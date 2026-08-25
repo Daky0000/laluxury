@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Inter } from "next/font/google";
+import { Cormorant_Garamond, Jost } from "next/font/google";
 import "./globals.css";
 
 const display = Cormorant_Garamond({
@@ -9,19 +9,20 @@ const display = Cormorant_Garamond({
   display: "swap",
 });
 
-const body = Inter({
+const body = Jost({
   variable: "--font-body",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
   display: "swap",
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "LaLuxury — Considered pieces for the modern Ghanaian home",
+    default: "LaLuxury — Quiet luxury for the modern home",
     template: "%s · LaLuxury",
   },
   description:
-    "Handmade lighting, textiles, tableware and furniture, made in Ghana and delivered nationwide.",
+    "Bedding, carpets, curtains and furnishings for Ghanaian homes. Delivered nationwide, cash on delivery welcome.",
   openGraph: {
     type: "website",
     siteName: "LaLuxury",

@@ -3,38 +3,46 @@
 /* ---------------------------------------------------------------------------
    LaLuxury design tokens
 
-   Every colour, radius and type step the app uses is declared here. When the
-   Claude Design artboards are imported, re-skinning is a matter of changing
-   these values rather than touching components.
+   Every colour, radius and type step the app uses is declared here. The values
+   come from the "Efie Home Storefront v2 Light" artboard in Claude Design, so
+   re-skinning is a matter of changing these rather than touching components.
 --------------------------------------------------------------------------- */
 
 @theme {
-  /* Brand — warm, earthy, quiet luxury */
-  --color-clay-50: #faf7f3;
-  --color-clay-100: #f2ece3;
-  --color-clay-200: #e4d8c8;
-  --color-clay-300: #d1bda4;
-  --color-clay-400: #b99b77;
-  --color-clay-500: #a5825d;
-  --color-clay-600: #8b6a4b;
-  --color-clay-700: #70543e;
-  --color-clay-800: #5c4636;
-  --color-clay-900: #4d3b2f;
+  /* Brand — wine, the accent on every call to action */
+  --color-clay-50: #fbf7f7;
+  --color-clay-100: #f4eaec;
+  --color-clay-200: #e3dddf;
+  --color-clay-300: #d6c3c7;
+  --color-clay-400: #b98b95;
+  --color-clay-500: #a2626f;
+  --color-clay-600: #96525e;
+  --color-clay-700: #7a2e3c;
+  --color-clay-800: #63252f;
+  --color-clay-900: #4b1c24;
 
-  --color-ink-50: #f6f6f5;
-  --color-ink-100: #e7e7e4;
-  --color-ink-200: #d0d0ca;
-  --color-ink-300: #afafa5;
-  --color-ink-400: #8a8a7e;
-  --color-ink-500: #6f6f63;
-  --color-ink-600: #57574e;
-  --color-ink-700: #474740;
-  --color-ink-800: #3a3a35;
-  --color-ink-900: #22201e;
-  --color-ink-950: #171614;
+  /* Neutrals — warm stone, from paper through to ink */
+  --color-ink-50: #fbfaf6;
+  --color-ink-100: #f1f0ec;
+  --color-ink-200: #e4e3de;
+  --color-ink-300: #cfcdc6;
+  --color-ink-400: #a8a59c;
+  --color-ink-500: #918e86;
+  --color-ink-600: #6e6c66;
+  --color-ink-700: #56544e;
+  --color-ink-800: #33322e;
+  --color-ink-900: #1a1a18;
+  --color-ink-950: #0f0f0e;
+
+  /* Secondary — the sage panel used for the student section */
+  --color-sage-50: #eef1ed;
+  --color-sage-100: #e6e9e5;
+  --color-sage-200: #dfe3dd;
+  --color-sage-600: #3f5348;
+  --color-sage-700: #35473d;
 
   --color-brass: #c9a227;
-  --color-sage: #6b7355;
+  --color-sage: #3f5348;
 
   /* Semantic */
   --color-success: #3f7d58;
@@ -45,31 +53,39 @@
   --font-display: var(--font-display), Georgia, "Times New Roman", serif;
   --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, sans-serif;
 
-  --radius-card: 0.25rem;
+  --radius-card: 0px;
 }
 
 :root {
-  --surface: var(--color-clay-50);
-  --surface-raised: #ffffff;
-  --surface-sunken: var(--color-clay-100);
-  --border-subtle: var(--color-clay-200);
-  --text-primary: var(--color-ink-900);
-  --text-secondary: var(--color-ink-500);
-  --text-muted: var(--color-ink-400);
-  --accent: var(--color-clay-700);
+  --surface: #f1f0ec;
+  --surface-raised: #fbfaf6;
+  --surface-sunken: #e9e8e3;
+  --surface-media: #e4e3de;
+  --border-subtle: rgba(43, 39, 36, 0.12);
+  --border-strong: rgba(43, 39, 36, 0.22);
+  --text-primary: #1a1a18;
+  --text-secondary: #56544e;
+  --text-muted: #918e86;
+  --accent: #7a2e3c;
+  --accent-hover: #96525e;
   --accent-contrast: #ffffff;
+  /* Type scale for the editorial headings on the storefront. */
+  --step-eyebrow: 0.6875rem;
 }
 
 /* The admin runs on a cooler, denser surface so it never gets mistaken for
    the storefront. */
 [data-theme="admin"] {
-  --surface: var(--color-ink-50);
+  --surface: #f6f5f2;
   --surface-raised: #ffffff;
-  --surface-sunken: var(--color-ink-100);
-  --border-subtle: var(--color-ink-200);
+  --surface-sunken: #ecebe6;
+  --surface-media: #e4e3de;
+  --border-subtle: rgba(43, 39, 36, 0.14);
   --text-primary: var(--color-ink-900);
-  --text-secondary: var(--color-ink-500);
+  --text-secondary: var(--color-ink-600);
+  --text-muted: var(--color-ink-500);
   --accent: var(--color-ink-900);
+  --accent-hover: var(--color-ink-800);
   --accent-contrast: #ffffff;
 }
 
@@ -78,6 +94,7 @@
     background-color: var(--surface);
     color: var(--text-primary);
     font-family: var(--font-sans);
+    font-weight: 300;
     -webkit-font-smoothing: antialiased;
   }
 
@@ -85,8 +102,13 @@
   h2,
   h3 {
     font-family: var(--font-display);
-    font-weight: 400;
-    letter-spacing: -0.015em;
+    font-weight: 300;
+    letter-spacing: -0.01em;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
   }
 
   /* Visible focus for keyboard users, invisible for mouse users. */
@@ -104,24 +126,69 @@
 @layer components {
   .lx-container {
     width: 100%;
-    max-width: 80rem;
+    max-width: 81.25rem; /* 1300px, matching the artboard */
     margin-inline: auto;
     padding-inline: 1.25rem;
   }
 
   @media (min-width: 768px) {
     .lx-container {
-      padding-inline: 2rem;
+      padding-inline: 2.5rem;
     }
   }
 
   /* Small-caps label used above section headings and on form fields. */
   .lx-eyebrow {
-    font-size: 0.6875rem;
-    letter-spacing: 0.14em;
+    font-size: var(--step-eyebrow);
+    letter-spacing: 0.32em;
     text-transform: uppercase;
-    color: var(--text-secondary);
+    color: var(--accent);
+    font-weight: 400;
+  }
+
+  /* Wide-tracked uppercase used on buttons and meta rows. */
+  .lx-caps {
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  /* The solid wine call to action from the artboard. */
+  .lx-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--accent);
+    color: var(--accent-contrast);
+    padding: 1rem 2.125rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
     font-weight: 500;
+    transition: background-color 0.2s ease;
+  }
+
+  .lx-cta:hover {
+    background-color: var(--accent-hover);
+  }
+
+  .lx-cta-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(253, 250, 244, 0.55);
+    color: #fbfaf6;
+    padding: 1rem 2.125rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 500;
+    backdrop-filter: blur(4px);
+    transition: background-color 0.2s ease;
+  }
+
+  .lx-cta-ghost:hover {
+    background-color: rgba(253, 250, 244, 0.14);
   }
 
   .lx-field {
@@ -148,7 +215,7 @@
   .lx-media {
     position: relative;
     overflow: hidden;
-    background-color: var(--surface-sunken);
+    background-color: var(--surface-media);
     aspect-ratio: 4 / 5;
   }
 
@@ -156,6 +223,24 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+}
+
+@layer utilities {
+  /* Announcement marquee. Two identical runs sit side by side and the track
+     is shifted by exactly half its width, so the loop has no seam. */
+  .lx-marquee {
+    display: inline-flex;
+    animation: lx-marquee 34s linear infinite;
+  }
+
+  @keyframes lx-marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
   }
 }
 

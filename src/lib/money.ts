@@ -29,6 +29,23 @@ export function formatMoney(minorUnits: number, currency: string = CURRENCY): st
     .padStart(2, "0")}`;
 }
 
+/**
+ * Storefront price label: "₵350", or "₵350.50" when there are pesewas.
+ *
+ * The shop artboards show the bare cedi sign and drop trailing zeros; the
+ * admin and every document that has to be unambiguous keep `formatMoney`.
+ */
+export function formatPrice(minorUnits: number, currency: string = CURRENCY): string {
+  const symbol = currency === "GHS" ? "₵" : currencySymbol(currency);
+  const negative = minorUnits < 0;
+  const abs = Math.abs(Math.round(minorUnits));
+  const major = Math.floor(abs / 100);
+  const minor = abs % 100;
+  const grouped = major.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const fraction = minor === 0 ? "" : `.${minor.toString().padStart(2, "0")}`;
+  return `${negative ? "-" : ""}${symbol}${grouped}${fraction}`;
+}
+
 /** "120.50" or 120.5 -> 12050. Throws on nonsense so bad prices never persist. */
 export function toMinorUnits(value: string | number): number {
   const n = typeof value === "string" ? Number(value.replace(/[^0-9.-]/g, "")) : value;

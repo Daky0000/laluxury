@@ -6,6 +6,10 @@ import { PrismaClient } from "../src/generated/prisma/client";
 /**
  * Seeds a working store: staff account, catalog, shipping, discounts.
  * Safe to re-run - everything is upserted by a natural key.
+ *
+ * The catalog mirrors the "Efie Home Storefront v2 Light" artboard: four
+ * rooms, the bestseller edit and the student range. Artwork comes from
+ * `public/catalog`, produced by `node scripts/fetch-catalog-images.mjs`.
  */
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
@@ -16,6 +20,22 @@ const cedis = (amount: number) => Math.round(amount * 100);
 function searchText(p: { title: string; tags: string[]; material?: string; short?: string }) {
   return [p.title, ...p.tags, p.material ?? "", p.short ?? ""].join(" ").toLowerCase();
 }
+
+/** The demo catalog this store shipped with, retired in favour of the real one. */
+const LEGACY_PRODUCT_SLUGS = [
+  "adinkra-ceramic-table-lamp",
+  "kente-stripe-throw",
+  "sekondi-stoneware-dinner-set",
+  "woven-raffia-pendant",
+  "bolga-storage-basket",
+  "teak-low-stool",
+  "brass-candle-holders",
+  "linen-cushion-cover",
+];
+
+const LEGACY_CATEGORY_SLUGS = ["lighting", "textiles", "tableware", "decor", "furniture"];
+
+const LEGACY_ANNOUNCEMENT = "Free delivery in Accra on orders over GH₵500";
 
 async function main() {
   console.log("Seeding LaLuxury...");
@@ -40,11 +60,34 @@ async function main() {
 
   // --- Categories ----------------------------------------------------------
   const categorySeed = [
-    { name: "Lighting", slug: "lighting", position: 1 },
-    { name: "Textiles", slug: "textiles", position: 2 },
-    { name: "Tableware", slug: "tableware", position: 3 },
-    { name: "Decor", slug: "decor", position: 4 },
-    { name: "Furniture", slug: "furniture", position: 5 },
+    {
+      name: "Bedding",
+      slug: "bedding",
+      position: 1,
+      description: "Duvets, sheets, toppers and pillows for a bed you sink into.",
+      imageUrl: "/catalog/room-bedroom.webp",
+    },
+    {
+      name: "Living",
+      slug: "living",
+      position: 2,
+      description: "Carpets, stools, tables and the small things that finish a room.",
+      imageUrl: "/catalog/room-living.webp",
+    },
+    {
+      name: "Windows",
+      slug: "windows",
+      position: 3,
+      description: "Curtains, blinds and poles, measured for Ghanaian windows.",
+      imageUrl: "/catalog/room-windows.webp",
+    },
+    {
+      name: "Student",
+      slug: "student",
+      position: 4,
+      description: "Hall-ready essentials from ₵50.",
+      imageUrl: "/catalog/room-student.webp",
+    },
   ];
 
   const categories = new Map<string, string>();
@@ -52,7 +95,13 @@ async function main() {
     const row = await db.category.upsert({
       where: { slug: c.slug },
       create: c,
-      update: { name: c.name, position: c.position },
+      update: {
+        name: c.name,
+        position: c.position,
+        description: c.description,
+        imageUrl: c.imageUrl,
+        isActive: true,
+      },
     });
     categories.set(c.slug, row.id);
   }
@@ -61,7 +110,8 @@ async function main() {
   const collectionSeed = [
     { name: "New In", slug: "new-in", isFeatured: true, position: 1 },
     { name: "Best Sellers", slug: "best-sellers", isFeatured: true, position: 2 },
-    { name: "The Accra Edit", slug: "accra-edit", isFeatured: false, position: 3 },
+    { name: "The Complete Bed Set", slug: "bed-set", isFeatured: true, position: 3 },
+    { name: "Student Essentials", slug: "student-essentials", isFeatured: false, position: 4 },
   ];
 
   const collections = new Map<string, string>();
@@ -69,7 +119,7 @@ async function main() {
     const row = await db.collection.upsert({
       where: { slug: c.slug },
       create: c,
-      update: { name: c.name },
+      update: { name: c.name, position: c.position, isActive: true },
     });
     collections.set(c.slug, row.id);
   }
@@ -81,11 +131,13 @@ async function main() {
     slug: string;
     short: string;
     description: string;
-    category: string;
+    /** First entry is the grid image. */
+    images: string[];
+    categories: string[];
     collections: string[];
     tags: string[];
     material: string;
-    basePrice: number;
+    care?: string;
     compareAt?: number;
     featured?: boolean;
     options?: { name: string; values: { value: string; hex?: string }[] };
@@ -93,162 +145,296 @@ async function main() {
   };
 
   const products: ProductSeed[] = [
+    // --- Bedding -----------------------------------------------------------
     {
-      title: "Adinkra Ceramic Table Lamp",
-      slug: "adinkra-ceramic-table-lamp",
-      short: "Hand-thrown stoneware with a linen shade.",
+      title: "Rabbit Fur Duvet",
+      slug: "rabbit-fur-duvet",
+      short: "Deep-pile faux fur, quilted through.",
       description:
-        "A hand-thrown stoneware base carrying a subtle Adinkra relief, finished with a natural linen shade. Each piece is turned individually in Accra, so no two are identical.",
-      category: "lighting",
-      collections: ["new-in", "best-sellers"],
-      tags: ["handmade", "ceramic", "lamp"],
-      material: "Stoneware, linen",
-      basePrice: 890,
-      compareAt: 1050,
+        "A dense faux-fur duvet quilted so the pile never shifts, backed in brushed microfibre. Warm without weight, and the piece most of our customers come back for.",
+      images: ["/catalog/rabbit-fur-duvet.webp"],
+      categories: ["bedding"],
+      collections: ["best-sellers", "bed-set"],
+      tags: ["bestseller", "duvet", "fur"],
+      material: "Faux fur, brushed microfibre",
+      care: "Cold machine wash, dry flat.",
+      compareAt: 420,
       featured: true,
-      options: {
-        name: "Colour",
-        values: [
-          { value: "Ivory", hex: "#EFE9DD" },
-          { value: "Clay", hex: "#B4785C" },
-          { value: "Obsidian", hex: "#22201E" },
-        ],
-      },
+      options: { name: "Size", values: [{ value: "Double" }, { value: "King" }] },
       variants: [
-        { suffix: "IVR", options: { Colour: "Ivory" }, price: 890, stock: 14 },
-        { suffix: "CLY", options: { Colour: "Clay" }, price: 890, stock: 8 },
-        { suffix: "OBS", options: { Colour: "Obsidian" }, price: 940, stock: 3 },
+        { suffix: "DBL", options: { Size: "Double" }, price: 350, stock: 12 },
+        { suffix: "KNG", options: { Size: "King" }, price: 430, stock: 7 },
       ],
     },
     {
-      title: "Kente Stripe Throw",
-      slug: "kente-stripe-throw",
-      short: "Handwoven cotton, fringed edge.",
+      title: "King Size Duvet",
+      slug: "king-size-duvet",
+      short: "Hotel-weight, four-season fill.",
       description:
-        "Woven on traditional narrow looms and finished with a hand-knotted fringe. Warm enough for harmattan evenings, light enough to leave out all year.",
-      category: "textiles",
-      collections: ["best-sellers", "accra-edit"],
-      tags: ["handwoven", "cotton", "throw"],
-      material: "100% cotton",
-      basePrice: 520,
-      featured: true,
-      options: {
-        name: "Colourway",
-        values: [
-          { value: "Gold", hex: "#C9A227" },
-          { value: "Indigo", hex: "#2C3E60" },
-        ],
-      },
-      variants: [
-        { suffix: "GLD", options: { Colourway: "Gold" }, price: 520, stock: 22 },
-        { suffix: "IND", options: { Colourway: "Indigo" }, price: 520, stock: 11 },
-      ],
+        "A generous king duvet with a 300gsm hollow-fibre fill and a piped edge, so it drapes over the sides of the bed rather than perching on top.",
+      images: ["/catalog/king-size-duvet.webp"],
+      categories: ["bedding"],
+      collections: ["bed-set"],
+      tags: ["duvet", "king"],
+      material: "Cotton-blend shell, hollow-fibre fill",
+      variants: [{ suffix: "STD", options: {}, price: 280, stock: 15 }],
     },
     {
-      title: "Sekondi Stoneware Dinner Set",
-      slug: "sekondi-stoneware-dinner-set",
-      short: "Four-place setting, reactive glaze.",
+      title: "King Bed Topper",
+      slug: "king-bed-topper",
+      short: "Plush topper with elastic corner straps.",
       description:
-        "Sixteen pieces across four settings, finished in a reactive glaze that pools differently on every plate. Dishwasher and microwave safe.",
-      category: "tableware",
-      collections: ["new-in"],
-      tags: ["stoneware", "dinnerware", "set"],
-      material: "Reactive-glaze stoneware",
-      basePrice: 1450,
+        "Eight centimetres of quilted loft with elasticated corner straps, for tired mattresses and guest rooms you want people to remember.",
+      images: ["/catalog/king-bed-topper.webp"],
+      categories: ["bedding"],
+      collections: ["bed-set", "new-in"],
+      tags: ["luxe", "topper"],
+      material: "Microfibre",
+      variants: [{ suffix: "STD", options: {}, price: 450, stock: 6 }],
+    },
+    {
+      title: "Cotton Bedsheet Set",
+      slug: "cotton-bedsheet-set",
+      short: "Fitted sheet, flat sheet and pillowcases.",
+      description:
+        "Breathable cotton percale in a four-piece set: fitted sheet, flat sheet and two pillowcases. Deep pockets that stay put through the night.",
+      images: ["/catalog/cotton-bedsheet-set.webp"],
+      categories: ["bedding"],
+      collections: ["best-sellers", "bed-set"],
+      tags: ["bestseller", "bedsheet", "cotton"],
+      material: "100% cotton percale",
       options: {
         name: "Size",
-        values: [{ value: "4 place" }, { value: "8 place" }],
+        values: [{ value: "Single" }, { value: "Double" }, { value: "King" }],
       },
       variants: [
-        { suffix: "4P", options: { Size: "4 place" }, price: 1450, stock: 6 },
-        { suffix: "8P", options: { Size: "8 place" }, price: 2680, stock: 2 },
+        { suffix: "SGL", options: { Size: "Single" }, price: 80, stock: 40 },
+        { suffix: "DBL", options: { Size: "Double" }, price: 110, stock: 32 },
+        { suffix: "KNG", options: { Size: "King" }, price: 150, stock: 21 },
       ],
     },
     {
-      title: "Woven Raffia Pendant",
-      slug: "woven-raffia-pendant",
-      short: "Open-weave shade, cast in warm light.",
+      title: "White King Bedsheet",
+      slug: "white-king-bedsheet",
+      short: "Crisp white, hotel finish.",
       description:
-        "An open raffia weave that throws a soft dappled light across the ceiling. Supplied with a 2m braided cord and brass fitting.",
-      category: "lighting",
-      collections: ["accra-edit"],
-      tags: ["raffia", "pendant", "handmade"],
-      material: "Raffia, brass",
-      basePrice: 680,
-      featured: true,
-      options: {
-        name: "Size",
-        values: [{ value: "Small" }, { value: "Large" }],
-      },
-      variants: [
-        { suffix: "SM", options: { Size: "Small" }, price: 680, stock: 9 },
-        { suffix: "LG", options: { Size: "Large" }, price: 940, stock: 4 },
-      ],
+        "The plain white king set we keep restocking: tight weave, square corners, and a finish that survives a hot wash every week.",
+      images: ["/catalog/white-king-bedsheet.webp"],
+      categories: ["bedding"],
+      collections: ["bed-set"],
+      tags: ["bedsheet", "white"],
+      material: "Cotton blend",
+      variants: [{ suffix: "STD", options: {}, price: 180, stock: 18 }],
     },
     {
-      title: "Bolga Storage Basket",
-      slug: "bolga-storage-basket",
-      short: "Elephant grass, leather-bound handles.",
+      title: "Heavy Blanket · Double",
+      slug: "heavy-blanket-double",
+      short: "Weighted mink-touch blanket.",
       description:
-        "Hand-coiled from elephant grass in the Upper East, with vegetable-tanned leather binding on the handles. Holds firewood, laundry or a very large plant.",
-      category: "decor",
-      collections: ["best-sellers"],
-      tags: ["basket", "storage", "handwoven"],
-      material: "Elephant grass, leather",
-      basePrice: 340,
-      variants: [{ suffix: "STD", options: {}, price: 340, stock: 31 }],
+        "A heavy mink-touch blanket with a satin trim. Warm enough for a harmattan night in Kumasi, soft enough to leave folded at the foot of the bed.",
+      images: ["/catalog/heavy-blanket-double.webp"],
+      categories: ["bedding"],
+      collections: [],
+      tags: ["blanket", "warm"],
+      material: "Mink-touch polyester",
+      variants: [{ suffix: "STD", options: {}, price: 160, stock: 24 }],
     },
     {
-      title: "Teak Low Stool",
-      slug: "teak-low-stool",
-      short: "Solid teak, oiled finish.",
+      title: "Waterproof Bed Cover",
+      slug: "waterproof-bed-cover",
+      short: "Quiet membrane, cotton face.",
       description:
-        "Carved from a single block of reclaimed teak and finished with a hand-rubbed oil. Works as a seat, a side table, or a plinth for something you love.",
-      category: "furniture",
-      collections: ["new-in", "accra-edit"],
-      tags: ["teak", "stool", "solid wood"],
-      material: "Reclaimed teak",
-      basePrice: 1180,
-      variants: [{ suffix: "STD", options: {}, price: 1180, stock: 5 }],
-    },
-    {
-      title: "Brass Candle Holders",
-      slug: "brass-candle-holders",
-      short: "Set of three, graduated heights.",
-      description:
-        "Cast and hand-polished in a small Accra foundry. The brass will patina gently with use, which is the point.",
-      category: "decor",
-      collections: ["best-sellers"],
-      tags: ["brass", "candles", "set"],
-      material: "Solid brass",
-      basePrice: 420,
-      compareAt: 490,
-      variants: [{ suffix: "SET3", options: {}, price: 420, stock: 18 }],
-    },
-    {
-      title: "Linen Cushion Cover",
-      slug: "linen-cushion-cover",
-      short: "Stonewashed linen, hidden zip.",
-      description:
-        "Heavyweight stonewashed linen with a concealed zip and a neat mitred corner. Cover only; inners sold separately.",
-      category: "textiles",
+        "A cotton-faced mattress protector with a breathable waterproof membrane. No crinkle, no plastic feel, and it keeps a new mattress new.",
+      images: ["/catalog/waterproof-bed-cover.webp"],
+      categories: ["bedding"],
       collections: ["new-in"],
-      tags: ["linen", "cushion", "washable"],
-      material: "Stonewashed linen",
-      basePrice: 180,
-      options: {
-        name: "Colour",
-        values: [
-          { value: "Sand", hex: "#D8C9B0" },
-          { value: "Olive", hex: "#6B7355" },
-          { value: "Charcoal", hex: "#3A3A38" },
-        ],
-      },
+      tags: ["new", "protector"],
+      material: "Cotton, TPU membrane",
+      variants: [{ suffix: "STD", options: {}, price: 250, stock: 14 }],
+    },
+    {
+      title: "Soft Sleep Pillow",
+      slug: "soft-sleep-pillow",
+      short: "Medium loft, holds its shape.",
+      description:
+        "A medium-loft pillow with a siliconised fibre fill that recovers overnight instead of flattening by month three.",
+      images: ["/catalog/soft-sleep-pillow.webp"],
+      categories: ["bedding", "student"],
+      collections: ["bed-set", "student-essentials"],
+      tags: ["pillow"],
+      material: "Siliconised hollow fibre",
+      variants: [{ suffix: "STD", options: {}, price: 70, stock: 60 }],
+    },
+
+    // --- Living ------------------------------------------------------------
+    {
+      title: "Fluffy Carpet 150×220",
+      slug: "fluffy-carpet-150-220",
+      short: "Deep shag pile, anti-slip backing.",
+      description:
+        "A 150 × 220cm shag carpet with a woven anti-slip backing. Vacuum on the lowest setting and it stays as it arrived.",
+      images: ["/catalog/fluffy-carpet.webp"],
+      categories: ["living"],
+      collections: ["best-sellers"],
+      tags: ["bestseller", "carpet", "rug"],
+      material: "Polyester shag",
+      variants: [{ suffix: "STD", options: {}, price: 250, stock: 11 }],
+    },
+    {
+      title: "Coffee Table",
+      slug: "coffee-table",
+      short: "Solid frame, warm timber top.",
+      description:
+        "A low table sized for a three-seater, with a warm timber top and a slim frame that keeps the floor visible underneath.",
+      images: ["/catalog/coffee-table.webp"],
+      categories: ["living"],
+      collections: ["new-in"],
+      tags: ["table", "furniture"],
+      material: "Engineered timber, steel",
+      variants: [{ suffix: "STD", options: {}, price: 350, stock: 5 }],
+    },
+    {
+      title: "Round Stool",
+      slug: "round-stool",
+      short: "Upholstered, works as a side table.",
+      description:
+        "An upholstered round stool that doubles as a side table or an extra seat when the room fills up.",
+      images: ["/catalog/round-stool.webp"],
+      categories: ["living"],
+      collections: [],
+      tags: ["stool", "seating"],
+      material: "Upholstered foam, timber legs",
+      variants: [{ suffix: "STD", options: {}, price: 120, stock: 16 }],
+    },
+    {
+      title: "Throw Pillow",
+      slug: "throw-pillow",
+      short: "45 × 45cm, cover and inner.",
+      description:
+        "A 45 × 45cm throw pillow supplied with its inner, in a textured weave that holds a corner rather than slumping.",
+      images: ["/catalog/throw-pillow.webp"],
+      categories: ["living"],
+      collections: [],
+      tags: ["pillow", "cushion"],
+      material: "Textured polyester",
+      variants: [{ suffix: "STD", options: {}, price: 80, stock: 45 }],
+    },
+    {
+      title: "Doormat",
+      slug: "doormat",
+      short: "Coir face, rubber back.",
+      description:
+        "A dense coir doormat on a rubber back that stays where you put it, even on a polished entry floor.",
+      images: ["/catalog/doormat.webp"],
+      categories: ["living"],
+      collections: [],
+      tags: ["doormat", "entry"],
+      material: "Coir, rubber",
+      variants: [{ suffix: "STD", options: {}, price: 60, stock: 38 }],
+    },
+
+    // --- Windows -----------------------------------------------------------
+    {
+      title: "Window Curtain",
+      slug: "window-curtain",
+      short: "Lined panels, sold in pairs.",
+      description:
+        "A lined pair of curtain panels with a pencil-pleat header. Heavy enough to soften afternoon light without darkening the room.",
+      images: ["/catalog/window-curtain.webp"],
+      categories: ["windows"],
+      collections: ["best-sellers"],
+      tags: ["curtain"],
+      material: "Lined polyester",
+      variants: [{ suffix: "STD", options: {}, price: 180, stock: 20 }],
+    },
+    {
+      title: "Curtain Blinds",
+      slug: "curtain-blinds",
+      short: "Roller blinds, cut to width.",
+      description:
+        "Roller blinds in a light-filtering weave, supplied with the bracket set. Tell us the width at checkout and we cut before delivery.",
+      images: ["/catalog/curtain-blinds.webp"],
+      categories: ["windows"],
+      collections: [],
+      tags: ["blinds"],
+      material: "Light-filtering polyester",
+      options: { name: "Width", values: [{ value: "90cm" }, { value: "150cm" }] },
       variants: [
-        { suffix: "SND", options: { Colour: "Sand" }, price: 180, stock: 40 },
-        { suffix: "OLV", options: { Colour: "Olive" }, price: 180, stock: 26 },
-        { suffix: "CHR", options: { Colour: "Charcoal" }, price: 180, stock: 0 },
+        { suffix: "W90", options: { Width: "90cm" }, price: 120, stock: 14 },
+        { suffix: "W150", options: { Width: "150cm" }, price: 180, stock: 9 },
       ],
+    },
+    {
+      title: "Curtain Pole",
+      slug: "curtain-pole",
+      short: "Steel pole with finials and brackets.",
+      description:
+        "A 25mm steel pole with finials, brackets and fixings in the box. Two lengths, both matt black.",
+      images: ["/catalog/curtain-pole.webp"],
+      categories: ["windows"],
+      collections: [],
+      tags: ["pole", "hardware"],
+      material: "Powder-coated steel",
+      options: { name: "Length", values: [{ value: "1.5m" }, { value: "2.4m" }] },
+      variants: [
+        { suffix: "L15", options: { Length: "1.5m" }, price: 80, stock: 22 },
+        { suffix: "L24", options: { Length: "2.4m" }, price: 120, stock: 13 },
+      ],
+    },
+    {
+      title: "Shower Curtain",
+      slug: "shower-curtain",
+      short: "Mould-resistant, rings included.",
+      description:
+        "A weighted-hem shower curtain in a mould-resistant fabric, with twelve rings in the pack.",
+      images: ["/catalog/shower-curtain.webp"],
+      categories: ["windows"],
+      collections: [],
+      tags: ["deal", "bathroom"],
+      material: "Coated polyester",
+      compareAt: 70,
+      variants: [{ suffix: "STD", options: {}, price: 50, stock: 33 }],
+    },
+
+    // --- Student -----------------------------------------------------------
+    {
+      title: "Student Bedsheet",
+      slug: "student-bedsheet",
+      short: "Single set sized for a hall bed.",
+      description:
+        "A single bedsheet set cut for a standard hall mattress, in a cotton blend that survives the laundry queue.",
+      images: ["/catalog/student-bedsheet.webp"],
+      categories: ["student"],
+      collections: ["student-essentials"],
+      tags: ["student", "bedsheet"],
+      material: "Cotton blend",
+      variants: [{ suffix: "STD", options: {}, price: 50, stock: 70 }],
+    },
+    {
+      title: "Student White Bedsheet",
+      slug: "student-white-bedsheet",
+      short: "Plain white single set.",
+      description:
+        "The plain white version of our student set, for halls that ask for white linen.",
+      images: ["/catalog/student-white-bedsheet.webp"],
+      categories: ["student"],
+      collections: ["student-essentials"],
+      tags: ["student", "bedsheet", "white"],
+      material: "Cotton blend",
+      variants: [{ suffix: "STD", options: {}, price: 50, stock: 54 }],
+    },
+    {
+      title: "Student Blanket",
+      slug: "student-blanket",
+      short: "Light fleece, single size.",
+      description:
+        "A light single-size fleece blanket that packs down small enough for a trotro trip home at the end of term.",
+      images: ["/catalog/student-blanket.webp"],
+      categories: ["student"],
+      collections: ["student-essentials"],
+      tags: ["student", "blanket"],
+      material: "Polar fleece",
+      variants: [{ suffix: "STD", options: {}, price: 60, stock: 48 }],
     },
   ];
 
@@ -274,27 +460,55 @@ async function main() {
         maxPrice: Math.max(...prices),
         compareAtPrice: p.compareAt ? cedis(p.compareAt) : null,
         material: p.material,
+        care: p.care,
         tags: p.tags,
         isFeatured: Boolean(p.featured),
         searchText: searchText({ title: p.title, tags: p.tags, material: p.material, short: p.short }),
       },
       update: {
+        title: p.title,
         shortDescription: p.short,
         description: p.description,
+        status: "ACTIVE",
         minPrice: Math.min(...prices),
         maxPrice: Math.max(...prices),
+        compareAtPrice: p.compareAt ? cedis(p.compareAt) : null,
+        material: p.material,
+        care: p.care,
+        tags: p.tags,
         isFeatured: Boolean(p.featured),
+        searchText: searchText({ title: p.title, tags: p.tags, material: p.material, short: p.short }),
       },
     });
 
+    // Imagery. Position is the natural key so re-running swaps the artwork
+    // rather than stacking duplicates.
+    for (const [i, url] of p.images.entries()) {
+      const existing = await db.productImage.findFirst({
+        where: { productId: product.id, position: i },
+      });
+      if (existing) {
+        await db.productImage.update({
+          where: { id: existing.id },
+          data: { url, alt: p.title },
+        });
+      } else {
+        await db.productImage.create({
+          data: { productId: product.id, url, alt: p.title, position: i },
+        });
+      }
+    }
+
     // Category + collections
-    await db.productCategory.upsert({
-      where: {
-        productId_categoryId: { productId: product.id, categoryId: categories.get(p.category)! },
-      },
-      create: { productId: product.id, categoryId: categories.get(p.category)! },
-      update: {},
-    });
+    for (const slug of p.categories) {
+      await db.productCategory.upsert({
+        where: {
+          productId_categoryId: { productId: product.id, categoryId: categories.get(slug)! },
+        },
+        create: { productId: product.id, categoryId: categories.get(slug)! },
+        update: {},
+      });
+    }
 
     for (const slug of p.collections) {
       await db.productCollection.upsert({
@@ -345,7 +559,7 @@ async function main() {
           weightGrams: 1200,
           position: i,
         },
-        update: { price: cedis(v.price), title },
+        update: { price: cedis(v.price), title, isActive: true },
       });
 
       for (const value of Object.values(v.options)) {
@@ -367,6 +581,21 @@ async function main() {
   }
   console.log(`  products: ${products.length}`);
 
+  // --- Retire the demo catalog --------------------------------------------
+  // Archived rather than deleted: it stays visible in the admin, and any order
+  // that referenced it still reads correctly.
+  const archived = await db.product.updateMany({
+    where: { slug: { in: LEGACY_PRODUCT_SLUGS }, status: { not: "ARCHIVED" } },
+    data: { status: "ARCHIVED" },
+  });
+  const hidden = await db.category.updateMany({
+    where: { slug: { in: LEGACY_CATEGORY_SLUGS }, isActive: true },
+    data: { isActive: false },
+  });
+  if (archived.count || hidden.count) {
+    console.log(`  retired demo catalog: ${archived.count} products, ${hidden.count} categories`);
+  }
+
   // --- Shipping ------------------------------------------------------------
   const accra = await db.shippingZone.findFirst({ where: { name: "Greater Accra" } });
   const accraZone =
@@ -386,7 +615,7 @@ async function main() {
       price: cedis(45),
       estimatedDaysMin: 0,
       estimatedDaysMax: 1,
-      freeAboveSubtotal: cedis(500),
+      freeAboveSubtotal: cedis(300),
       position: 0,
     },
     {
@@ -395,7 +624,7 @@ async function main() {
       price: cedis(25),
       estimatedDaysMin: 1,
       estimatedDaysMax: 2,
-      freeAboveSubtotal: cedis(500),
+      freeAboveSubtotal: cedis(300),
       position: 1,
     },
     {
@@ -404,7 +633,7 @@ async function main() {
       price: cedis(70),
       estimatedDaysMin: 3,
       estimatedDaysMax: 5,
-      freeAboveSubtotal: cedis(1500),
+      freeAboveSubtotal: cedis(800),
       position: 0,
     },
   ];
@@ -464,20 +693,38 @@ async function main() {
   }
 
   // --- Settings ------------------------------------------------------------
-  await db.setting.upsert({
-    where: { key: "store" },
-    create: {
-      key: "store",
-      value: {
-        storeName: "LaLuxury",
-        tagline: "Considered pieces for the modern Ghanaian home",
-        supportEmail: ownerEmail,
-        announcementBar: "Free delivery in Accra on orders over GH₵500",
-        agentRequiresApproval: true,
-      },
-    },
-    update: {},
-  });
+  const storeDefaults = {
+    storeName: "LaLuxury",
+    tagline: "Considered textiles and furnishings for Ghanaian homes.",
+    supportEmail: ownerEmail,
+    announcementBar:
+      "Complimentary delivery over ₵300 · Cash on delivery nationwide · New arrivals in stock",
+    freeShippingThreshold: cedis(300),
+    agentRequiresApproval: true,
+  };
+
+  const storeRow = await db.setting.findUnique({ where: { key: "store" } });
+
+  if (!storeRow) {
+    await db.setting.create({ data: { key: "store", value: storeDefaults } });
+  } else {
+    // Only the demo announcement is replaced; anything the owner has edited
+    // since is left alone.
+    const value = (storeRow.value ?? {}) as Record<string, unknown>;
+    if (value.announcementBar === LEGACY_ANNOUNCEMENT) {
+      await db.setting.update({
+        where: { key: "store" },
+        data: {
+          value: {
+            ...value,
+            announcementBar: storeDefaults.announcementBar,
+            freeShippingThreshold: cedis(300),
+          },
+        },
+      });
+      console.log("  settings: refreshed the announcement bar");
+    }
+  }
 
   console.log("Done.");
 }

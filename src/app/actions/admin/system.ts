@@ -23,6 +23,12 @@ export async function updateSettingsAction(
 
   const threshold = String(formData.get("freeShippingThreshold") || "").trim();
 
+  const text = (key: string) => String(formData.get(key) || "").trim();
+  const price = (key: string) => {
+    const raw = text(key);
+    return raw ? toMinorUnits(Number(raw)) : null;
+  };
+
   const patch: Partial<StoreSettings> = {
     storeName: String(formData.get("storeName") || "").trim() || "LaLuxury",
     tagline: String(formData.get("tagline") || "").trim(),
@@ -37,6 +43,24 @@ export async function updateSettingsAction(
     lowStockThreshold: Math.max(0, Number(formData.get("lowStockThreshold")) || 5),
     freeShippingThreshold: threshold ? toMinorUnits(Number(threshold)) : null,
     agentRequiresApproval: formData.get("agentRequiresApproval") === "on",
+
+    // Home page content
+    heroEyebrow: text("heroEyebrow"),
+    heroTitle: text("heroTitle"),
+    heroTitleAccent: text("heroTitleAccent"),
+    heroBody: text("heroBody"),
+    heroImageUrl: text("heroImageUrl"),
+    bundleEyebrow: text("bundleEyebrow"),
+    bundleTitle: text("bundleTitle"),
+    bundleBody: text("bundleBody"),
+    bundlePrice: price("bundlePrice"),
+    bundleCompareAtPrice: price("bundleCompareAtPrice"),
+    bundleImageUrl: text("bundleImageUrl"),
+    bundleHref: text("bundleHref") || "/shop",
+    studentEyebrow: text("studentEyebrow"),
+    studentTitle: text("studentTitle"),
+    newsletterTitle: text("newsletterTitle"),
+    newsletterBody: text("newsletterBody"),
   };
 
   await updateSettings(patch);

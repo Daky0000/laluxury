@@ -160,6 +160,12 @@ src/
 
 ### Conventions worth knowing
 
+**The home page is data, not markup.** Every product, room tile and price on it comes from
+the database; the hero, the bundle banner and the section headings come from store settings
+(`/admin/settings` → Home page). Adding a product to Bedding, Living or Windows puts it in
+the edit grid; the badge on a tile is the product's `bestseller` / `new` / `luxe` / `deal`
+tag. Artwork lives in `public/catalog`, produced by `npm run catalog:images`.
+
 **Money is integer minor units.** `12050` is GH₵120.50. Nothing holds a price as a float.
 Paystack also expects subunits, so no conversion happens at that boundary. Use
 `formatMoney` to display and `toMinorUnits` to parse.
@@ -209,6 +215,7 @@ npm run typecheck    # tsc --noEmit
 npm run verify       # domain checks: money, stock, discounts, roles
 npm run db:migrate   # apply migrations
 npm run db:seed      # seed catalog + owner
+npm run catalog:images  # re-download and resize the storefront artwork
 npm run db:studio    # browse the database
 ```
 
@@ -220,10 +227,10 @@ ranges match their variants, and that no password is stored in plain text.
 
 ## Known gaps
 
-- **Design import is pending.** The Claude Design artboards could not be read — the design
-  MCP needs `/design-login` on this machine. The current visual layer is a considered
-  placeholder driven entirely by CSS custom properties in `src/app/globals.css`, so
-  re-skinning to the artboards is a token swap plus component polish, not a rewrite.
+- **One artboard is built.** The home page, header, footer and bag drawer follow
+  "Efie Home Storefront v2 Light". The other artboards (admin, archive, thank-you) are
+  still on the earlier visual layer, which shares the same tokens in
+  `src/app/globals.css`.
 - **Product images are URL-based.** Paste a hosted URL in the editor. Direct upload needs
   the Cloudinary keys and an upload widget.
 - **Transactional email is wired but not sent.** SMTP config is read and reported; the

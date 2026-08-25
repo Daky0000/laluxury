@@ -42,7 +42,7 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
         <Field
           label="Announcement bar"
           htmlFor="announcementBar"
-          hint="Shown across the top of every storefront page. Leave blank to hide it."
+          hint="Scrolls across the top of every storefront page. Separate messages with · to run several. Leave blank to hide it."
         >
           <input
             id="announcementBar"
@@ -100,6 +100,177 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
             className="lx-field"
           />
         </Field>
+      </Card>
+
+      <Card className="flex flex-col gap-4 p-5">
+        <h2 className="lx-eyebrow">Home page</h2>
+        <p className="-mt-2 text-sm text-[var(--text-secondary)]">
+          The hero, the bundle banner and the section headings on the storefront home page.
+          Images can be any URL, or a file under <code>/public</code> such as{" "}
+          <code>/catalog/hero-bedroom.webp</code>.
+        </p>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Hero eyebrow" htmlFor="heroEyebrow">
+            <input
+              id="heroEyebrow"
+              name="heroEyebrow"
+              defaultValue={settings.heroEyebrow}
+              className="lx-field"
+            />
+          </Field>
+
+          <Field label="Hero image URL" htmlFor="heroImageUrl">
+            <input
+              id="heroImageUrl"
+              name="heroImageUrl"
+              defaultValue={settings.heroImageUrl}
+              className="lx-field"
+            />
+          </Field>
+
+          <Field label="Hero headline" htmlFor="heroTitle" hint="First line, upright.">
+            <input
+              id="heroTitle"
+              name="heroTitle"
+              defaultValue={settings.heroTitle}
+              className="lx-field"
+            />
+          </Field>
+
+          <Field label="Hero headline, second line" htmlFor="heroTitleAccent" hint="Set in italic.">
+            <input
+              id="heroTitleAccent"
+              name="heroTitleAccent"
+              defaultValue={settings.heroTitleAccent}
+              className="lx-field"
+            />
+          </Field>
+        </div>
+
+        <Field label="Hero paragraph" htmlFor="heroBody">
+          <textarea
+            id="heroBody"
+            name="heroBody"
+            rows={2}
+            defaultValue={settings.heroBody}
+            className="lx-field resize-y"
+          />
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Bundle eyebrow" htmlFor="bundleEyebrow">
+            <input
+              id="bundleEyebrow"
+              name="bundleEyebrow"
+              defaultValue={settings.bundleEyebrow}
+              className="lx-field"
+            />
+          </Field>
+
+          <Field label="Bundle heading" htmlFor="bundleTitle" hint="Leave blank to hide the banner.">
+            <input
+              id="bundleTitle"
+              name="bundleTitle"
+              defaultValue={settings.bundleTitle}
+              className="lx-field"
+            />
+          </Field>
+        </div>
+
+        <Field label="Bundle paragraph" htmlFor="bundleBody">
+          <textarea
+            id="bundleBody"
+            name="bundleBody"
+            rows={2}
+            defaultValue={settings.bundleBody}
+            className="lx-field resize-y"
+          />
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Field label="Bundle price (GHS)" htmlFor="bundlePrice">
+            <input
+              id="bundlePrice"
+              name="bundlePrice"
+              type="number"
+              step="0.01"
+              min="0"
+              defaultValue={settings.bundlePrice ? toMajorUnits(settings.bundlePrice) : ""}
+              className="lx-field"
+            />
+          </Field>
+
+          <Field label="Bundle was (GHS)" htmlFor="bundleCompareAtPrice">
+            <input
+              id="bundleCompareAtPrice"
+              name="bundleCompareAtPrice"
+              type="number"
+              step="0.01"
+              min="0"
+              defaultValue={
+                settings.bundleCompareAtPrice ? toMajorUnits(settings.bundleCompareAtPrice) : ""
+              }
+              className="lx-field"
+            />
+          </Field>
+
+          <Field label="Bundle image URL" htmlFor="bundleImageUrl">
+            <input
+              id="bundleImageUrl"
+              name="bundleImageUrl"
+              defaultValue={settings.bundleImageUrl}
+              className="lx-field"
+            />
+          </Field>
+
+          <Field label="Bundle link" htmlFor="bundleHref">
+            <input
+              id="bundleHref"
+              name="bundleHref"
+              defaultValue={settings.bundleHref}
+              className="lx-field"
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Student eyebrow" htmlFor="studentEyebrow">
+            <input
+              id="studentEyebrow"
+              name="studentEyebrow"
+              defaultValue={settings.studentEyebrow}
+              className="lx-field"
+            />
+          </Field>
+
+          <Field label="Student heading" htmlFor="studentTitle">
+            <input
+              id="studentTitle"
+              name="studentTitle"
+              defaultValue={settings.studentTitle}
+              className="lx-field"
+            />
+          </Field>
+
+          <Field label="Newsletter heading" htmlFor="newsletterTitle">
+            <input
+              id="newsletterTitle"
+              name="newsletterTitle"
+              defaultValue={settings.newsletterTitle}
+              className="lx-field"
+            />
+          </Field>
+
+          <Field label="Newsletter paragraph" htmlFor="newsletterBody">
+            <input
+              id="newsletterBody"
+              name="newsletterBody"
+              defaultValue={settings.newsletterBody}
+              className="lx-field"
+            />
+          </Field>
+        </div>
       </Card>
 
       <Card className="flex flex-col gap-4 p-5">

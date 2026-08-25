@@ -4,13 +4,16 @@ import { revalidatePath } from "next/cache";
 import {
   addToCart,
   getOrCreateCart,
+  readCart,
   removeCartLine,
   setCartDiscountCode,
   updateCartLine,
+  type CartLineView,
 } from "@/lib/cart";
 import { validateDiscount } from "@/lib/discounts";
 import { toDiscountLines, computeCartTotals } from "@/lib/cart";
 import { getSession } from "@/lib/auth/session";
+import { getSettings } from "@/lib/settings";
 
 export type ActionState = { ok: boolean; message?: string };
 
@@ -26,6 +29,44 @@ export async function addToCartAction(
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Could not add that." };
   }
+}
+
+export type CartSummary = {
+  lines: CartLineView[];
+  itemCount: number;
+  subtotal: number;
+  /** Copy for the drawer's delivery row, e.g. "Complimentary". */
+  deliveryLabel: string;
+};
+
+/**
+ * What the mini-bag drawer renders. Read-only, so it never creates a cart for
+ * a visitor who has not added anything yet.
+ */
+export async function cartSummaryAction(): Promise<CartSummary> {
+  const cart = await readCart();
+  const settings = await getSettings();
+
+  if (!cart) {
+    return { lines: [], itemCount: 0, subtotal: 0, deliveryLabel: "—" };
+  }
+
+  const totals = await computeCartTotals(cart);
+  const threshold = settings.freeShippingThreshold;
+
+  const deliveryLabel =
+    totals.subtotal === 0
+      ? "—"
+      : threshold !== null && totals.subtotal >= threshold
+        ? "Complimentary"
+        : "Calculated at checkout";
+
+  return {
+    lines: totals.lines,
+    itemCount: totals.itemCount,
+    subtotal: totals.subtotal,
+    deliveryLabel,
+  };
 }
 
 export async function updateCartLineAction(
