@@ -48,6 +48,9 @@ export const productCardSelect = {
   brand: true,
   createdAt: true,
   images: { orderBy: { position: "asc" }, take: 2, select: { url: true, alt: true } },
+  categories: {
+    select: { category: { select: { name: true, slug: true, position: true } } },
+  },
   variants: {
     where: { isActive: true },
     select: {
@@ -71,7 +74,9 @@ function orderBy(sort: ProductSort | undefined): Prisma.ProductOrderByWithRelati
     case "name-asc":
       return [{ title: "asc" }];
     default:
-      return [{ isFeatured: "desc" }, { publishedAt: "desc" }, { createdAt: "desc" }];
+      // Curated pieces first, then the order the catalog was built in, so the
+      // default view matches how the rooms read on the artboards.
+      return [{ isFeatured: "desc" }, { createdAt: "asc" }];
   }
 }
 
@@ -188,7 +193,7 @@ export async function searchProducts(filters: CatalogFilters) {
  * catalog so a shopper can always see and undo a filter that returned nothing.
  */
 export async function catalogFacets() {
-  const [categories, priceRange, tagRows, options] = await Promise.all([
+  const [categories, priceRange, tagRows, options, productTotal] = await Promise.all([
     db.category.findMany({
       where: { isActive: true },
       orderBy: [{ position: "asc" }, { name: "asc" }],
@@ -216,6 +221,9 @@ export async function catalogFacets() {
         values: { select: { value: true, hexColor: true }, orderBy: { position: "asc" } },
       },
     }),
+    // Counted rather than summed from the categories: a product can sit in
+    // several rooms, so the per-room counts add up to more than the catalog.
+    db.product.count({ where: { status: "ACTIVE" } }),
   ]);
 
   // Collapse duplicate option names across products into one facet group.
@@ -234,6 +242,7 @@ export async function catalogFacets() {
   }
 
   return {
+    productTotal,
     categories: categories.map((c) => ({
       id: c.id,
       name: c.name,

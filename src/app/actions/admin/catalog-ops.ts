@@ -15,6 +15,13 @@ import type { AdminState } from "./products";
 // Inventory
 // ---------------------------------------------------------------------------
 
+/** The storefront views that show stock, price or availability. */
+function revalidateStorefront() {
+  revalidatePath("/shop");
+  revalidatePath("/");
+  revalidatePath("/product/[slug]", "page");
+}
+
 export async function adjustStockAction(
   _prev: AdminState | null,
   formData: FormData,
@@ -39,6 +46,8 @@ export async function adjustStockAction(
 
   revalidatePath("/admin/inventory");
   revalidatePath("/admin");
+  // Stock decides whether the storefront offers "Add to bag" or "Sold out".
+  revalidateStorefront();
   return { ok: true, message: "Stock updated." };
 }
 
@@ -64,6 +73,7 @@ export async function updateInventorySettingsAction(
   });
 
   revalidatePath("/admin/inventory");
+  revalidateStorefront();
   return { ok: true, message: "Saved." };
 }
 

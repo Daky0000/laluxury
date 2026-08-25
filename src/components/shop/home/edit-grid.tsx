@@ -1,10 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { formatPrice } from "@/lib/money";
-import type { HomeProduct } from "@/lib/home";
-import { AddToBag } from "../add-to-bag";
+import type { ProductTileData } from "@/lib/product-view";
+import { ProductTile } from "../product-tile";
 
 /**
  * "The edit" — the bestseller grid with its room tabs.
@@ -16,7 +14,7 @@ export function EditGrid({
   products,
   tabs,
 }: {
-  products: HomeProduct[];
+  products: ProductTileData[];
   tabs: { label: string; slug: string }[];
 }) {
   const [active, setActive] = useState("all");
@@ -55,7 +53,7 @@ export function EditGrid({
 
       <div className="grid grid-cols-2 gap-x-5 gap-y-8 md:grid-cols-3 lg:grid-cols-4">
         {shown.map((product) => (
-          <EditCard key={product.id} product={product} />
+          <ProductTile key={product.id} product={product} />
         ))}
       </div>
 
@@ -65,70 +63,5 @@ export function EditGrid({
         </p>
       ) : null}
     </>
-  );
-}
-
-function EditCard({ product }: { product: HomeProduct }) {
-  const onSale = product.compareAtPrice !== null && product.compareAtPrice > product.price;
-
-  return (
-    <article className="group flex flex-col">
-      <div className="relative aspect-square overflow-hidden bg-[var(--surface-media)]">
-        <Link href={`/product/${product.slug}`} className="block h-full w-full">
-          {product.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={product.imageUrl}
-              alt={product.imageAlt}
-              loading="lazy"
-              className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-            />
-          ) : (
-            <span className="flex h-full items-center justify-center text-xs text-[var(--text-muted)]">
-              No image yet
-            </span>
-          )}
-        </Link>
-
-        {product.badge ? (
-          <span className="absolute left-3.5 top-3.5 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.9)] px-2.5 py-1.5 text-[9.5px] font-medium uppercase tracking-[0.16em] text-[var(--text-primary)] backdrop-blur">
-            {product.badge}
-          </span>
-        ) : null}
-
-        <AddToBag
-          variantId={product.inStock ? product.variantId : null}
-          href={`/product/${product.slug}`}
-          soldOut={!product.inStock}
-        />
-      </div>
-
-      <div className="flex items-start justify-between gap-2.5 pt-3.5">
-        <div>
-          <h3 className="font-sans text-[0.9rem] font-normal leading-snug tracking-normal">
-            <Link href={`/product/${product.slug}`} className="hover:underline">
-              {product.title}
-            </Link>
-          </h3>
-          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            {product.category}
-          </p>
-        </div>
-
-        <div className="whitespace-nowrap text-right">
-          {product.hasRange ? (
-            <span className="text-[10.5px] text-[var(--text-muted)]">from </span>
-          ) : null}
-          <span className="font-display text-[19px] tabular-nums">
-            {formatPrice(product.price)}
-          </span>
-          {onSale ? (
-            <span className="mt-0.5 block text-[11px] text-[var(--text-muted)] line-through">
-              {formatPrice(product.compareAtPrice!)}
-            </span>
-          ) : null}
-        </div>
-      </div>
-    </article>
   );
 }

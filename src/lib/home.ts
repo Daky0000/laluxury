@@ -1,104 +1,15 @@
 import { db } from "./db";
-import type { Prisma } from "@/generated/prisma";
+import { productCardSelect } from "./catalog";
+import { toTile, type ProductTileData } from "./product-view";
 
 /**
- * Reads for the storefront home page.
- *
- * The home grids need a flatter shape than the shop grid: one image, one
- * category label, a badge and the single variant id that "Add to bag" can use.
- * Building that here keeps the page component to layout, and keeps the client
- * grid props small enough to serialise cheaply.
+ * Reads for the storefront home page. Everything goes through the shared
+ * `toTile` mapping, so the home grids and the all-products grid describe a
+ * product the same way.
  */
 
-const homeProductSelect = {
-  id: true,
-  title: true,
-  slug: true,
-  minPrice: true,
-  maxPrice: true,
-  compareAtPrice: true,
-  tags: true,
-  isFeatured: true,
-  images: { orderBy: { position: "asc" }, take: 1, select: { url: true, alt: true } },
-  categories: {
-    select: { category: { select: { name: true, slug: true, position: true } } },
-  },
-  variants: {
-    where: { isActive: true },
-    select: {
-      id: true,
-      inventory: {
-        select: { onHand: true, reserved: true, trackInventory: true, allowBackorder: true },
-      },
-    },
-  },
-} satisfies Prisma.ProductSelect;
-
-type HomeProductRow = Prisma.ProductGetPayload<{ select: typeof homeProductSelect }>;
-
-export type HomeProduct = {
-  id: string;
-  title: string;
-  slug: string;
-  /** Category label shown under the title, e.g. "Bedding". */
-  category: string;
-  categorySlug: string;
-  price: number;
-  maxPrice: number;
-  compareAtPrice: number | null;
-  /** True when the product has several sizes, so the price reads "from ₵x". */
-  hasRange: boolean;
-  badge: string | null;
-  imageUrl: string | null;
-  imageAlt: string;
-  /** Set only when a single active variant exists, so it can be added in one tap. */
-  variantId: string | null;
-  inStock: boolean;
-};
-
-/** Merchandising badges are ordinary tags, so the owner can set them in the admin. */
-const BADGES: Record<string, string> = {
-  bestseller: "Bestseller",
-  new: "New",
-  luxe: "Luxe",
-  deal: "Deal",
-  sale: "Sale",
-};
-
-function toHomeProduct(product: HomeProductRow): HomeProduct {
-  const category = [...product.categories]
-    .sort((a, b) => a.category.position - b.category.position)
-    .find((c) => c.category.slug !== "student")?.category ??
-    product.categories[0]?.category ?? { name: "", slug: "" };
-
-  const badgeTag = product.tags.find((tag) => BADGES[tag.toLowerCase()]);
-
-  const inStock = product.variants.some((variant) => {
-    const inv = variant.inventory;
-    if (!inv || !inv.trackInventory || inv.allowBackorder) return true;
-    return inv.onHand - inv.reserved > 0;
-  });
-
-  return {
-    id: product.id,
-    title: product.title,
-    slug: product.slug,
-    category: category.name,
-    categorySlug: category.slug,
-    price: product.minPrice,
-    maxPrice: product.maxPrice,
-    compareAtPrice: product.compareAtPrice,
-    hasRange: product.maxPrice > product.minPrice,
-    badge: badgeTag ? BADGES[badgeTag.toLowerCase()] : null,
-    imageUrl: product.images[0]?.url ?? null,
-    imageAlt: product.images[0]?.alt ?? product.title,
-    variantId: product.variants.length === 1 ? product.variants[0].id : null,
-    inStock,
-  };
-}
-
-/** The main "edit" grid: everything on sale except the student range. */
-export async function editProducts(limit = 16): Promise<HomeProduct[]> {
+/** The main "edit" grid: everything on sale except the student-only range. */
+export async function editProducts(limit = 20): Promise<ProductTileData[]> {
   const rows = await db.product.findMany({
     where: {
       status: "ACTIVE",
@@ -109,24 +20,24 @@ export async function editProducts(limit = 16): Promise<HomeProduct[]> {
         { categories: { some: { category: { slug: { not: "student" } } } } },
       ],
     },
-    select: homeProductSelect,
+    select: productCardSelect,
     orderBy: [{ isFeatured: "desc" }, { createdAt: "asc" }],
     take: limit,
   });
 
-  return rows.map(toHomeProduct);
+  return rows.map(toTile);
 }
 
 /** The sage student essentials row. */
-export async function studentProducts(limit = 4): Promise<HomeProduct[]> {
+export async function studentProducts(limit = 4): Promise<ProductTileData[]> {
   const rows = await db.product.findMany({
     where: { status: "ACTIVE", categories: { some: { category: { slug: "student" } } } },
-    select: homeProductSelect,
+    select: productCardSelect,
     orderBy: [{ minPrice: "asc" }, { createdAt: "asc" }],
     take: limit,
   });
 
-  return rows.map(toHomeProduct);
+  return rows.map(toTile);
 }
 
 /** "Shop by room" tiles, with a live count of what is in each room. */

@@ -3,10 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Star } from "lucide-react";
 import { getProductBySlug, ratingFor, relatedProducts } from "@/lib/catalog";
+import { toTile } from "@/lib/product-view";
 import { availableOf } from "@/lib/inventory";
 import { getSettings } from "@/lib/settings";
 import { ProductView } from "@/components/shop/product-view";
-import { ProductCard } from "@/components/shop/product-card";
+import { ProductTile } from "@/components/shop/product-tile";
 import { SectionHeading, Divider } from "@/components/ui";
 
 export const revalidate = 120;
@@ -207,7 +208,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
             <SectionHeading eyebrow="You might also like" title="Goes well with" />
             <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-4">
               {related.map((item) => (
-                <ProductCard key={item.id} product={item} />
+                <ProductTile key={item.id} product={toTile(item)} />
               ))}
             </div>
           </section>

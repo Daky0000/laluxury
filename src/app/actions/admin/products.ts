@@ -17,11 +17,18 @@ function fail(message: string): AdminState {
   return { ok: false, message };
 }
 
+/**
+ * Clears every cached view a product appears in, so an edit in the admin is
+ * live on the storefront immediately rather than when the page's own
+ * revalidate window happens to lapse.
+ */
 function revalidateProduct(id?: string) {
   revalidatePath("/admin/products");
   if (id) revalidatePath(`/admin/products/${id}`);
   revalidatePath("/shop");
   revalidatePath("/");
+  // Every product page at once: the slug may itself have just changed.
+  revalidatePath("/product/[slug]", "page");
 }
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ export async function Footer() {
     {
       head: "Shop",
       links: [
+        { label: "All products", href: "/shop" },
         { label: "Bedding", href: "/shop?category=bedding" },
         { label: "Living", href: "/shop?category=living" },
         { label: "Windows", href: "/shop?category=windows" },
