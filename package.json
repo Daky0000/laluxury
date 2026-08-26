@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "prisma migrate deploy && next start",
+    "start": "prisma migrate deploy && node scripts/seed-once.mjs && next start",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
@@ -38,6 +38,7 @@
     "react-dom": "19.2.8",
     "recharts": "^3.10.1",
     "tailwind-merge": "^3.6.0",
+    "tsx": "^4.23.12",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -51,7 +52,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
     "tailwindcss": "^4",
-    "tsx": "^4.23.12",
     "typescript": "^5"
   }
 }
