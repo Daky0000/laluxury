@@ -31,8 +31,21 @@ function readEnv(name: string): string | undefined {
 export async function POST(request: Request) {
   const expected = readEnv("SEED_TOKEN");
 
-  // No token configured means the endpoint does not exist at all.
-  if (!expected) return new Response("Not found", { status: 404 });
+  // No token configured means the endpoint does not exist at all. The key
+  // names are reported so a variable that is set on the service but missing
+  // from the container can be told apart from one that was never set; values
+  // are never included.
+  if (!expected) {
+    return Response.json(
+      {
+        error: "SEED_TOKEN is not set in this container",
+        visibleKeys: Object.keys(process.env)
+          .filter((key) => /^(SEED|PROBE|HEALTH|NEXT_PUBLIC|AUTH|DATABASE)/.test(key))
+          .sort(),
+      },
+      { status: 404 },
+    );
+  }
 
   if (request.headers.get("x-seed-token") !== expected) {
     return new Response("Forbidden", { status: 403 });
