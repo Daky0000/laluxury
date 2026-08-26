@@ -30,9 +30,35 @@ Generate a secret with `openssl rand -base64 32`.
 2. Add a service from this repo. Railway detects Next.js and runs `npm run build` / `npm start`.
 3. Set the environment variables below in the service's Variables tab.
 4. Set `NEXT_PUBLIC_SITE_URL` to the public domain Railway gives you (no trailing slash).
-5. Run `npm run db:migrate && npm run db:seed` once, from the Railway shell.
 
 `postinstall` runs `prisma generate`, so the client is always built against the deployed schema.
+
+**The catalog deploys itself.** `npm start` runs `prisma migrate deploy`, then the seed, then
+the server — so editing `prisma/seed.ts`, committing and pushing is all it takes for a product
+to appear in the shop. There is no flag to set and nothing to run from a shell.
+
+What makes running the seed on every boot safe is that it does nothing on most of them. The
+seed file is fingerprinted and the fingerprint kept in the `catalog.revision` setting; a boot
+whose fingerprint already matches skips the catalog writes entirely. That matters because
+those writes are authoritative — they set titles, prices and descriptions — so running them
+unconditionally would overwrite whatever had since been edited in the console. Watch the
+deploy log for the one line that says which happened:
+
+```
+catalog: already at 02b7067b7f8e, skipped     # ordinary restart, nothing written
+catalog: 02b7067b7f8e -> 76f805f838d7         # the catalog changed, and was applied
+```
+
+Two things never move. Stock (`onHand`) is written when a variant first appears and never
+again, because the figure in the seed is an opening balance and the real one lives in the
+console. And products are archived rather than deleted, since an order line points at a
+product — archiving takes it off the storefront while leaving the order readable.
+
+`RUN_SEED=1` forces a run even when the fingerprint matches. It is the escape hatch for
+putting a hand-edited row back to what the seed says it should be, and it will overwrite
+console edits to titles, prices and descriptions when you use it. `RUN_DEMO_ORDERS=1`
+additionally seeds demo customers and orders, so the console has something to show before
+real trade starts.
 
 ---
 
@@ -228,7 +254,7 @@ npm run lint         # eslint
 npm run typecheck    # tsc --noEmit
 npm run verify       # domain checks: money, stock, discounts, roles
 npm run db:migrate   # apply migrations
-npm run db:seed      # seed catalog + owner
+npm run db:seed      # apply the catalog if it changed (RUN_SEED=1 forces it)
 npm run catalog:images  # re-download and resize the storefront artwork
 npm run catalog:photos  # re-convert the supplier's product photographs
 npm run db:studio    # browse the database
