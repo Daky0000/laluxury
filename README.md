@@ -166,6 +166,20 @@ the database; the hero, the bundle banner and the section headings come from sto
 the edit grid; the badge on a tile is the product's `bestseller` / `new` / `luxe` / `deal`
 tag. Artwork lives in `public/catalog`, produced by `npm run catalog:images`.
 
+**Two kinds of picture, two pipelines.** `public/catalog/*.webp` is the commissioned
+storefront artwork — heroes, room tiles and stand-in product renders — fetched by
+`npm run catalog:images`. `public/catalog/products/*.webp` is photography of the real stock,
+converted from the supplier's phone JPEGs by `npm run catalog:photos`. Both write committed
+output, so a deploy never depends on a source that lives on one laptop. The photo importer
+takes its originals from `~/Downloads/Product` unless `PHOTO_SOURCE` says otherwise, and the
+file-to-product mapping — including which frames are cropped, turned or left out — is the
+`PHOTOS` table at the top of `scripts/import-product-photos.mjs`.
+
+**Counterfeit prints are not stocked.** The supplier's bedsheet folder includes sets printed
+with Gucci, Louis Vuitton, Versace, Chanel and Burberry marks. Those frames are deliberately
+absent from the importer. Listing them would be trademark infringement, and it is the kind
+of listing that costs a store its payment processor rather than merely earning a takedown.
+
 **Money is integer minor units.** `12050` is GH₵120.50. Nothing holds a price as a float.
 Paystack also expects subunits, so no conversion happens at that boundary. Use
 `formatMoney` to display and `toMinorUnits` to parse.
@@ -216,6 +230,7 @@ npm run verify       # domain checks: money, stock, discounts, roles
 npm run db:migrate   # apply migrations
 npm run db:seed      # seed catalog + owner
 npm run catalog:images  # re-download and resize the storefront artwork
+npm run catalog:photos  # re-convert the supplier's product photographs
 npm run db:studio    # browse the database
 ```
 

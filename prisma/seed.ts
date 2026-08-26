@@ -126,13 +126,27 @@ async function main() {
 
   // --- Products ------------------------------------------------------------
   type VariantSeed = { suffix: string; options: Record<string, string>; price: number; stock: number };
+  type OptionSeed = { name: string; values: { value: string; hex?: string }[] };
+
+  /**
+   * A bare string is an ordinary gallery shot. The object form pins a photograph
+   * to one option value, so picking that colour swaps the gallery to the piece
+   * actually photographed in it.
+   */
+  type ImageSeed = string | { url: string; alt?: string; swatch?: [string, string] };
+
   type ProductSeed = {
     title: string;
     slug: string;
+    /**
+     * The slug this product used to sell under. The row is renamed rather than
+     * replaced, so its orders, reviews and wishlist entries all follow it.
+     */
+    formerSlug?: string;
     short: string;
     description: string;
     /** First entry is the grid image. */
-    images: string[];
+    images: ImageSeed[];
     categories: string[];
     collections: string[];
     tags: string[];
@@ -140,9 +154,49 @@ async function main() {
     care?: string;
     compareAt?: number;
     featured?: boolean;
-    options?: { name: string; values: { value: string; hex?: string }[] };
+    options?: OptionSeed[];
     variants: VariantSeed[];
   };
+
+  /** Photographs of the real stock, produced by `npm run catalog:photos`. */
+  const photo = (name: string) => `/catalog/products/${name}.webp`;
+
+  /**
+   * Every size × colour pairing. Blinds are cut to a height and chosen in a
+   * colour independently, and the cart needs one variant per combination, so
+   * writing thirty of them out by hand would only invite a typo.
+   */
+  const sizeByColour = (
+    sizes: { value: string; suffix: string; price: number }[],
+    colours: { value: string; suffix: string }[],
+    stock: number,
+  ): VariantSeed[] =>
+    sizes.flatMap((size) =>
+      colours.map((colour) => ({
+        suffix: `${size.suffix}${colour.suffix}`,
+        options: { Size: size.value, Colour: colour.value },
+        price: size.price,
+        stock,
+      })),
+    );
+
+  /** Blinds are quoted per foot, so the ladder is derived rather than typed. */
+  const BLIND_RATE_PER_FOOT = 60;
+
+  const BLIND_SIZES = [3, 4, 5, 6, 7].map((feet) => ({
+    value: `${feet}ft`,
+    suffix: `${feet}F`,
+    price: feet * BLIND_RATE_PER_FOOT,
+  }));
+
+  const BLIND_COLOURS = [
+    { value: "Sea Blue", suffix: "SB", hex: "#2E5F7A" },
+    { value: "Black", suffix: "BK", hex: "#1C1C1C" },
+    { value: "Black and White", suffix: "BW", hex: "#6E6E6E" },
+    { value: "Wine", suffix: "WN", hex: "#6E1B2E" },
+    { value: "Brown", suffix: "BR", hex: "#6B4A2F" },
+    { value: "Ash", suffix: "AS", hex: "#9A9A96" },
+  ];
 
   const products: ProductSeed[] = [
     // --- Bedding -----------------------------------------------------------
@@ -160,7 +214,7 @@ async function main() {
       care: "Cold machine wash, dry flat.",
       compareAt: 420,
       featured: true,
-      options: { name: "Size", values: [{ value: "Double" }, { value: "King" }] },
+      options: [{ name: "Size", values: [{ value: "Double" }, { value: "King" }] }],
       variants: [
         { suffix: "DBL", options: { Size: "Double" }, price: 350, stock: 12 },
         { suffix: "KNG", options: { Size: "King" }, price: 430, stock: 7 },
@@ -197,16 +251,35 @@ async function main() {
       slug: "cotton-bedsheet-set",
       short: "Fitted sheet, flat sheet and pillowcases.",
       description:
-        "Breathable cotton percale in a four-piece set: fitted sheet, flat sheet and two pillowcases. Deep pockets that stay put through the night.",
-      images: ["/catalog/cotton-bedsheet-set.webp"],
+        "Breathable cotton percale in a four-piece set: fitted sheet, flat sheet and two pillowcases. Deep pockets that stay put through the night. Prints change with each delivery — the gallery is what is on the shelf now, and you can name the one you want in the order notes or on WhatsApp.",
+      images: [
+        { url: photo("bedsheet-01"), alt: "Red and tan roses on white" },
+        { url: photo("bedsheet-02"), alt: "Green palm leaves over a black and white geometric ground" },
+        { url: photo("bedsheet-03"), alt: "White magnolia on soft teal" },
+        { url: photo("bedsheet-04"), alt: "Butterflies and blossom in cream and green" },
+        { url: photo("bedsheet-05"), alt: "Butterflies and blossom, second view" },
+        { url: photo("bedsheet-06"), alt: "Coral gerbera on white" },
+        { url: photo("bedsheet-07"), alt: "Pale butterflies on deep green" },
+        { url: photo("bedsheet-08"), alt: "Navy check with red and white lines" },
+        { url: photo("bedsheet-09"), alt: "Gold ribbon lines on navy" },
+        { url: photo("bedsheet-10"), alt: "Taupe and cream blocks" },
+        { url: photo("bedsheet-11"), alt: "Sand check with small hearts" },
+        { url: photo("bedsheet-12"), alt: "Outlined hearts on beige" },
+        { url: photo("bedsheet-13"), alt: "Caramel abstract floral" },
+        { url: photo("bedsheet-14"), alt: "Gold leaves on charcoal" },
+        { url: photo("bedsheet-15"), alt: "Cocoa spots on a cream stripe" },
+        { url: photo("bedsheet-16"), alt: "Cream and burgundy circles" },
+      ],
       categories: ["bedding"],
       collections: ["best-sellers", "bed-set"],
       tags: ["bestseller", "bedsheet", "cotton"],
       material: "100% cotton percale",
-      options: {
-        name: "Size",
-        values: [{ value: "Single" }, { value: "Double" }, { value: "King" }],
-      },
+      options: [
+        {
+          name: "Size",
+          values: [{ value: "Single" }, { value: "Double" }, { value: "King" }],
+        },
+      ],
       variants: [
         { suffix: "SGL", options: { Size: "Single" }, price: 80, stock: 40 },
         { suffix: "DBL", options: { Size: "Double" }, price: 110, stock: 32 },
@@ -268,16 +341,26 @@ async function main() {
 
     // --- Living ------------------------------------------------------------
     {
-      title: "Fluffy Carpet 150×220",
-      slug: "fluffy-carpet-150-220",
-      short: "Deep shag pile, anti-slip backing.",
+      title: "3D Carpet 150 × 220",
+      slug: "3d-carpet",
+      formerSlug: "fluffy-carpet-150-220",
+      short: "150 × 220cm, printed depth, anti-slip backing.",
       description:
-        "A 150 × 220cm shag carpet with a woven anti-slip backing. Vacuum on the lowest setting and it stays as it arrived.",
-      images: ["/catalog/fluffy-carpet.webp"],
+        "A 150 × 220cm carpet with a high-definition print that reads as depth from standing height — marble panels, gold seams and stone shading — over a dense low pile and a woven anti-slip backing. Designs change with each container. The gallery shows what is in stock now; tell us which one when you order and we set it aside.",
+      images: [
+        { url: photo("3d-carpet-1"), alt: "Grey, blue and gold panels in a living room" },
+        { url: photo("3d-carpet-2"), alt: "Navy and gold facets in a living room" },
+        { url: photo("3d-carpet-3"), alt: "Grey, clay and gold panels in a living room" },
+        { url: photo("3d-carpet-4"), alt: "Black, white and grey waves in a living room" },
+        { url: photo("3d-carpet-5"), alt: "Graphite and gold panels in a living room" },
+        { url: photo("3d-carpet-6"), alt: "Black marble and gold seams, in stock" },
+        { url: photo("3d-carpet-7"), alt: "Ivory with charcoal and amber brushwork, in stock" },
+      ],
       categories: ["living"],
       collections: ["best-sellers"],
-      tags: ["bestseller", "carpet", "rug"],
-      material: "Polyester shag",
+      tags: ["bestseller", "carpet", "rug", "3d"],
+      material: "Printed polyester pile, anti-slip backing",
+      care: "Vacuum on the lowest setting. Spot clean with a damp cloth.",
       variants: [{ suffix: "STD", options: {}, price: 250, stock: 11 }],
     },
     {
@@ -307,78 +390,161 @@ async function main() {
       variants: [{ suffix: "STD", options: {}, price: 120, stock: 16 }],
     },
     {
-      title: "Throw Pillow",
-      slug: "throw-pillow",
-      short: "45 × 45cm, cover and inner.",
+      title: "Fury Heavy Throw Pillow",
+      slug: "fury-heavy-throw-pillow",
+      formerSlug: "throw-pillow",
+      short: "Long-pile faux fur, filled and heavy in the hand.",
       description:
-        "A 45 × 45cm throw pillow supplied with its inner, in a textured weave that holds a corner rather than slumping.",
-      images: ["/catalog/throw-pillow.webp"],
+        "A long-pile faux-fur throw pillow, filled rather than sold as a bare cover, with enough weight that it sits into a sofa instead of perching on it. Six colours, all in the same deep pile.",
+      images: [
+        {
+          url: photo("fury-throw-pillow-1"),
+          alt: "Fury throw pillows stacked in dark ash and baby pink",
+        },
+        "/catalog/throw-pillow.webp",
+      ],
       categories: ["living"],
       collections: [],
-      tags: ["pillow", "cushion"],
-      material: "Textured polyester",
-      variants: [{ suffix: "STD", options: {}, price: 80, stock: 45 }],
+      tags: ["pillow", "cushion", "fur"],
+      material: "Long-pile faux fur, hollow-fibre fill",
+      care: "Spot clean. Shake the pile back out after use.",
+      options: [
+        {
+          name: "Colour",
+          values: [
+            { value: "Dark Ash", hex: "#6B6B6B" },
+            { value: "Light Blue", hex: "#A8C6DC" },
+            { value: "Cream", hex: "#EFE3CE" },
+            { value: "Brown", hex: "#7A5638" },
+            { value: "Light Green", hex: "#B7CDA6" },
+            { value: "Baby Pink", hex: "#F2C4CE" },
+          ],
+        },
+      ],
+      variants: [
+        { suffix: "ASH", options: { Colour: "Dark Ash" }, price: 70, stock: 18 },
+        { suffix: "BLU", options: { Colour: "Light Blue" }, price: 70, stock: 14 },
+        { suffix: "CRM", options: { Colour: "Cream" }, price: 70, stock: 16 },
+        { suffix: "BRN", options: { Colour: "Brown" }, price: 70, stock: 12 },
+        { suffix: "GRN", options: { Colour: "Light Green" }, price: 70, stock: 10 },
+        { suffix: "PNK", options: { Colour: "Baby Pink" }, price: 70, stock: 15 },
+      ],
+    },
+    {
+      title: "Knotted Pillow",
+      slug: "knotted-pillow",
+      short: "Hand-tied knot cushion.",
+      description:
+        "A knot cushion, hand-tied from a stuffed velvet tube so it holds its shape on a bed or a reading chair. Sold ready-filled.",
+      images: ["/catalog/throw-pillow.webp"],
+      categories: ["living"],
+      collections: ["new-in"],
+      tags: ["new", "pillow", "cushion"],
+      material: "Velvet, hollow-fibre fill",
+      care: "Spot clean only.",
+      variants: [{ suffix: "STD", options: {}, price: 70, stock: 20 }],
     },
     {
       title: "Doormat",
       slug: "doormat",
-      short: "Coir face, rubber back.",
+      short: "Plush pile face, non-slip back.",
       description:
-        "A dense coir doormat on a rubber back that stays where you put it, even on a polished entry floor.",
-      images: ["/catalog/doormat.webp"],
+        "A soft carved-pile doormat on a non-slip back that stays where you put it, even on a polished entry floor. Five colours, all in the same pebble carve.",
+      images: [
+        { url: photo("doormat-1"), alt: "Doormat in deep green", swatch: ["Colour", "Green"] },
+        "/catalog/doormat.webp",
+      ],
       categories: ["living"],
       collections: [],
       tags: ["doormat", "entry"],
-      material: "Coir, rubber",
-      variants: [{ suffix: "STD", options: {}, price: 60, stock: 38 }],
+      material: "Carved polyester pile, non-slip backing",
+      care: "Shake out and machine wash cold.",
+      options: [
+        {
+          name: "Colour",
+          values: [
+            { value: "Gold", hex: "#C8A24A" },
+            { value: "Brown", hex: "#6B4A2F" },
+            { value: "Blue", hex: "#2F5C8A" },
+            { value: "Green", hex: "#1E6B5C" },
+            { value: "Purple", hex: "#6A4A8C" },
+          ],
+        },
+      ],
+      variants: [
+        { suffix: "GLD", options: { Colour: "Gold" }, price: 60, stock: 12 },
+        { suffix: "BRN", options: { Colour: "Brown" }, price: 60, stock: 14 },
+        { suffix: "BLU", options: { Colour: "Blue" }, price: 60, stock: 10 },
+        { suffix: "GRN", options: { Colour: "Green" }, price: 60, stock: 16 },
+        { suffix: "PUR", options: { Colour: "Purple" }, price: 60, stock: 8 },
+      ],
     },
 
     // --- Windows -----------------------------------------------------------
     {
-      title: "Window Curtain",
-      slug: "window-curtain",
-      short: "Lined panels, sold in pairs.",
+      title: "Already Made Curtains",
+      slug: "already-made-curtains",
+      formerSlug: "window-curtain",
+      short: "Ready-made eyelet panels, sold in pairs.",
       description:
-        "A lined pair of curtain panels with a pencil-pleat header. Heavy enough to soften afternoon light without darkening the room.",
-      images: ["/catalog/window-curtain.webp"],
+        "Curtains made up and ready to hang: a heavy textured weave, hemmed, with pressed steel eyelets that run straight onto a rod. No measuring, no tailoring wait — the pair comes as photographed.",
+      images: [
+        { url: photo("already-made-curtain-1"), alt: "Brown eyelet curtain panel hanging" },
+        { url: photo("already-made-curtain-2"), alt: "Close-up of the woven curtain fabric" },
+        "/catalog/window-curtain.webp",
+      ],
       categories: ["windows"],
       collections: ["best-sellers"],
       tags: ["curtain"],
-      material: "Lined polyester",
+      material: "Textured polyester, steel eyelets",
+      care: "Cold machine wash, warm iron on the reverse.",
       variants: [{ suffix: "STD", options: {}, price: 180, stock: 20 }],
     },
     {
       title: "Curtain Blinds",
       slug: "curtain-blinds",
-      short: "Roller blinds, cut to width.",
+      short: "Zebra blinds, cut 3ft to 7ft.",
       description:
-        "Roller blinds in a light-filtering weave, supplied with the bracket set. Tell us the width at checkout and we cut before delivery.",
-      images: ["/catalog/curtain-blinds.webp"],
+        "Day-and-night zebra blinds: alternating sheer and solid bands that line up to close the window or offset to filter it, on a smooth roller with the bracket set in the box. Priced by the foot — pick the drop and the colour and we cut before delivery.",
+      images: [
+        { url: photo("curtain-blinds-1"), alt: "Zebra blind in black and white, half open" },
+        "/catalog/curtain-blinds.webp",
+      ],
       categories: ["windows"],
       collections: [],
       tags: ["blinds"],
-      material: "Light-filtering polyester",
-      options: { name: "Width", values: [{ value: "90cm" }, { value: "150cm" }] },
-      variants: [
-        { suffix: "W90", options: { Width: "90cm" }, price: 120, stock: 14 },
-        { suffix: "W150", options: { Width: "150cm" }, price: 180, stock: 9 },
+      material: "Light-filtering polyester, aluminium roller",
+      care: "Dust with a dry cloth. Do not wet the bands.",
+      options: [
+        { name: "Size", values: BLIND_SIZES.map((s) => ({ value: s.value })) },
+        {
+          name: "Colour",
+          values: BLIND_COLOURS.map((c) => ({ value: c.value, hex: c.hex })),
+        },
       ],
+      variants: sizeByColour(BLIND_SIZES, BLIND_COLOURS, 6),
     },
     {
-      title: "Curtain Pole",
-      slug: "curtain-pole",
-      short: "Steel pole with finials and brackets.",
+      title: "Curtain Rod",
+      slug: "curtain-rod",
+      formerSlug: "curtain-pole",
+      short: "Rod, brackets and fixings in the box.",
       description:
-        "A 25mm steel pole with finials, brackets and fixings in the box. Two lengths, both matt black.",
+        "A steel curtain rod with the brackets, finials and wall fixings in the box. The 2 metre carries a single window or a two-in-one; the 3 metre is the one to order for a three-in-one run.",
       images: ["/catalog/curtain-pole.webp"],
       categories: ["windows"],
       collections: [],
-      tags: ["pole", "hardware"],
+      tags: ["rod", "hardware"],
       material: "Powder-coated steel",
-      options: { name: "Length", values: [{ value: "1.5m" }, { value: "2.4m" }] },
+      options: [
+        {
+          name: "Size",
+          values: [{ value: "2m · single or 2-in-one" }, { value: "3m · 3-in-one" }],
+        },
+      ],
       variants: [
-        { suffix: "L15", options: { Length: "1.5m" }, price: 80, stock: 22 },
-        { suffix: "L24", options: { Length: "2.4m" }, price: 120, stock: 13 },
+        { suffix: "2M", options: { Size: "2m · single or 2-in-one" }, price: 80, stock: 22 },
+        { suffix: "3M", options: { Size: "3m · 3-in-one" }, price: 90, stock: 13 },
       ],
     },
     {
@@ -402,8 +568,25 @@ async function main() {
       slug: "student-bedsheet",
       short: "Single set sized for a hall bed.",
       description:
-        "A single bedsheet set cut for a standard hall mattress, in a cotton blend that survives the laundry queue.",
-      images: ["/catalog/student-bedsheet.webp"],
+        "A single bedsheet set cut for a standard hall mattress, in a cotton blend that survives the laundry queue. Prints rotate with each delivery — name the one you want in the order notes.",
+      images: [
+        { url: photo("bedsheet-17"), alt: "Black and white diamond motif" },
+        { url: photo("bedsheet-18"), alt: "Red hearts and butterflies on caramel" },
+        { url: photo("bedsheet-19"), alt: "White hearts on red" },
+        { url: photo("bedsheet-20"), alt: "Red lettering on black" },
+        { url: photo("bedsheet-21"), alt: "Roses and gold on white" },
+        { url: photo("bedsheet-22"), alt: "Red and white damask border" },
+        { url: photo("bedsheet-23"), alt: "Red, black and grey waves" },
+        { url: photo("bedsheet-24"), alt: "Grey and black geometric" },
+        { url: photo("bedsheet-25"), alt: "Grey and black geometric, second view" },
+        { url: photo("bedsheet-26"), alt: "Charcoal brick geometric" },
+        { url: photo("bedsheet-27"), alt: "Monochrome block print" },
+        { url: photo("bedsheet-28"), alt: "Grey and white spots" },
+        { url: photo("bedsheet-29"), alt: "Grey rings on pale grey" },
+        { url: photo("bedsheet-30"), alt: "Zebra print in black and white" },
+        { url: photo("bedsheet-31"), alt: "Red lips on black" },
+        "/catalog/student-bedsheet.webp",
+      ],
       categories: ["student"],
       collections: ["student-essentials"],
       tags: ["student", "bedsheet"],
@@ -439,6 +622,21 @@ async function main() {
   ];
 
   for (const p of products) {
+    // A renamed product is moved, not replaced: the row keeps its id, and with
+    // it every order line, review and wishlist entry that points at it. Only
+    // when the new slug is still free — if both exist, someone has already
+    // dealt with it and overwriting would be the destructive answer.
+    if (p.formerSlug) {
+      const [former, current] = await Promise.all([
+        db.product.findUnique({ where: { slug: p.formerSlug }, select: { id: true } }),
+        db.product.findUnique({ where: { slug: p.slug }, select: { id: true } }),
+      ]);
+      if (former && !current) {
+        await db.product.update({ where: { id: former.id }, data: { slug: p.slug } });
+        console.log(`  renamed ${p.formerSlug} -> ${p.slug}`);
+      }
+    }
+
     const skuStem = p.slug
       .split("-")
       .map((w) => w.slice(0, 2).toUpperCase())
@@ -446,6 +644,22 @@ async function main() {
       .slice(0, 8);
 
     const prices = p.variants.map((v) => cedis(v.price));
+
+    // A renamed product is moved, not replaced. Upserting on the new slug alone
+    // would leave the old row published beside it and strand the orders,
+    // reviews and wishlist entries that still point at it. Skipped once the new
+    // slug exists, so a second run is a no-op.
+    if (p.formerSlug) {
+      const [former, current] = await Promise.all([
+        db.product.findUnique({ where: { slug: p.formerSlug }, select: { id: true } }),
+        db.product.findUnique({ where: { slug: p.slug }, select: { id: true } }),
+      ]);
+
+      if (former && !current) {
+        await db.product.update({ where: { id: former.id }, data: { slug: p.slug } });
+        console.log(`  renamed: ${p.formerSlug} -> ${p.slug}`);
+      }
+    }
 
     const product = await db.product.upsert({
       where: { slug: p.slug },
@@ -481,21 +695,77 @@ async function main() {
       },
     });
 
-    // Imagery. Position is the natural key so re-running swaps the artwork
+    // Options first: a photograph can be pinned to one of their values, so the
+    // values have to exist before the imagery is written.
+    const optionSeeds = p.options ?? [];
+
+    // Whatever the seed no longer describes is dropped, so a product that
+    // changes how it is sold — blinds moved from two widths to a foot ladder —
+    // does not keep the retired picker standing next to the new one. Deleting
+    // an option cascades to its values and to the variant links that used them.
+    await db.productOption.deleteMany({
+      where: {
+        productId: product.id,
+        ...(optionSeeds.length ? { name: { notIn: optionSeeds.map((o) => o.name) } } : {}),
+      },
+    });
+
+    // Keyed "Option:Value", so two options on one product can share a value
+    // name without one shadowing the other.
+    const valueIds = new Map<string, string>();
+
+    for (const [i, optionSeed] of optionSeeds.entries()) {
+      const option = await db.productOption.upsert({
+        where: { productId_name: { productId: product.id, name: optionSeed.name } },
+        create: { productId: product.id, name: optionSeed.name, position: i },
+        update: { position: i },
+      });
+
+      await db.productOptionValue.deleteMany({
+        where: { optionId: option.id, value: { notIn: optionSeed.values.map((v) => v.value) } },
+      });
+
+      for (const [j, v] of optionSeed.values.entries()) {
+        const row = await db.productOptionValue.upsert({
+          where: { optionId_value: { optionId: option.id, value: v.value } },
+          create: { optionId: option.id, value: v.value, hexColor: v.hex ?? null, position: j },
+          update: { hexColor: v.hex ?? null, position: j },
+        });
+        valueIds.set(`${optionSeed.name}:${v.value}`, row.id);
+      }
+    }
+
+    // Imagery. The url is the natural key, so re-running reorders and retitles
     // rather than stacking duplicates.
-    for (const [i, url] of p.images.entries()) {
+    const imageSeeds = p.images.map((image, i) => {
+      const seed = typeof image === "string" ? { url: image } : image;
+      return {
+        url: seed.url,
+        alt: ("alt" in seed && seed.alt) || p.title,
+        optionValueId:
+          "swatch" in seed && seed.swatch ? (valueIds.get(seed.swatch.join(":")) ?? null) : null,
+        position: i,
+      };
+    });
+
+    // Only artwork the seed owns is cleared. Photographs uploaded through the
+    // console are served from the CDN, so a re-seed never destroys one.
+    await db.productImage.deleteMany({
+      where: {
+        productId: product.id,
+        url: { startsWith: "/catalog/", notIn: imageSeeds.map((image) => image.url) },
+      },
+    });
+
+    for (const image of imageSeeds) {
       const existing = await db.productImage.findFirst({
-        where: { productId: product.id, position: i },
+        where: { productId: product.id, url: image.url },
+        select: { id: true },
       });
       if (existing) {
-        await db.productImage.update({
-          where: { id: existing.id },
-          data: { url, alt: p.title },
-        });
+        await db.productImage.update({ where: { id: existing.id }, data: image });
       } else {
-        await db.productImage.create({
-          data: { productId: product.id, url, alt: p.title, position: i },
-        });
+        await db.productImage.create({ data: { ...image, productId: product.id } });
       }
     }
 
@@ -523,28 +793,11 @@ async function main() {
       });
     }
 
-    // Options and their values
-    const valueIds = new Map<string, string>();
-    if (p.options) {
-      const option = await db.productOption.upsert({
-        where: { productId_name: { productId: product.id, name: p.options.name } },
-        create: { productId: product.id, name: p.options.name, position: 0 },
-        update: {},
-      });
-
-      for (const [i, v] of p.options.values.entries()) {
-        const row = await db.productOptionValue.upsert({
-          where: { optionId_value: { optionId: option.id, value: v.value } },
-          create: { optionId: option.id, value: v.value, hexColor: v.hex ?? null, position: i },
-          update: { hexColor: v.hex ?? null, position: i },
-        });
-        valueIds.set(v.value, row.id);
-      }
-    }
-
     // Variants + inventory
+    const skus = p.variants.map((v) => `${skuStem}-${v.suffix}`);
+
     for (const [i, v] of p.variants.entries()) {
-      const sku = `${skuStem}-${v.suffix}`;
+      const sku = skus[i];
       const title = Object.values(v.options).join(" / ") || "Default";
 
       const variant = await db.variant.upsert({
@@ -559,11 +812,11 @@ async function main() {
           weightGrams: 1200,
           position: i,
         },
-        update: { price: cedis(v.price), title, isActive: true },
+        update: { price: cedis(v.price), title, position: i, isActive: true },
       });
 
-      for (const value of Object.values(v.options)) {
-        const optionValueId = valueIds.get(value);
+      for (const [optionName, value] of Object.entries(v.options)) {
+        const optionValueId = valueIds.get(`${optionName}:${value}`);
         if (!optionValueId) continue;
         await db.variantOptionValue.upsert({
           where: { variantId_optionValueId: { variantId: variant.id, optionValueId } },
@@ -578,6 +831,15 @@ async function main() {
         update: { onHand: v.stock },
       });
     }
+
+    // A variant is never deleted — an order line points straight at one, and
+    // that line has to keep reading correctly years later. One the catalog has
+    // dropped is retired instead, which takes it off the storefront and out of
+    // the picker while leaving the history intact.
+    await db.variant.updateMany({
+      where: { productId: product.id, sku: { notIn: skus }, isActive: true },
+      data: { isActive: false },
+    });
   }
   console.log(`  products: ${products.length}`);
 

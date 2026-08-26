@@ -17,6 +17,7 @@
     "db:reset": "prisma migrate reset --force",
     "verify": "node scripts/verify.mjs",
     "catalog:images": "node scripts/fetch-catalog-images.mjs",
+    "catalog:photos": "node scripts/import-product-photos.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {
