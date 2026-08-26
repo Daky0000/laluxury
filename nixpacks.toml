@@ -1,0 +1,7 @@
+# Pins the runtime so Nixpacks cannot pick a different Node between builds.
+#
+# Keep this in step with .nvmrc — they are the only two places the version is
+# declared, and a disagreement between them is the kind of thing that only
+# shows up as a build that behaves differently for no visible reason.
+[phases.setup]
+nixPkgs = ["nodejs_24"]

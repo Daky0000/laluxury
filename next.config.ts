@@ -5,6 +5,14 @@ const nextConfig: NextConfig = {
   // bundler so `pg` never tries to resolve `util/types` for the browser.
   serverExternalPackages: ["pg", "@prisma/adapter-pg", "@prisma/client"],
 
+  // Baked in at build time and served from /api/health, so there is one value
+  // that changes on every build and can be read without authenticating. Railway
+  // supplies the commit only for builds it pulls from GitHub; a `railway up`
+  // deploy has no commit, hence the timestamp fallback.
+  env: {
+    BUILD_STAMP: process.env.RAILWAY_GIT_COMMIT_SHA ?? new Date().toISOString(),
+  },
+
   // Without this Turbopack walks up to the home directory looking for a lockfile.
   turbopack: {
     root: __dirname,
