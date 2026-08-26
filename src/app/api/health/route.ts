@@ -44,6 +44,24 @@ export async function GET(request: Request) {
 
     const raw = await db.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM "Product"`;
 
+    // The same query over a plain pg connection, in this same process. If this
+    // disagrees with Prisma above, the driver is the difference; if it agrees,
+    // the serving container simply reaches a different server than the release
+    // container did.
+    let direct: unknown = null;
+    try {
+      const { default: pg } = await import("pg");
+      const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+      await client.connect();
+      const result = await client.query(
+        'SELECT inet_server_addr()::text AS host, (SELECT count(*) FROM "Product")::int AS products',
+      );
+      direct = result.rows[0];
+      await client.end();
+    } catch (error) {
+      direct = { error: error instanceof Error ? error.message : String(error) };
+    }
+
     return Response.json({
       ...base,
       db: {
@@ -51,6 +69,7 @@ export async function GET(request: Request) {
         active,
         categories,
         rawProductRows: Number(raw[0]?.n ?? -1),
+        direct,
         ...identity[0],
         // Which URL this process actually resolved, credentials stripped.
         configured: (process.env.DATABASE_URL ?? "unset").replace(/\/\/[^@]*@/, "//"),
