@@ -35,7 +35,25 @@ export async function GET(request: Request) {
       db.product.count({ where: { status: "ACTIVE" } }),
       db.category.count(),
     ]);
-    return Response.json({ ...base, db: { products, active, categories } });
+
+    // Asked of Postgres directly, so a mismatch between what the seed wrote and
+    // what the app reads points at the connection rather than at Prisma.
+    const identity = await db.$queryRaw<
+      { database: string; schema: string; user: string }[]
+    >`SELECT current_database() AS database, current_schema() AS schema, current_user AS "user"`;
+
+    const raw = await db.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM "Product"`;
+
+    return Response.json({
+      ...base,
+      db: {
+        products,
+        active,
+        categories,
+        rawProductRows: Number(raw[0]?.n ?? -1),
+        ...identity[0],
+      },
+    });
   } catch (error) {
     return Response.json({
       ...base,
