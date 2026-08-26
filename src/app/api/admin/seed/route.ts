@@ -18,8 +18,18 @@ import { spawn } from "node:child_process";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+/**
+ * Read through a variable key. `process.env.SEED_TOKEN` written literally is
+ * replaced at build time, so a variable added after the image was built would
+ * compile to undefined — the whole reason this is indirected. `src/lib/env.ts`
+ * does the same thing for the same reason.
+ */
+function readEnv(name: string): string | undefined {
+  return process.env[name];
+}
+
 export async function POST(request: Request) {
-  const expected = process.env.SEED_TOKEN;
+  const expected = readEnv("SEED_TOKEN");
 
   // No token configured means the endpoint does not exist at all.
   if (!expected) return new Response("Not found", { status: 404 });
