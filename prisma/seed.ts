@@ -1,16 +1,39 @@
 import "dotenv/config";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
+import type { Prisma } from "../src/generated/prisma/client";
 
 /**
  * Seeds a working store: staff account, catalog, shipping, discounts.
- * Safe to re-run - everything is upserted by a natural key.
  *
- * The catalog mirrors the "Efie Home Storefront v2 Light" artboard: four
- * rooms, the bestseller edit and the student range. Artwork comes from
- * `public/catalog`, produced by `node scripts/fetch-catalog-images.mjs`.
+ * This runs on every boot, so a catalog change reaches the shop by being
+ * committed and pushed, the same as any other change. What makes that safe is
+ * the revision check below.
+ *
+ * The catalog defined here is hashed, and the hash stored alongside it. On a
+ * boot where the hash is unchanged — a restart, a redeploy of unrelated code,
+ * a crash recovery — the catalog section is skipped entirely. That matters
+ * because these writes are authoritative: they set titles, prices and
+ * descriptions, and running them unconditionally would overwrite whatever the
+ * owner had since edited in the console, every single deploy. Skipping when
+ * nothing changed is what lets the console and this file coexist.
+ *
+ * Stock is the one figure never written twice; see the inventory upsert.
+ *
+ * Set RUN_SEED=1 to force a run even when the hash matches.
+ *
+ * Artwork comes from `public/catalog` (`npm run catalog:images`) and the
+ * photography from `public/catalog/products` (`npm run catalog:photos`).
  */
+
+/** Bump to force the catalog to re-apply without otherwise changing it. */
+const CATALOG_SCHEMA_VERSION = 2;
+
+const REVISION_KEY = "catalog.revision";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const db = new PrismaClient({ adapter });
@@ -21,8 +44,22 @@ function searchText(p: { title: string; tags: string[]; material?: string; short
   return [p.title, ...p.tags, p.material ?? "", p.short ?? ""].join(" ").toLowerCase();
 }
 
-/** The demo catalog this store shipped with, retired in favour of the real one. */
-const LEGACY_PRODUCT_SLUGS = [
+/**
+ * Everything this store has ever listed that it does not actually sell.
+ *
+ * Two generations of it. The first eight came with the original demo. The rest
+ * were stand-ins built from commissioned renders — plausible furnishings, but
+ * nobody ever had one in stock, and every price on them was invented. They are
+ * retired here in favour of the range that was actually photographed.
+ *
+ * Archived rather than deleted, deliberately. `OrderItem` points at a product,
+ * so deleting one would blank that line on an order somebody really placed;
+ * archiving takes it off the storefront and out of search while leaving the
+ * history readable. They stay visible in the admin, which is also where they
+ * can be deleted for good if that is what you want.
+ */
+const RETIRED_PRODUCT_SLUGS = [
+  // The original demo catalog.
   "adinkra-ceramic-table-lamp",
   "kente-stripe-throw",
   "sekondi-stoneware-dinner-set",
@@ -31,11 +68,58 @@ const LEGACY_PRODUCT_SLUGS = [
   "teak-low-stool",
   "brass-candle-holders",
   "linen-cushion-cover",
+  // Render-only stand-ins, never stocked.
+  "rabbit-fur-duvet",
+  "king-size-duvet",
+  "king-bed-topper",
+  "white-king-bedsheet",
+  "heavy-blanket-double",
+  "waterproof-bed-cover",
+  "soft-sleep-pillow",
+  "coffee-table",
+  "round-stool",
+  "shower-curtain",
+  "student-bedsheet",
+  "student-white-bedsheet",
+  "student-blanket",
 ];
 
-const LEGACY_CATEGORY_SLUGS = ["lighting", "textiles", "tableware", "decor", "furniture"];
+/** Rooms with nothing left in them. */
+const RETIRED_CATEGORY_SLUGS = [
+  "lighting",
+  "textiles",
+  "tableware",
+  "decor",
+  "furniture",
+  "student",
+];
+
+/** Edits that only ever held stand-ins. */
+const RETIRED_COLLECTION_SLUGS = ["bed-set", "student-essentials"];
 
 const LEGACY_ANNOUNCEMENT = "Free delivery in Accra on orders over GH₵500";
+
+/** The bundle banner sold a four-piece bed set built entirely from stand-ins. */
+const LEGACY_BUNDLE_TITLE = "The Complete Bed Set";
+
+/**
+ * A fingerprint of this file, and the whole mechanism by which a catalog change
+ * reaches the shop: edit this file, push, and the hash no longer matches what
+ * the database recorded, so the catalog is applied on the next boot.
+ *
+ * The source is hashed rather than the data structures, so that a change
+ * anywhere in here counts — rooms, edits, products, delivery rates — with no
+ * list of things to remember to include, and no way to change the catalog
+ * without changing the hash. The cost is that editing a comment also re-applies
+ * it, which is harmless: the same values get written back.
+ */
+function catalogRevision(): string {
+  return createHash("sha256")
+    .update(`v${CATALOG_SCHEMA_VERSION}\n`)
+    .update(readFileSync(fileURLToPath(import.meta.url), "utf8"))
+    .digest("hex")
+    .slice(0, 12);
+}
 
 async function main() {
   console.log("Seeding LaLuxury...");
@@ -58,6 +142,139 @@ async function main() {
   });
   console.log(`  owner: ${owner.email}`);
 
+
+  // --- Catalog -------------------------------------------------------------
+  // Applied only when this file has actually changed; see the note at the top
+  // for why running it unconditionally would fight the console.
+  const revision = catalogRevision();
+  const stored = await db.setting.findUnique({ where: { key: REVISION_KEY } });
+  const applied = (stored?.value as { revision?: string } | null)?.revision;
+  const forced = process.env.RUN_SEED === "1";
+
+  if (!forced && applied === revision) {
+    console.log(`  catalog: already at ${revision}, skipped`);
+  } else {
+    await seedCatalog();
+    await db.setting.upsert({
+      where: { key: REVISION_KEY },
+      create: { key: REVISION_KEY, value: { revision, appliedAt: new Date().toISOString() } },
+      update: { value: { revision, appliedAt: new Date().toISOString() } },
+    });
+    console.log(
+      `  catalog: ${applied ?? "nothing"} -> ${revision}${forced ? " (forced by RUN_SEED)" : ""}`,
+    );
+  }
+
+  // --- Discounts -----------------------------------------------------------
+  await db.discount.upsert({
+    where: { code: "WELCOME10" },
+    create: {
+      code: "WELCOME10",
+      description: "10% off your first order",
+      type: "PERCENTAGE",
+      value: 10,
+      firstOrderOnly: true,
+      usageLimitPerUser: 1,
+      isActive: true,
+    },
+    update: {},
+  });
+
+  await db.discount.upsert({
+    where: { code: "FREESHIP" },
+    create: {
+      code: "FREESHIP",
+      description: "Free delivery over GHS 300",
+      type: "FREE_SHIPPING",
+      value: 0,
+      minSubtotal: cedis(300),
+      isActive: true,
+    },
+    update: {},
+  });
+  console.log("  discounts: 2");
+
+  // --- Customer tags -------------------------------------------------------
+  for (const tag of [
+    { name: "VIP", color: "#C9A227" },
+    { name: "Wholesale", color: "#2C3E60" },
+    { name: "Repeat", color: "#6B7355" },
+  ]) {
+    await db.customerTag.upsert({
+      where: { name: tag.name },
+      create: tag,
+      update: {},
+    });
+  }
+
+  // --- Settings ------------------------------------------------------------
+  const storeDefaults = {
+    storeName: "LaLuxury",
+    tagline: "Considered textiles and furnishings for Ghanaian homes.",
+    supportEmail: ownerEmail,
+    announcementBar:
+      "Complimentary delivery over ₵300 · Cash on delivery nationwide · New arrivals in stock",
+    freeShippingThreshold: cedis(300),
+    agentRequiresApproval: true,
+  };
+
+  const storeRow = await db.setting.findUnique({ where: { key: "store" } });
+
+  if (!storeRow) {
+    await db.setting.create({ data: { key: "store", value: storeDefaults } });
+  } else {
+    // Only wording the store never chose for itself is replaced; anything the
+    // owner has edited since is left exactly as they left it.
+    const value = (storeRow.value ?? {}) as Record<string, unknown>;
+    const patch: Record<string, unknown> = {};
+
+    if (value.announcementBar === LEGACY_ANNOUNCEMENT) {
+      patch.announcementBar = storeDefaults.announcementBar;
+      patch.freeShippingThreshold = cedis(300);
+    }
+
+    // The bundle banner offered a duvet, a bedsheet, two pillows and a topper
+    // for one price. Three of those four are stand-ins being retired here, so
+    // the banner would be advertising something nobody can buy. Clearing the
+    // title is what hides the section — the home page renders it only when a
+    // title is set — and leaves the rest of the fields for whoever writes the
+    // next real bundle.
+    //
+    // The stored row only holds keys somebody has actually saved, so a store
+    // that never opened the settings screen has no `bundleTitle` at all and is
+    // still showing the old copy from the code defaults. Absent therefore has
+    // to count as unchanged, or exactly the stores that never touched it would
+    // be the ones that keep advertising the retired bundle.
+    if (value.bundleTitle === undefined || value.bundleTitle === LEGACY_BUNDLE_TITLE) {
+      patch.bundleTitle = "";
+      patch.bundleEyebrow = "";
+      patch.bundleBody = "";
+      patch.bundlePrice = null;
+      patch.bundleCompareAtPrice = null;
+      patch.bundleHref = "";
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await db.setting.update({
+        where: { key: "store" },
+        // Prisma types a Json column against its own input union, which an
+        // open Record does not satisfy; the contents are plain JSON either way.
+        data: { value: { ...value, ...patch } as Prisma.InputJsonValue },
+      });
+      console.log(`  settings: refreshed ${Object.keys(patch).join(", ")}`);
+    }
+  }
+
+  console.log("Done.");
+}
+
+
+/**
+ * Everything the catalog is made of: rooms, edits, products, and the delivery
+ * rates that go with them. Authoritative — it overwrites what it describes —
+ * which is why `main` runs it only when `catalogRevision()` has moved.
+ */
+async function seedCatalog() {
   // --- Categories ----------------------------------------------------------
   const categorySeed = [
     {
@@ -78,15 +295,8 @@ async function main() {
       name: "Windows",
       slug: "windows",
       position: 3,
-      description: "Curtains, blinds and poles, measured for Ghanaian windows.",
+      description: "Curtains, blinds and rods, measured for Ghanaian windows.",
       imageUrl: "/catalog/room-windows.webp",
-    },
-    {
-      name: "Student",
-      slug: "student",
-      position: 4,
-      description: "Hall-ready essentials from ₵50.",
-      imageUrl: "/catalog/room-student.webp",
     },
   ];
 
@@ -110,8 +320,6 @@ async function main() {
   const collectionSeed = [
     { name: "New In", slug: "new-in", isFeatured: true, position: 1 },
     { name: "Best Sellers", slug: "best-sellers", isFeatured: true, position: 2 },
-    { name: "The Complete Bed Set", slug: "bed-set", isFeatured: true, position: 3 },
-    { name: "Student Essentials", slug: "student-essentials", isFeatured: false, position: 4 },
   ];
 
   const collections = new Map<string, string>();
@@ -201,57 +409,12 @@ async function main() {
   const products: ProductSeed[] = [
     // --- Bedding -----------------------------------------------------------
     {
-      title: "Rabbit Fur Duvet",
-      slug: "rabbit-fur-duvet",
-      short: "Deep-pile faux fur, quilted through.",
-      description:
-        "A dense faux-fur duvet quilted so the pile never shifts, backed in brushed microfibre. Warm without weight, and the piece most of our customers come back for.",
-      images: ["/catalog/rabbit-fur-duvet.webp"],
-      categories: ["bedding"],
-      collections: ["best-sellers", "bed-set"],
-      tags: ["bestseller", "duvet", "fur"],
-      material: "Faux fur, brushed microfibre",
-      care: "Cold machine wash, dry flat.",
-      compareAt: 420,
-      featured: true,
-      options: [{ name: "Size", values: [{ value: "Double" }, { value: "King" }] }],
-      variants: [
-        { suffix: "DBL", options: { Size: "Double" }, price: 350, stock: 12 },
-        { suffix: "KNG", options: { Size: "King" }, price: 430, stock: 7 },
-      ],
-    },
-    {
-      title: "King Size Duvet",
-      slug: "king-size-duvet",
-      short: "Hotel-weight, four-season fill.",
-      description:
-        "A generous king duvet with a 300gsm hollow-fibre fill and a piped edge, so it drapes over the sides of the bed rather than perching on top.",
-      images: ["/catalog/king-size-duvet.webp"],
-      categories: ["bedding"],
-      collections: ["bed-set"],
-      tags: ["duvet", "king"],
-      material: "Cotton-blend shell, hollow-fibre fill",
-      variants: [{ suffix: "STD", options: {}, price: 280, stock: 15 }],
-    },
-    {
-      title: "King Bed Topper",
-      slug: "king-bed-topper",
-      short: "Plush topper with elastic corner straps.",
-      description:
-        "Eight centimetres of quilted loft with elasticated corner straps, for tired mattresses and guest rooms you want people to remember.",
-      images: ["/catalog/king-bed-topper.webp"],
-      categories: ["bedding"],
-      collections: ["bed-set", "new-in"],
-      tags: ["luxe", "topper"],
-      material: "Microfibre",
-      variants: [{ suffix: "STD", options: {}, price: 450, stock: 6 }],
-    },
-    {
-      title: "Cotton Bedsheet Set",
-      slug: "cotton-bedsheet-set",
+      title: "Bedsheet Set",
+      slug: "bedsheet-set",
+      formerSlug: "cotton-bedsheet-set",
       short: "Fitted sheet, flat sheet and pillowcases.",
       description:
-        "Breathable cotton percale in a four-piece set: fitted sheet, flat sheet and two pillowcases. Deep pockets that stay put through the night. Prints change with each delivery — the gallery is what is on the shelf now, and you can name the one you want in the order notes or on WhatsApp.",
+        "A four-piece set: fitted sheet, flat sheet and two pillowcases, with deep pockets that stay put through the night. The prints turn over with each delivery — the gallery is what is on the shelf now. Tell us which one you want in the order notes or on WhatsApp and we set it aside.",
       images: [
         { url: photo("bedsheet-01"), alt: "Red and tan roses on white" },
         { url: photo("bedsheet-02"), alt: "Green palm leaves over a black and white geometric ground" },
@@ -269,11 +432,28 @@ async function main() {
         { url: photo("bedsheet-14"), alt: "Gold leaves on charcoal" },
         { url: photo("bedsheet-15"), alt: "Cocoa spots on a cream stripe" },
         { url: photo("bedsheet-16"), alt: "Cream and burgundy circles" },
+        { url: photo("bedsheet-17"), alt: "Black and white diamond motif" },
+        { url: photo("bedsheet-18"), alt: "Red hearts and butterflies on caramel" },
+        { url: photo("bedsheet-19"), alt: "White hearts on red" },
+        { url: photo("bedsheet-20"), alt: "Red lettering on black" },
+        { url: photo("bedsheet-21"), alt: "Roses and gold on white" },
+        { url: photo("bedsheet-22"), alt: "Red and white damask border" },
+        { url: photo("bedsheet-23"), alt: "Red, black and grey waves" },
+        { url: photo("bedsheet-24"), alt: "Grey and black geometric" },
+        { url: photo("bedsheet-25"), alt: "Grey and black geometric, second view" },
+        { url: photo("bedsheet-26"), alt: "Charcoal brick geometric" },
+        { url: photo("bedsheet-27"), alt: "Monochrome block print" },
+        { url: photo("bedsheet-28"), alt: "Grey and white spots" },
+        { url: photo("bedsheet-29"), alt: "Grey rings on pale grey" },
+        { url: photo("bedsheet-30"), alt: "Zebra print in black and white" },
+        { url: photo("bedsheet-31"), alt: "Red lips on black" },
       ],
       categories: ["bedding"],
-      collections: ["best-sellers", "bed-set"],
-      tags: ["bestseller", "bedsheet", "cotton"],
-      material: "100% cotton percale",
+      collections: ["best-sellers"],
+      tags: ["bestseller", "bedsheet"],
+      material: "Cotton blend",
+      care: "Cold machine wash, warm iron.",
+      featured: true,
       options: [
         {
           name: "Size",
@@ -285,58 +465,6 @@ async function main() {
         { suffix: "DBL", options: { Size: "Double" }, price: 110, stock: 32 },
         { suffix: "KNG", options: { Size: "King" }, price: 150, stock: 21 },
       ],
-    },
-    {
-      title: "White King Bedsheet",
-      slug: "white-king-bedsheet",
-      short: "Crisp white, hotel finish.",
-      description:
-        "The plain white king set we keep restocking: tight weave, square corners, and a finish that survives a hot wash every week.",
-      images: ["/catalog/white-king-bedsheet.webp"],
-      categories: ["bedding"],
-      collections: ["bed-set"],
-      tags: ["bedsheet", "white"],
-      material: "Cotton blend",
-      variants: [{ suffix: "STD", options: {}, price: 180, stock: 18 }],
-    },
-    {
-      title: "Heavy Blanket · Double",
-      slug: "heavy-blanket-double",
-      short: "Weighted mink-touch blanket.",
-      description:
-        "A heavy mink-touch blanket with a satin trim. Warm enough for a harmattan night in Kumasi, soft enough to leave folded at the foot of the bed.",
-      images: ["/catalog/heavy-blanket-double.webp"],
-      categories: ["bedding"],
-      collections: [],
-      tags: ["blanket", "warm"],
-      material: "Mink-touch polyester",
-      variants: [{ suffix: "STD", options: {}, price: 160, stock: 24 }],
-    },
-    {
-      title: "Waterproof Bed Cover",
-      slug: "waterproof-bed-cover",
-      short: "Quiet membrane, cotton face.",
-      description:
-        "A cotton-faced mattress protector with a breathable waterproof membrane. No crinkle, no plastic feel, and it keeps a new mattress new.",
-      images: ["/catalog/waterproof-bed-cover.webp"],
-      categories: ["bedding"],
-      collections: ["new-in"],
-      tags: ["new", "protector"],
-      material: "Cotton, TPU membrane",
-      variants: [{ suffix: "STD", options: {}, price: 250, stock: 14 }],
-    },
-    {
-      title: "Soft Sleep Pillow",
-      slug: "soft-sleep-pillow",
-      short: "Medium loft, holds its shape.",
-      description:
-        "A medium-loft pillow with a siliconised fibre fill that recovers overnight instead of flattening by month three.",
-      images: ["/catalog/soft-sleep-pillow.webp"],
-      categories: ["bedding", "student"],
-      collections: ["bed-set", "student-essentials"],
-      tags: ["pillow"],
-      material: "Siliconised hollow fibre",
-      variants: [{ suffix: "STD", options: {}, price: 70, stock: 60 }],
     },
 
     // --- Living ------------------------------------------------------------
@@ -361,33 +489,8 @@ async function main() {
       tags: ["bestseller", "carpet", "rug", "3d"],
       material: "Printed polyester pile, anti-slip backing",
       care: "Vacuum on the lowest setting. Spot clean with a damp cloth.",
+      featured: true,
       variants: [{ suffix: "STD", options: {}, price: 250, stock: 11 }],
-    },
-    {
-      title: "Coffee Table",
-      slug: "coffee-table",
-      short: "Solid frame, warm timber top.",
-      description:
-        "A low table sized for a three-seater, with a warm timber top and a slim frame that keeps the floor visible underneath.",
-      images: ["/catalog/coffee-table.webp"],
-      categories: ["living"],
-      collections: ["new-in"],
-      tags: ["table", "furniture"],
-      material: "Engineered timber, steel",
-      variants: [{ suffix: "STD", options: {}, price: 350, stock: 5 }],
-    },
-    {
-      title: "Round Stool",
-      slug: "round-stool",
-      short: "Upholstered, works as a side table.",
-      description:
-        "An upholstered round stool that doubles as a side table or an extra seat when the room fills up.",
-      images: ["/catalog/round-stool.webp"],
-      categories: ["living"],
-      collections: [],
-      tags: ["stool", "seating"],
-      material: "Upholstered foam, timber legs",
-      variants: [{ suffix: "STD", options: {}, price: 120, stock: 16 }],
     },
     {
       title: "Fury Heavy Throw Pillow",
@@ -401,11 +504,10 @@ async function main() {
           url: photo("fury-throw-pillow-1"),
           alt: "Fury throw pillows stacked in dark ash and baby pink",
         },
-        "/catalog/throw-pillow.webp",
       ],
       categories: ["living"],
-      collections: [],
-      tags: ["pillow", "cushion", "fur"],
+      collections: ["best-sellers"],
+      tags: ["bestseller", "pillow", "cushion", "fur"],
       material: "Long-pile faux fur, hollow-fibre fill",
       care: "Spot clean. Shake the pile back out after use.",
       options: [
@@ -452,7 +554,6 @@ async function main() {
         "A soft carved-pile doormat on a non-slip back that stays where you put it, even on a polished entry floor. Five colours, all in the same pebble carve.",
       images: [
         { url: photo("doormat-1"), alt: "Doormat in deep green", swatch: ["Colour", "Green"] },
-        "/catalog/doormat.webp",
       ],
       categories: ["living"],
       collections: [],
@@ -491,11 +592,10 @@ async function main() {
       images: [
         { url: photo("already-made-curtain-1"), alt: "Brown eyelet curtain panel hanging" },
         { url: photo("already-made-curtain-2"), alt: "Close-up of the woven curtain fabric" },
-        "/catalog/window-curtain.webp",
       ],
       categories: ["windows"],
       collections: ["best-sellers"],
-      tags: ["curtain"],
+      tags: ["bestseller", "curtain"],
       material: "Textured polyester, steel eyelets",
       care: "Cold machine wash, warm iron on the reverse.",
       variants: [{ suffix: "STD", options: {}, price: 180, stock: 20 }],
@@ -508,11 +608,10 @@ async function main() {
         "Day-and-night zebra blinds: alternating sheer and solid bands that line up to close the window or offset to filter it, on a smooth roller with the bracket set in the box. Priced by the foot — pick the drop and the colour and we cut before delivery.",
       images: [
         { url: photo("curtain-blinds-1"), alt: "Zebra blind in black and white, half open" },
-        "/catalog/curtain-blinds.webp",
       ],
       categories: ["windows"],
-      collections: [],
-      tags: ["blinds"],
+      collections: ["new-in"],
+      tags: ["new", "blinds"],
       material: "Light-filtering polyester, aluminium roller",
       care: "Dust with a dry cloth. Do not wet the bands.",
       options: [
@@ -546,78 +645,6 @@ async function main() {
         { suffix: "2M", options: { Size: "2m · single or 2-in-one" }, price: 80, stock: 22 },
         { suffix: "3M", options: { Size: "3m · 3-in-one" }, price: 90, stock: 13 },
       ],
-    },
-    {
-      title: "Shower Curtain",
-      slug: "shower-curtain",
-      short: "Mould-resistant, rings included.",
-      description:
-        "A weighted-hem shower curtain in a mould-resistant fabric, with twelve rings in the pack.",
-      images: ["/catalog/shower-curtain.webp"],
-      categories: ["windows"],
-      collections: [],
-      tags: ["deal", "bathroom"],
-      material: "Coated polyester",
-      compareAt: 70,
-      variants: [{ suffix: "STD", options: {}, price: 50, stock: 33 }],
-    },
-
-    // --- Student -----------------------------------------------------------
-    {
-      title: "Student Bedsheet",
-      slug: "student-bedsheet",
-      short: "Single set sized for a hall bed.",
-      description:
-        "A single bedsheet set cut for a standard hall mattress, in a cotton blend that survives the laundry queue. Prints rotate with each delivery — name the one you want in the order notes.",
-      images: [
-        { url: photo("bedsheet-17"), alt: "Black and white diamond motif" },
-        { url: photo("bedsheet-18"), alt: "Red hearts and butterflies on caramel" },
-        { url: photo("bedsheet-19"), alt: "White hearts on red" },
-        { url: photo("bedsheet-20"), alt: "Red lettering on black" },
-        { url: photo("bedsheet-21"), alt: "Roses and gold on white" },
-        { url: photo("bedsheet-22"), alt: "Red and white damask border" },
-        { url: photo("bedsheet-23"), alt: "Red, black and grey waves" },
-        { url: photo("bedsheet-24"), alt: "Grey and black geometric" },
-        { url: photo("bedsheet-25"), alt: "Grey and black geometric, second view" },
-        { url: photo("bedsheet-26"), alt: "Charcoal brick geometric" },
-        { url: photo("bedsheet-27"), alt: "Monochrome block print" },
-        { url: photo("bedsheet-28"), alt: "Grey and white spots" },
-        { url: photo("bedsheet-29"), alt: "Grey rings on pale grey" },
-        { url: photo("bedsheet-30"), alt: "Zebra print in black and white" },
-        { url: photo("bedsheet-31"), alt: "Red lips on black" },
-        "/catalog/student-bedsheet.webp",
-      ],
-      categories: ["student"],
-      collections: ["student-essentials"],
-      tags: ["student", "bedsheet"],
-      material: "Cotton blend",
-      variants: [{ suffix: "STD", options: {}, price: 50, stock: 70 }],
-    },
-    {
-      title: "Student White Bedsheet",
-      slug: "student-white-bedsheet",
-      short: "Plain white single set.",
-      description:
-        "The plain white version of our student set, for halls that ask for white linen.",
-      images: ["/catalog/student-white-bedsheet.webp"],
-      categories: ["student"],
-      collections: ["student-essentials"],
-      tags: ["student", "bedsheet", "white"],
-      material: "Cotton blend",
-      variants: [{ suffix: "STD", options: {}, price: 50, stock: 54 }],
-    },
-    {
-      title: "Student Blanket",
-      slug: "student-blanket",
-      short: "Light fleece, single size.",
-      description:
-        "A light single-size fleece blanket that packs down small enough for a trotro trip home at the end of term.",
-      images: ["/catalog/student-blanket.webp"],
-      categories: ["student"],
-      collections: ["student-essentials"],
-      tags: ["student", "blanket"],
-      material: "Polar fleece",
-      variants: [{ suffix: "STD", options: {}, price: 60, stock: 48 }],
     },
   ];
 
@@ -825,10 +852,14 @@ async function main() {
         });
       }
 
+      // `onHand` is set once, when the variant first appears, and never again.
+      // The number in this file is an opening figure; the real one lives in the
+      // console and moves with every sale and restock. Writing it back on each
+      // run would silently undo a stock take.
       await db.inventoryItem.upsert({
         where: { variantId: variant.id },
         create: { variantId: variant.id, onHand: v.stock, reorderPoint: 5, reorderQuantity: 20 },
-        update: { onHand: v.stock },
+        update: {},
       });
     }
 
@@ -843,19 +874,33 @@ async function main() {
   }
   console.log(`  products: ${products.length}`);
 
-  // --- Retire the demo catalog --------------------------------------------
-  // Archived rather than deleted: it stays visible in the admin, and any order
-  // that referenced it still reads correctly.
+  // --- Retire what the store does not sell ---------------------------------
   const archived = await db.product.updateMany({
-    where: { slug: { in: LEGACY_PRODUCT_SLUGS }, status: { not: "ARCHIVED" } },
+    where: { slug: { in: RETIRED_PRODUCT_SLUGS }, status: { not: "ARCHIVED" } },
     data: { status: "ARCHIVED" },
   });
-  const hidden = await db.category.updateMany({
-    where: { slug: { in: LEGACY_CATEGORY_SLUGS }, isActive: true },
+  const hiddenCategories = await db.category.updateMany({
+    where: { slug: { in: RETIRED_CATEGORY_SLUGS }, isActive: true },
     data: { isActive: false },
   });
-  if (archived.count || hidden.count) {
-    console.log(`  retired demo catalog: ${archived.count} products, ${hidden.count} categories`);
+  const hiddenCollections = await db.collection.updateMany({
+    where: { slug: { in: RETIRED_COLLECTION_SLUGS }, isActive: true },
+    data: { isActive: false, isFeatured: false },
+  });
+
+  // Their variants go too. A product can be archived and still have live
+  // variants hanging off it, which the admin inventory screen reads straight
+  // from — leaving them active would keep counting stock nobody stocks.
+  const retiredVariants = await db.variant.updateMany({
+    where: { product: { slug: { in: RETIRED_PRODUCT_SLUGS } }, isActive: true },
+    data: { isActive: false },
+  });
+
+  if (archived.count || hiddenCategories.count || hiddenCollections.count) {
+    console.log(
+      `  retired: ${archived.count} products, ${retiredVariants.count} variants, ` +
+        `${hiddenCategories.count} categories, ${hiddenCollections.count} collections`,
+    );
   }
 
   // --- Shipping ------------------------------------------------------------
@@ -911,86 +956,7 @@ async function main() {
     }
   }
   console.log(`  shipping rates: ${rateSeed.length}`);
-
-  // --- Discounts -----------------------------------------------------------
-  await db.discount.upsert({
-    where: { code: "WELCOME10" },
-    create: {
-      code: "WELCOME10",
-      description: "10% off your first order",
-      type: "PERCENTAGE",
-      value: 10,
-      firstOrderOnly: true,
-      usageLimitPerUser: 1,
-      isActive: true,
-    },
-    update: {},
-  });
-
-  await db.discount.upsert({
-    where: { code: "FREESHIP" },
-    create: {
-      code: "FREESHIP",
-      description: "Free delivery over GHS 300",
-      type: "FREE_SHIPPING",
-      value: 0,
-      minSubtotal: cedis(300),
-      isActive: true,
-    },
-    update: {},
-  });
-  console.log("  discounts: 2");
-
-  // --- Customer tags -------------------------------------------------------
-  for (const tag of [
-    { name: "VIP", color: "#C9A227" },
-    { name: "Wholesale", color: "#2C3E60" },
-    { name: "Repeat", color: "#6B7355" },
-  ]) {
-    await db.customerTag.upsert({
-      where: { name: tag.name },
-      create: tag,
-      update: {},
-    });
-  }
-
-  // --- Settings ------------------------------------------------------------
-  const storeDefaults = {
-    storeName: "LaLuxury",
-    tagline: "Considered textiles and furnishings for Ghanaian homes.",
-    supportEmail: ownerEmail,
-    announcementBar:
-      "Complimentary delivery over ₵300 · Cash on delivery nationwide · New arrivals in stock",
-    freeShippingThreshold: cedis(300),
-    agentRequiresApproval: true,
-  };
-
-  const storeRow = await db.setting.findUnique({ where: { key: "store" } });
-
-  if (!storeRow) {
-    await db.setting.create({ data: { key: "store", value: storeDefaults } });
-  } else {
-    // Only the demo announcement is replaced; anything the owner has edited
-    // since is left alone.
-    const value = (storeRow.value ?? {}) as Record<string, unknown>;
-    if (value.announcementBar === LEGACY_ANNOUNCEMENT) {
-      await db.setting.update({
-        where: { key: "store" },
-        data: {
-          value: {
-            ...value,
-            announcementBar: storeDefaults.announcementBar,
-            freeShippingThreshold: cedis(300),
-          },
-        },
-      });
-      console.log("  settings: refreshed the announcement bar");
-    }
-  }
-
-  console.log("Done.");
 }
-
 main()
   .catch((error) => {
     console.error(error);

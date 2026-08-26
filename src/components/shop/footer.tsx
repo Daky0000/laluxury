@@ -1,8 +1,20 @@
 import Link from "next/link";
+import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 
 export async function Footer() {
-  const settings = await getSettings();
+  // The rooms come from the database rather than a list here, so retiring one
+  // takes it out of the footer too. Hardcoding them meant the footer went on
+  // offering a room after it had been emptied and switched off.
+  const [settings, rooms] = await Promise.all([
+    getSettings(),
+    db.category.findMany({
+      where: { isActive: true, parentId: null },
+      orderBy: { position: "asc" },
+      select: { name: true, slug: true },
+    }),
+  ]);
+
   const year = new Date().getFullYear();
   const whatsapp = settings.whatsappNumber.replace(/[^\d]/g, "");
   // The tagline is owner-edited, so it may or may not end in a full stop.
@@ -13,10 +25,10 @@ export async function Footer() {
       head: "Shop",
       links: [
         { label: "All products", href: "/shop" },
-        { label: "Bedding", href: "/shop?category=bedding" },
-        { label: "Living", href: "/shop?category=living" },
-        { label: "Windows", href: "/shop?category=windows" },
-        { label: "Student", href: "/shop?category=student" },
+        ...rooms.map((room) => ({
+          label: room.name,
+          href: `/shop?category=${room.slug}`,
+        })),
         { label: "New in", href: "/shop?sort=newest" },
       ],
     },

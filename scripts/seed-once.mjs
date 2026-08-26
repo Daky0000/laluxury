@@ -1,37 +1,36 @@
 /**
- * Seed-on-demand, run from `npm start` before the server listens.
+ * Runs the seed from `npm start`, before the server listens.
  *
  * The production database only accepts connections from inside Railway's
- * network, so a one-off seed cannot be run from a laptop — it has to happen
- * during a release. This is that hook: set RUN_SEED=1 on the service, deploy,
- * then delete the variable again so the next restart skips it.
+ * network, so a seed cannot be run from a laptop — it has to happen during a
+ * release. This is that hook, and it now fires on every boot, so a catalog
+ * change reaches the shop by being pushed like anything else.
+ *
+ * What makes running it every time safe is in `prisma/seed.ts`: the catalog is
+ * fingerprinted, and a boot whose fingerprint already matches skips the catalog
+ * writes entirely. So the ordinary restart costs one query and changes nothing,
+ * while a deploy that actually edited the catalog applies it.
+ *
+ * RUN_SEED=1 still exists, and now means "apply the catalog even though the
+ * fingerprint matches" — the escape hatch for putting a hand-edited row back to
+ * what this file says it should be.
  *
  * Two deliberate properties:
  *
- *   - Silent by default. With RUN_SEED unset this prints one line and exits, so
- *     it costs nothing on every ordinary restart.
  *   - Never fatal. A failed seed logs loudly but still exits 0, because a bad
  *     seed must not stop the storefront from booting — that would turn a data
  *     problem into an outage, and the healthcheck would roll the release back
  *     with nothing in the build log to explain why.
+ *   - Sequential. RUN_DEMO_ORDERS runs after the seed rather than instead of
+ *     it, since demo orders reference the catalog the seed just wrote.
  */
 import { spawn } from "node:child_process";
 
-// RUN_SEED fills the catalog; RUN_DEMO_ORDERS adds demo customers and orders so
-// the console has something to show before real trade starts.
-const task = process.env.RUN_SEED === "1" ? "db:seed" : process.env.RUN_DEMO_ORDERS === "1" ? "db:demo" : null;
+const tasks = ["db:seed"];
 
-if (!task) {
-  console.log("[seed-once] Neither RUN_SEED nor RUN_DEMO_ORDERS is set — skipping.");
-  process.exit(0);
-}
-
-console.log(`[seed-once] running ${task}.`);
-
-const child = spawn("npm", ["run", task], {
-  stdio: "inherit",
-  shell: process.platform === "win32",
-});
+// Demo customers and orders, so the console has something to show before real
+// trade starts. Opt-in, and never wanted twice.
+if (process.env.RUN_DEMO_ORDERS === "1") tasks.push("db:demo");
 
 /**
  * Reads back what the seed claims to have written, over a plain pg connection
@@ -44,7 +43,10 @@ async function verify() {
   try {
     await client.connect();
     const { rows } = await client.query(
-      'SELECT current_database() AS db, inet_server_addr()::text AS host, (SELECT count(*) FROM "Product")::int AS products, (SELECT count(*) FROM "Category")::int AS categories',
+      'SELECT current_database() AS db, inet_server_addr()::text AS host, ' +
+        '(SELECT count(*) FROM "Product" WHERE status = \'ACTIVE\')::int AS live_products, ' +
+        '(SELECT count(*) FROM "Product")::int AS products, ' +
+        '(SELECT count(*) FROM "Category" WHERE "isActive")::int AS categories',
     );
     console.log(`[seed-once] verify: ${JSON.stringify(rows[0])}`);
   } catch (error) {
@@ -54,19 +56,37 @@ async function verify() {
   }
 }
 
-child.on("exit", async (code) => {
-  await verify();
-  if (code === 0) {
-    console.log(`[seed-once] ${task} finished. Remove the flag so it does not run again.`);
-  } else {
-    console.error(
-      `[seed-once] SEED FAILED with exit code ${code}. Booting anyway — the store will come up, but the catalog may be empty or partial.`,
-    );
-  }
-  process.exit(0);
-});
+/** Resolves to the exit code rather than rejecting, so one failure is survivable. */
+function run(task) {
+  return new Promise((resolve) => {
+    console.log(`[seed-once] running ${task}.`);
+    const child = spawn("npm", ["run", task], {
+      stdio: "inherit",
+      shell: process.platform === "win32",
+    });
+    child.on("exit", (code) => resolve(code ?? 1));
+    child.on("error", (error) => {
+      console.error(`[seed-once] ${task} COULD NOT START: ${error.message}.`);
+      resolve(1);
+    });
+  });
+}
 
-child.on("error", (error) => {
-  console.error(`[seed-once] SEED COULD NOT START: ${error.message}. Booting anyway.`);
-  process.exit(0);
-});
+const failed = [];
+for (const task of tasks) {
+  const code = await run(task);
+  if (code !== 0) failed.push(`${task} (exit ${code})`);
+}
+
+await verify();
+
+if (failed.length === 0) {
+  console.log(`[seed-once] ${tasks.join(", ")} finished.`);
+} else {
+  console.error(
+    `[seed-once] FAILED: ${failed.join(", ")}. Booting anyway — the store will come up, ` +
+      "but the catalog may be stale or partial.",
+  );
+}
+
+process.exit(0);

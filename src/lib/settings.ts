@@ -65,14 +65,18 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   heroBody:
     "Considered textiles and furnishings — bedding, carpets, curtains and more — for Ghanaian homes that value calm and craft.",
   heroImageUrl: "/catalog/hero-bedroom.webp",
-  bundleEyebrow: "Bundle & save",
-  bundleTitle: "The Complete Bed Set",
-  bundleBody:
-    "Duvet, king bedsheet, two pillows and a bed topper — hotel-soft, gathered into one composed price.",
-  bundlePrice: 82000,
-  bundleCompareAtPrice: 97000,
+  // The bundle banner ships off. It used to advertise a duvet, a bedsheet, two
+  // pillows and a topper for one price — three of which were never stocked, and
+  // have since been retired. An empty title hides the section, so the home page
+  // does not offer something nobody can buy; fill these in from
+  // /admin/settings → Home page when there is a real bundle to sell.
+  bundleEyebrow: "",
+  bundleTitle: "",
+  bundleBody: "",
+  bundlePrice: null,
+  bundleCompareAtPrice: null,
   bundleImageUrl: "/catalog/bundle-bed-set.webp",
-  bundleHref: "/shop?collection=bed-set",
+  bundleHref: "",
   studentEyebrow: "Back to campus",
   studentTitle: "Student essentials from ₵50",
   newsletterTitle: "Join the LALUXURY list",
