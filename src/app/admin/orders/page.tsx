@@ -89,7 +89,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
 
           <button
             type="submit"
-            className="rounded-[--radius-card] bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
+            className="rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
           >
             Filter
           </button>
@@ -184,7 +184,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
           {page > 1 ? (
             <Link
               href={`/admin/orders${buildQuery({ q, status, page: page - 1 })}`}
-              className="rounded-[--radius-card] border border-[var(--border-subtle)] px-3 py-1.5"
+              className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
             >
               Previous
             </Link>
@@ -195,7 +195,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
           {page < pageCount ? (
             <Link
               href={`/admin/orders${buildQuery({ q, status, page: page + 1 })}`}
-              className="rounded-[--radius-card] border border-[var(--border-subtle)] px-3 py-1.5"
+              className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
             >
               Next
             </Link>

@@ -137,7 +137,7 @@ export function StockRow({
               type="button"
               onClick={submit}
               disabled={pending || quantity === ""}
-              className="rounded-[--radius-card] border border-[var(--border-subtle)] px-2.5 py-1 text-xs disabled:opacity-40"
+              className="rounded-(--radius-card) border border-[var(--border-subtle)] px-2.5 py-1 text-xs disabled:opacity-40"
             >
               {pending ? (
                 <Loader2 className="h-3 w-3 animate-spin" aria-hidden />

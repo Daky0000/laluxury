@@ -5,7 +5,8 @@ import { AddToBag } from "./add-to-bag";
 
 /**
  * The product tile from the storefront artboards: square image, merchandising
- * badge, an "Add to bag" bar that rises on hover, then name, room and price.
+ * badge, an "Add to bag" bar that rises on hover, then name, room, the colours
+ * it comes in and the price.
  *
  * Every grid in the shop renders this — home, all products, related — so a
  * product presents itself identically wherever it turns up. It holds no server
@@ -57,17 +58,23 @@ export function ProductTile({
           ) : null}
         </Link>
 
+        {/* Sold-out pieces stay in the grid, veiled rather than removed, so a
+            filtered view keeps its rhythm and the shopper can still open them. */}
+        {!product.inStock ? (
+          <span className="pointer-events-none absolute inset-0 grid place-items-center bg-[rgba(241,240,236,0.62)] text-[11px] uppercase tracking-[0.2em] text-[var(--text-primary)]">
+            Out of stock
+          </span>
+        ) : null}
+
         {product.badge ? (
           <span className="pointer-events-none absolute left-3.5 top-3.5 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.9)] px-2.5 py-1.5 text-[9.5px] font-medium uppercase tracking-[0.16em] text-[var(--text-primary)] backdrop-blur">
             {product.badge}
           </span>
         ) : null}
 
-        <AddToBag
-          variantId={product.inStock ? product.variantId : null}
-          href={`/product/${product.slug}`}
-          soldOut={!product.inStock}
-        />
+        {product.inStock ? (
+          <AddToBag variantId={product.variantId} href={`/product/${product.slug}`} />
+        ) : null}
       </div>
 
       <div className="flex items-start justify-between gap-2.5 pt-3.5">
@@ -81,6 +88,21 @@ export function ProductTile({
             <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
               {product.category}
             </p>
+          ) : null}
+
+          {product.swatches.length > 0 ? (
+            <ul className="mt-2.5 flex gap-1.5">
+              {product.swatches.map((swatch) => (
+                <li
+                  key={swatch.name}
+                  title={swatch.name}
+                  className="h-[13px] w-[13px] rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,.12)]"
+                  style={{ backgroundColor: swatch.hex }}
+                >
+                  <span className="sr-only">{swatch.name}</span>
+                </li>
+              ))}
+            </ul>
           ) : null}
         </div>
 

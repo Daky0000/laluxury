@@ -12,6 +12,9 @@ import { initializeTransaction } from "@/lib/paystack";
 import { InsufficientStockError } from "@/lib/inventory";
 import { GHANA_REGIONS } from "@/lib/constants";
 
+/** Everything Paystack supports for GHS; see lib/paystack. */
+const PAYSTACK_CHANNELS = ["card", "mobile_money", "bank_transfer", "ussd", "bank", "qr"];
+
 export type CheckoutState = {
   ok: boolean;
   message?: string;
@@ -31,6 +34,8 @@ const schema = z.object({
   }),
   postalCode: z.string().optional(),
   shippingRateId: z.string().optional(),
+  /** Paystack channels, comma separated. Whitelisted below before it is sent. */
+  channels: z.string().optional(),
   customerNote: z.string().optional(),
   createAccount: z.boolean().optional(),
   password: z.string().optional(),
@@ -51,6 +56,7 @@ export async function placeOrderAction(
     region: formData.get("region"),
     postalCode: formData.get("postalCode") || undefined,
     shippingRateId: formData.get("shippingRateId") || undefined,
+    channels: formData.get("channels") || undefined,
     customerNote: formData.get("customerNote") || undefined,
     createAccount: formData.get("createAccount") === "on",
     password: formData.get("password") || undefined,
@@ -74,6 +80,13 @@ export async function placeOrderAction(
 
   const data = parsed.data;
   const email = data.email.toLowerCase().trim();
+
+  // The payment choice only narrows what Paystack offers; anything we do not
+  // recognise falls back to its full set rather than failing the order.
+  const channels = (data.channels ?? "")
+    .split(",")
+    .map((channel) => channel.trim())
+    .filter((channel) => PAYSTACK_CHANNELS.includes(channel));
   const session = await getSession();
   let userId = session?.userId ?? null;
 
@@ -139,6 +152,7 @@ export async function placeOrderAction(
       amount: order.total,
       reference,
       callbackUrl: `${env.siteUrl()}/checkout/confirm`,
+      channels: channels.length ? channels : undefined,
       metadata: {
         orderId: order.id,
         orderNumber: order.orderNumber,

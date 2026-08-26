@@ -101,7 +101,7 @@ export function SearchDialog({ children }: { children: ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-label="Search products"
-            className="w-full max-w-xl overflow-hidden rounded-[--radius-card] border border-[var(--border-subtle)] bg-[var(--surface-raised)] shadow-2xl"
+            className="w-full max-w-xl overflow-hidden rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)] shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <form onSubmit={submit} className="flex items-center gap-3 border-b border-[var(--border-subtle)] px-4">

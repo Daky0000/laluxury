@@ -121,7 +121,7 @@ export function CustomerPanel({
           <button
             type="submit"
             disabled={notePending}
-            className="flex items-center justify-center gap-2 rounded-[--radius-card] bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
           >
             {notePending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
             Log it
@@ -175,7 +175,7 @@ export function CustomerPanel({
           <button
             type="submit"
             disabled={detailPending}
-            className="rounded-[--radius-card] border border-[var(--border-subtle)] px-4 py-2.5 text-sm disabled:opacity-50"
+            className="rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-2.5 text-sm disabled:opacity-50"
           >
             {detailPending ? "Saving…" : "Save details"}
           </button>

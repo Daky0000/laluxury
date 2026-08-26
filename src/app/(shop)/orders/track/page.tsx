@@ -76,7 +76,7 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
 
           <button
             type="submit"
-            className="flex items-center gap-1.5 rounded-[--radius-card] bg-[var(--accent)] px-5 py-2.5 text-sm text-[var(--accent-contrast)]"
+            className="flex items-center gap-1.5 rounded-(--radius-card) bg-[var(--accent)] px-5 py-2.5 text-sm text-[var(--accent-contrast)]"
           >
             <Search className="h-4 w-4" aria-hidden />
             Find it

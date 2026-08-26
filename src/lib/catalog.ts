@@ -29,6 +29,8 @@ export type CatalogFilters = {
   /** Option values, e.g. { Colour: ["Ivory"], Size: ["Large"] } */
   options?: Record<string, string[]>;
   inStockOnly?: boolean;
+  /** Only pieces whose "was" price is above what they sell for today. */
+  onSaleOnly?: boolean;
   featuredOnly?: boolean;
   sort?: ProductSort;
   page?: number;
@@ -50,6 +52,14 @@ export const productCardSelect = {
   images: { orderBy: { position: "asc" }, take: 2, select: { url: true, alt: true } },
   categories: {
     select: { category: { select: { name: true, slug: true, position: true } } },
+  },
+  // Carried so a tile can show its colour swatches without a second read.
+  options: {
+    orderBy: { position: "asc" },
+    select: {
+      name: true,
+      values: { orderBy: { position: "asc" }, select: { value: true, hexColor: true } },
+    },
   },
   variants: {
     where: { isActive: true },
@@ -134,6 +144,12 @@ function buildWhere(filters: CatalogFilters, status: ProductStatus | null = "ACT
     }
   }
 
+  // A field reference, so the comparison happens in Postgres rather than by
+  // pulling every product back to check it.
+  if (filters.onSaleOnly) {
+    and.push({ compareAtPrice: { gt: db.product.fields.minPrice } });
+  }
+
   if (filters.inStockOnly) {
     and.push({
       variants: {
@@ -163,7 +179,9 @@ export function isInStock(product: Pick<ProductCard, "variants">): boolean {
 
 export async function searchProducts(filters: CatalogFilters) {
   const page = Math.max(1, filters.page ?? 1);
-  const perPage = Math.min(60, Math.max(1, filters.perPage ?? 12));
+  // The grid loads more by growing its page rather than paging, so the ceiling
+  // is higher than a single screenful — but still bounded.
+  const perPage = Math.min(240, Math.max(1, filters.perPage ?? 12));
   const where = buildWhere(filters);
 
   const [items, total] = await Promise.all([

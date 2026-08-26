@@ -70,7 +70,7 @@ export function StaffManager({
         <button
           type="button"
           onClick={() => setAdding((v) => !v)}
-          className="flex items-center gap-1.5 rounded-[--radius-card] bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
+          className="flex items-center gap-1.5 rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
         >
           <Plus className="h-4 w-4" aria-hidden />
           Add a staff member
@@ -138,7 +138,7 @@ export function StaffManager({
               <button
                 type="submit"
                 disabled={pending}
-                className="flex items-center gap-2 rounded-[--radius-card] bg-[var(--accent)] px-5 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+                className="flex items-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-5 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
               >
                 {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
                 Create account
@@ -146,7 +146,7 @@ export function StaffManager({
               <button
                 type="button"
                 onClick={() => setAdding(false)}
-                className="rounded-[--radius-card] border border-[var(--border-subtle)] px-4 py-2.5 text-sm"
+                className="rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-2.5 text-sm"
               >
                 Cancel
               </button>
@@ -311,7 +311,7 @@ function PasswordReset({ userId, onDone }: { userId: string; onDone: () => void 
         <button
           type="submit"
           disabled={pending}
-          className="rounded-[--radius-card] bg-[var(--accent)] px-3 py-1 text-xs text-[var(--accent-contrast)] disabled:opacity-50"
+          className="rounded-(--radius-card) bg-[var(--accent)] px-3 py-1 text-xs text-[var(--accent-contrast)] disabled:opacity-50"
         >
           {pending ? "Setting…" : "Set"}
         </button>

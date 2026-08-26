@@ -35,13 +35,13 @@ export default function AdminError({
         <button
           type="button"
           onClick={reset}
-          className="rounded-[--radius-card] border border-[var(--border-subtle)] px-4 py-2 text-sm"
+          className="rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-2 text-sm"
         >
           Try again
         </button>
         <Link
           href="/admin"
-          className="rounded-[--radius-card] bg-[var(--accent)] px-4 py-2 text-sm text-[var(--accent-contrast)]"
+          className="rounded-(--radius-card) bg-[var(--accent)] px-4 py-2 text-sm text-[var(--accent-contrast)]"
         >
           Back to dashboard
         </Link>

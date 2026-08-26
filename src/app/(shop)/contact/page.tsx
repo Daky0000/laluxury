@@ -1,68 +1,176 @@
 import type { Metadata } from "next";
-import { Mail, Phone, MapPin } from "lucide-react";
+import { MessageCircle, Mail, Phone, MapPin } from "lucide-react";
 import { getSettings } from "@/lib/settings";
 import { ContactForm } from "@/components/shop/contact-form";
-import { Card } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Contact",
   description: "Questions about an order, a product, or a bulk enquiry. We reply within a day.",
 };
 
+/** Digits only, so +233 24 000 0000 becomes a wa.me link. */
+function whatsappHref(number: string): string {
+  return `https://wa.me/${number.replace(/\D/g, "")}`;
+}
+
 export default async function ContactPage() {
   const settings = await getSettings();
 
+  // Four quick channels from the artboard, minus any the owner has left blank.
+  const channels = [
+    settings.whatsappNumber
+      ? {
+          icon: MessageCircle,
+          label: "WhatsApp",
+          value: settings.whatsappNumber,
+          href: whatsappHref(settings.whatsappNumber),
+        }
+      : null,
+    settings.supportEmail
+      ? {
+          icon: Mail,
+          label: "Email",
+          value: settings.supportEmail,
+          href: `mailto:${settings.supportEmail}`,
+        }
+      : null,
+    settings.supportPhone
+      ? {
+          icon: Phone,
+          label: "Call us",
+          value: settings.supportPhone,
+          href: `tel:${settings.supportPhone.replace(/\s/g, "")}`,
+        }
+      : null,
+    settings.addressLine
+      ? { icon: MapPin, label: "Visit", value: settings.addressLine, href: null }
+      : null,
+  ].filter((channel) => channel !== null);
+
+  // The info column reads from the same settings the policies elsewhere use, so
+  // there is only ever one copy of the delivery and returns wording.
+  const info = [
+    settings.addressLine ? { label: "Showroom", value: settings.addressLine } : null,
+    { label: "Delivery", value: settings.shippingPolicy },
+    { label: "Returns", value: settings.returnsPolicy },
+  ].filter((row) => row !== null);
+
+  const faqs = [
+    { q: "How long does delivery take?", a: settings.shippingPolicy },
+    {
+      q: "Do you offer cash on delivery?",
+      a: "Yes — cash on delivery is available everywhere we deliver. You can also pay by Mobile Money (MTN / Telecel) or card at checkout.",
+    },
+    { q: "What is your returns policy?", a: settings.returnsPolicy },
+    {
+      q: "Can I order in bulk for a hostel or hotel?",
+      a: "Absolutely. We offer wholesale pricing on bedding, blankets and towels for institutions. Use the form above and pick “Wholesale / bulk”, or message us on WhatsApp.",
+    },
+  ];
+
   return (
-    <div className="lx-container max-w-4xl py-14">
-      <h1 className="text-3xl md:text-4xl">Get in touch</h1>
-      <p className="mt-2 max-w-prose text-[var(--text-secondary)]">
-        Questions about an order, a product, or a bulk enquiry. We reply within one business day.
-      </p>
+    <>
+      {/* Hero */}
+      <section className="lx-container pb-2 pt-14 text-center">
+        <p className="lx-eyebrow">We&rsquo;re here to help</p>
+        <h1 className="mt-3 text-[clamp(2.5rem,6vw,3.875rem)] leading-tight">Get in touch</h1>
+        <p className="mx-auto mt-3 max-w-[520px] text-[15.5px] font-light leading-relaxed text-[var(--text-muted)]">
+          Questions about an order, sizing, or wholesale? Reach us any way you like — we usually
+          reply within the hour.
+        </p>
+      </section>
 
-      <div className="mt-10 grid gap-10 md:grid-cols-[1fr_16rem]">
-        <ContactForm />
+      {/* Quick channels */}
+      {channels.length > 0 ? (
+        <section className="lx-container pb-2 pt-9">
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {channels.map((channel) => {
+              const Icon = channel.icon;
+              const body = (
+                <>
+                  <Icon className="h-6 w-6 text-[var(--accent)]" strokeWidth={1.5} aria-hidden />
+                  <span>
+                    <span className="block text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                      {channel.label}
+                    </span>
+                    <span className="mt-1.5 block text-[15.5px] text-[var(--text-primary)]">
+                      {channel.value}
+                    </span>
+                  </span>
+                </>
+              );
 
-        <aside className="flex flex-col gap-4">
-          <Card className="flex flex-col gap-3 p-5 text-sm">
-            {settings.supportEmail ? (
-              <a
-                href={`mailto:${settings.supportEmail}`}
-                className="flex items-center gap-2.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              >
-                <Mail className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="truncate">{settings.supportEmail}</span>
-              </a>
-            ) : null}
+              return (
+                <li key={channel.label}>
+                  {channel.href ? (
+                    <a
+                      href={channel.href}
+                      className="flex h-full flex-col gap-3.5 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-6 py-6 transition-colors hover:border-[var(--border-strong)]"
+                    >
+                      {body}
+                    </a>
+                  ) : (
+                    <div className="flex h-full flex-col gap-3.5 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-6 py-6">
+                      {body}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
-            {settings.supportPhone ? (
-              <a
-                href={`tel:${settings.supportPhone}`}
-                className="flex items-center gap-2.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              >
-                <Phone className="h-4 w-4 shrink-0" aria-hidden />
-                {settings.supportPhone}
-              </a>
-            ) : null}
+      {/* Form + info */}
+      <section className="lx-container grid items-start gap-10 pb-5 pt-10 lg:grid-cols-[1.3fr_1fr] lg:gap-14">
+        <div className="border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-7 sm:p-9">
+          <ContactForm />
+        </div>
 
-            {settings.addressLine ? (
-              <p className="flex items-center gap-2.5 text-[var(--text-secondary)]">
-                <MapPin className="h-4 w-4 shrink-0" aria-hidden />
-                {settings.addressLine}
+        <div>
+          <div className="lx-media mb-6 aspect-[4/3]">
+            {/* The showroom shot; swap the file to change it. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/catalog/room-living.webp" alt="Inside the LaLuxury showroom" loading="lazy" />
+          </div>
+
+          <dl className="border-t border-[var(--border-subtle)]">
+            {info.map((row) => (
+              <div key={row.label} className="border-b border-[var(--border-subtle)] py-4.5">
+                <dt className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {row.label}
+                </dt>
+                <dd className="mt-1.5 text-[14.5px] font-light leading-relaxed">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="lx-container max-w-[900px] pb-5 pt-12">
+        <h2 className="mb-6 text-center text-[clamp(1.75rem,4vw,2.25rem)]">Common questions</h2>
+
+        <div className="border-t border-[var(--border-subtle)]">
+          {faqs.map((faq) => (
+            <details key={faq.q} className="group border-b border-[var(--border-subtle)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-[15px] marker:hidden [&::-webkit-details-marker]:hidden">
+                {faq.q}
+                <span
+                  aria-hidden
+                  className="shrink-0 text-[19px] leading-none text-[var(--accent-hover)]"
+                >
+                  <span className="group-open:hidden">+</span>
+                  <span className="hidden group-open:inline">&minus;</span>
+                </span>
+              </summary>
+              <p className="max-w-[640px] pb-5.5 text-sm font-light leading-relaxed text-[var(--text-secondary)]">
+                {faq.a}
               </p>
-            ) : null}
-          </Card>
-
-          <Card className="p-5">
-            <h2 className="lx-eyebrow mb-2">Delivery</h2>
-            <p className="text-sm text-[var(--text-secondary)]">{settings.shippingPolicy}</p>
-          </Card>
-
-          <Card className="p-5">
-            <h2 className="lx-eyebrow mb-2">Returns</h2>
-            <p className="text-sm text-[var(--text-secondary)]">{settings.returnsPolicy}</p>
-          </Card>
-        </aside>
-      </div>
-    </div>
+            </details>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }

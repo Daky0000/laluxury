@@ -1,7 +1,9 @@
 "use server";
 
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { currentUser } from "@/lib/auth";
 import { postAlert } from "@/lib/agent/slack";
 
 export type SimpleState = { ok: boolean; message?: string };
@@ -25,6 +27,30 @@ export async function subscribeAction(
   });
 
   return { ok: true, message: "You are on the list." };
+}
+
+/**
+ * The heart on a product page. Saving needs an account, so a signed-out
+ * shopper is told to sign in rather than silently losing the tap.
+ */
+export async function toggleWishlistAction(
+  productId: string,
+): Promise<{ ok: boolean; saved: boolean; message?: string }> {
+  const user = await currentUser();
+  if (!user) return { ok: false, saved: false, message: "Sign in to save pieces." };
+
+  const existing = await db.wishlistItem.findUnique({
+    where: { userId_productId: { userId: user.id, productId } },
+  });
+
+  if (existing) {
+    await db.wishlistItem.delete({ where: { id: existing.id } });
+  } else {
+    await db.wishlistItem.create({ data: { userId: user.id, productId } });
+  }
+
+  revalidatePath("/account");
+  return { ok: true, saved: !existing };
 }
 
 const contactSchema = z.object({

@@ -71,7 +71,7 @@ export default async function AdminCustomersPage({ searchParams }: PageProps<"/a
           </div>
           <button
             type="submit"
-            className="rounded-[--radius-card] bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
+            className="rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
           >
             Search
           </button>
@@ -162,7 +162,7 @@ export default async function AdminCustomersPage({ searchParams }: PageProps<"/a
           {page > 1 ? (
             <Link
               href={`/admin/customers${buildQuery({ q, page: page - 1 })}`}
-              className="rounded-[--radius-card] border border-[var(--border-subtle)] px-3 py-1.5"
+              className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
             >
               Previous
             </Link>
@@ -173,7 +173,7 @@ export default async function AdminCustomersPage({ searchParams }: PageProps<"/a
           {page < pageCount ? (
             <Link
               href={`/admin/customers${buildQuery({ q, page: page + 1 })}`}
-              className="rounded-[--radius-card] border border-[var(--border-subtle)] px-3 py-1.5"
+              className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
             >
               Next
             </Link>

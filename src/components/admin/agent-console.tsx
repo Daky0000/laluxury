@@ -170,7 +170,7 @@ export function AgentConsole({
         <button
           type="submit"
           disabled={!enabled || pending || !draft.trim()}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[--radius-card] bg-[var(--accent)] text-[var(--accent-contrast)] disabled:opacity-40"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-(--radius-card) bg-[var(--accent)] text-[var(--accent-contrast)] disabled:opacity-40"
           aria-label="Send"
         >
           {pending ? (
@@ -201,7 +201,7 @@ function Turn({ role, content }: { role: "user" | "assistant"; content: string }
 
       <div
         className={cn(
-          "max-w-[85%] whitespace-pre-wrap rounded-[--radius-card] px-3.5 py-2.5 text-sm",
+          "max-w-[85%] whitespace-pre-wrap rounded-(--radius-card) px-3.5 py-2.5 text-sm",
           isUser
             ? "bg-[var(--surface-sunken)]"
             : "border border-[var(--border-subtle)] bg-[var(--surface-raised)]",

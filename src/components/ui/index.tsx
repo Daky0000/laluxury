@@ -14,7 +14,7 @@ type ButtonSize = "sm" | "md" | "lg";
 
 const buttonBase =
   "inline-flex items-center justify-center gap-2 font-medium transition-colors " +
-  "disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap rounded-[--radius-card]";
+  "disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap rounded-(--radius-card)";
 
 const buttonVariants: Record<ButtonVariant, string> = {
   primary:
@@ -103,7 +103,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-[--radius-card] border border-[var(--border-subtle)] bg-[var(--surface-raised)]",
+        "rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)]",
         className,
       )}
       {...props}
@@ -152,7 +152,7 @@ export function EmptyState({
   icon?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-[--radius-card] border border-dashed border-[var(--border-subtle)] px-6 py-16 text-center">
+    <div className="flex flex-col items-center justify-center gap-3 rounded-(--radius-card) border border-dashed border-[var(--border-subtle)] px-6 py-16 text-center">
       {icon ? <div className="text-[var(--text-muted)]">{icon}</div> : null}
       <p className="text-base text-[var(--text-primary)]">{title}</p>
       {description ? (
@@ -217,7 +217,7 @@ export function Alert({
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
-      className={cn("rounded-[--radius-card] border px-3 py-2.5 text-sm", tones[tone])}
+      className={cn("rounded-(--radius-card) border px-3 py-2.5 text-sm", tones[tone])}
     >
       {children}
     </div>
@@ -237,23 +237,27 @@ export function Stat({
   delta?: { value: string; positive: boolean };
   hint?: string;
 }) {
+  // The KPI tile from the admin artboard: label and trend on one line, the
+  // number set large in the display face, then what it is measured against.
   return (
-    <Card className="p-4">
-      <p className="lx-eyebrow">{label}</p>
-      <p className="mt-2 font-display text-2xl tabular-nums">{value}</p>
-      <div className="mt-1 flex items-center gap-2">
+    <Card className="px-5 py-5">
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-[11.5px] uppercase tracking-[0.1em] text-[var(--text-muted)]">
+          {label}
+        </span>
         {delta ? (
           <span
             className={cn(
-              "text-xs font-medium tabular-nums",
-              delta.positive ? "text-success" : "text-danger",
+              "text-[11.5px] font-semibold tabular-nums",
+              delta.positive ? "text-sage-600" : "text-[var(--accent)]",
             )}
           >
             {delta.positive ? "▲" : "▼"} {delta.value}
           </span>
         ) : null}
-        {hint ? <span className="text-xs text-[var(--text-muted)]">{hint}</span> : null}
       </div>
+      <p className="mt-2.5 font-display text-[34px] leading-none tabular-nums">{value}</p>
+      {hint ? <p className="mt-1.5 text-xs text-[var(--text-muted)]">{hint}</p> : null}
     </Card>
   );
 }

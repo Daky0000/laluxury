@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { Store } from "lucide-react";
+import { db } from "@/lib/db";
 import { currentUser, displayName } from "@/lib/auth";
 import { can, isStaff, permissionsFor, ROLE_LABELS, type Permission } from "@/lib/auth/rbac";
 import { logoutAction } from "@/app/actions/auth";
 import { AdminNav } from "@/components/admin/nav";
+import { AdminTopbar } from "@/components/admin/topbar";
 import { initials } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -29,51 +29,40 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   if (!user) redirect("/login");
   if (!isStaff(user.role)) redirect("/account");
 
+  // The count beside Orders is what is actually waiting on someone, so the rail
+  // says whether there is work without opening anything.
+  const openOrders = await db.order.count({
+    where: { status: { in: ["PAID", "PROCESSING"] } },
+  });
+
   const permissions = permissionsFor(user.role);
-  const items = NAV.filter((item) => can(user.role, item.permission));
+  const items = NAV.filter((item) => can(user.role, item.permission)).map((item) => ({
+    ...item,
+    badge: item.href === "/admin/orders" && openOrders > 0 ? openOrders : undefined,
+  }));
   const name = displayName(user);
 
   return (
     <div data-theme="admin" className="flex min-h-screen bg-[var(--surface)]">
-      <AdminNav items={items} />
+      <AdminNav
+        items={items}
+        user={{ name, role: ROLE_LABELS[user.role], initials: initials(name) }}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-[var(--border-subtle)] bg-[var(--surface-raised)] px-5">
-          <div className="lg:hidden" />
+        <AdminTopbar />
 
-          <Link
-            href="/"
-            className="hidden items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] sm:flex"
-          >
-            <Store className="h-4 w-4" aria-hidden />
-            View storefront
-          </Link>
+        <main className="min-w-0 flex-1 px-5 pb-11 pt-7 lg:px-8">{children}</main>
 
-          <div className="ml-auto flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-sm leading-tight">{name}</p>
-              <p className="text-xs text-[var(--text-muted)]">{ROLE_LABELS[user.role]}</p>
-            </div>
-
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-900 text-xs font-medium text-white">
-              {initials(name)}
-            </span>
-
-            <form action={logoutAction}>
-              <button
-                type="submit"
-                className="text-xs text-[var(--text-secondary)] underline-offset-4 hover:underline"
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
-        </header>
-
-        <main className="min-w-0 flex-1 p-5 lg:p-8">{children}</main>
-
-        <footer className="border-t border-[var(--border-subtle)] px-5 py-3 text-xs text-[var(--text-muted)]">
-          Signed in as {user.email} · {permissions.length} permissions
+        <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--border-subtle)] px-5 py-3 text-xs text-[var(--text-muted)] lg:px-8">
+          <span>
+            Signed in as {user.email} · {permissions.length} permissions
+          </span>
+          <form action={logoutAction} className="ml-auto">
+            <button type="submit" className="underline-offset-4 hover:underline">
+              Sign out
+            </button>
+          </form>
         </footer>
       </div>
     </div>

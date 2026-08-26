@@ -28,6 +28,8 @@ export type ProductTileData = {
   /** Set only when a single active variant exists, so it can be added in one tap. */
   variantId: string | null;
   inStock: boolean;
+  /** Colour dots under the title, from whichever option carries hex values. */
+  swatches: { name: string; hex: string }[];
 };
 
 /** Merchandising badges are ordinary tags, so the owner can set them in the admin. */
@@ -51,6 +53,14 @@ export function toTile(product: ProductCard): ProductTileData {
   const badgeTag = product.tags.find((tag) => BADGES[tag.toLowerCase()]);
   const [primary, secondary] = product.images;
 
+  // Whichever option group the owner gave hex values to is the colour one,
+  // whatever they named it. Four dots is all the tile has room for.
+  const swatches = (product.options ?? [])
+    .flatMap((option) => option.values)
+    .filter((value): value is { value: string; hexColor: string } => Boolean(value.hexColor))
+    .slice(0, 4)
+    .map((value) => ({ name: value.value, hex: value.hexColor }));
+
   return {
     id: product.id,
     title: product.title,
@@ -67,5 +77,6 @@ export function toTile(product: ProductCard): ProductTileData {
     hoverImageUrl: secondary?.url ?? null,
     variantId: product.variants.length === 1 ? product.variants[0].id : null,
     inStock: isInStock(product),
+    swatches,
   };
 }

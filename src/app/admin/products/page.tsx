@@ -124,7 +124,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
 
           <button
             type="submit"
-            className="rounded-[--radius-card] bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
+            className="rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
           >
             Filter
           </button>
@@ -266,7 +266,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
           {page > 1 ? (
             <Link
               href={`/admin/products${buildQuery({ q, status, category: categoryId, page: page - 1 })}`}
-              className="rounded-[--radius-card] border border-[var(--border-subtle)] px-3 py-1.5"
+              className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
             >
               Previous
             </Link>
@@ -277,7 +277,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
           {page < pageCount ? (
             <Link
               href={`/admin/products${buildQuery({ q, status, category: categoryId, page: page + 1 })}`}
-              className="rounded-[--radius-card] border border-[var(--border-subtle)] px-3 py-1.5"
+              className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
             >
               Next
             </Link>

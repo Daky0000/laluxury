@@ -117,7 +117,7 @@ export default async function AdminInventoryPage({ searchParams }: PageProps<"/a
 
           <button
             type="submit"
-            className="rounded-[--radius-card] bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
+            className="rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
           >
             Filter
           </button>

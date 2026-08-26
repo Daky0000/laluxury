@@ -53,7 +53,7 @@ export default async function AdminSettingsPage() {
           {integrations.map((integration) => (
             <li
               key={integration.key}
-              className="flex flex-wrap items-center gap-3 rounded-[--radius-card] border border-[var(--border-subtle)] px-4 py-3"
+              className="flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-3"
             >
               <span className="min-w-40 flex-1 text-sm">{integration.label}</span>
               <Badge tone={integration.ready ? "success" : "neutral"}>
@@ -68,7 +68,7 @@ export default async function AdminSettingsPage() {
           ))}
         </ul>
 
-        <div className="mt-4 rounded-[--radius-card] bg-[var(--surface-sunken)] p-3">
+        <div className="mt-4 rounded-(--radius-card) bg-[var(--surface-sunken)] p-3">
           <p className="text-xs text-[var(--text-secondary)]">
             Public site URL: <code>{env.siteUrl()}</code> · Currency:{" "}
             <code>{env.currency()}</code>
@@ -104,7 +104,7 @@ export default async function AdminSettingsPage() {
                   {zone.rates.map((rate) => (
                     <li
                       key={rate.id}
-                      className="flex flex-wrap items-center gap-3 rounded-[--radius-card] border border-[var(--border-subtle)] px-3 py-2 text-sm"
+                      className="flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-2 text-sm"
                     >
                       <span className="min-w-32 flex-1">{rate.name}</span>
                       <span className="tabular-nums">{formatMoney(rate.price)}</span>

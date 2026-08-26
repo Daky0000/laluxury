@@ -8,11 +8,15 @@ import { lowStockItems } from "@/lib/inventory";
 import { integrationStatus } from "@/lib/env";
 import { formatMoney } from "@/lib/money";
 import { formatDate, relativeTime } from "@/lib/utils";
-import { Card, Stat, Badge, SectionHeading, EmptyState } from "@/components/ui";
+import { Card, Stat, Badge, EmptyState } from "@/components/ui";
 import { RevenueChart } from "@/components/admin/revenue-chart";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Dashboard" };
+
+const cardTitle = "text-sm font-semibold";
+const tableHead =
+  "border-b border-[var(--border-subtle)] px-2 py-2.5 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]";
 
 export default async function AdminDashboard() {
   await requirePermission("dashboard:view");
@@ -24,7 +28,7 @@ export default async function AdminDashboard() {
     lowStockItems(6),
     db.order.findMany({
       orderBy: { placedAt: "desc" },
-      take: 8,
+      take: 6,
       select: {
         id: true,
         orderNumber: true,
@@ -32,6 +36,7 @@ export default async function AdminDashboard() {
         total: true,
         status: true,
         placedAt: true,
+        shippingAddress: { select: { firstName: true, lastName: true, city: true } },
       },
     }),
     Promise.resolve(integrationStatus()),
@@ -40,13 +45,7 @@ export default async function AdminDashboard() {
   const unready = integrations.filter((i) => !i.ready);
 
   return (
-    <div className="flex flex-col gap-8">
-      <SectionHeading
-        eyebrow="Last 30 days"
-        title="Dashboard"
-        description="Revenue counts paid orders only, so abandoned checkouts never inflate it."
-      />
-
+    <div className="flex flex-col gap-4.5">
       {/* Setup nudge */}
       {unready.length > 0 ? (
         <Card className="border-warning/30 bg-warning/5 p-4">
@@ -72,9 +71,9 @@ export default async function AdminDashboard() {
       ) : null}
 
       {/* Headline numbers */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4.5 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
-          label="Revenue"
+          label="Revenue (30d)"
           value={formatMoney(metrics.revenue)}
           delta={
             metrics.revenueChange !== null
@@ -84,7 +83,7 @@ export default async function AdminDashboard() {
                 }
               : undefined
           }
-          hint="vs previous 30 days"
+          hint={`Across ${metrics.orderCount} paid orders`}
         />
         <Stat
           label="Orders"
@@ -97,43 +96,54 @@ export default async function AdminDashboard() {
                 }
               : undefined
           }
-          hint="paid"
+          hint="Paid in the last 30 days"
         />
-        <Stat label="Average order" value={formatMoney(metrics.averageOrderValue)} />
+        <Stat
+          label="Avg order value"
+          value={formatMoney(metrics.averageOrderValue)}
+          hint="Per paid order"
+        />
         <Stat
           label="To fulfil"
           value={String(metrics.pendingFulfilment)}
-          hint={metrics.pendingFulfilment > 0 ? "needs packing" : "all clear"}
+          hint={metrics.pendingFulfilment > 0 ? "Awaiting packing" : "All clear"}
         />
       </div>
 
       {/* Chart + top products */}
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <Card className="p-5">
-          <h2 className="lx-eyebrow mb-4">Revenue, last 30 days</h2>
+      <div className="grid gap-4.5 lg:grid-cols-[1.5fr_1fr]">
+        <Card className="px-6 py-5.5">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <h2 className={cardTitle}>Revenue · last 30 days</h2>
+            <span className="text-[13px] font-semibold text-sage-600 tabular-nums">
+              {formatMoney(metrics.revenue)} total
+            </span>
+          </div>
           <RevenueChart data={series} />
         </Card>
 
-        <Card className="p-5">
-          <h2 className="lx-eyebrow mb-4">Best sellers</h2>
+        <Card className="px-6 py-5.5">
+          <h2 className={cardTitle}>Top products</h2>
           {top.length === 0 ? (
-            <p className="py-8 text-center text-sm text-[var(--text-muted)]">
+            <p className="py-10 text-center text-sm text-[var(--text-muted)]">
               No sales in this window yet.
             </p>
           ) : (
-            <ol className="flex flex-col gap-3">
+            <ol className="mt-4 flex flex-col gap-3.5">
               {top.map((product, index) => (
                 <li key={product.title} className="flex items-center gap-3">
-                  <span className="w-4 text-xs tabular-nums text-[var(--text-muted)]">
+                  <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] bg-[var(--surface-sunken)] text-xs font-semibold text-[var(--accent)] tabular-nums">
                     {index + 1}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{product.title}</span>
-                    <span className="text-xs text-[var(--text-muted)]">
+                    <span className="block truncate text-[13.5px]">{product.title}</span>
+                    <span className="text-[11.5px] text-[var(--text-muted)]">
                       {product.units} sold
                     </span>
                   </span>
-                  <span className="text-sm tabular-nums">{formatMoney(product.revenue)}</span>
+                  <span className="text-[13.5px] font-medium tabular-nums">
+                    {formatMoney(product.revenue)}
+                  </span>
                 </li>
               ))}
             </ol>
@@ -141,56 +151,84 @@ export default async function AdminDashboard() {
         </Card>
       </div>
 
-      {/* Orders + stock */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="lx-eyebrow">Recent orders</h2>
-            <Link href="/admin/orders" className="text-xs underline underline-offset-4">
-              All orders
-            </Link>
+      {/* Recent orders */}
+      <Card className="px-6 py-5.5">
+        <div className="mb-2 flex items-center justify-between gap-4">
+          <h2 className={cardTitle}>Recent orders</h2>
+          <Link href="/admin/orders" className="text-[12.5px] text-[var(--accent)]">
+            View all →
+          </Link>
+        </div>
+
+        {recentOrders.length === 0 ? (
+          <EmptyState title="No orders yet" description="They will appear here as they come in." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <th className={tableHead}>Order</th>
+                  <th className={tableHead}>Customer</th>
+                  <th className={tableHead}>Date</th>
+                  <th className={tableHead}>Total</th>
+                  <th className={tableHead}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentOrders.map((order) => {
+                  const address = order.shippingAddress;
+                  const who = address
+                    ? `${address.firstName} ${address.lastName}`.trim()
+                    : order.email;
+
+                  return (
+                    <tr key={order.id} className="border-b border-[var(--border-subtle)] last:border-0">
+                      <td className="px-2 py-3">
+                        <Link
+                          href={`/admin/orders/${order.id}`}
+                          className="text-[13px] font-medium text-[var(--accent)] underline underline-offset-4"
+                        >
+                          {order.orderNumber}
+                        </Link>
+                      </td>
+                      <td className="px-2 py-3 text-[13px] text-[var(--text-secondary)]">
+                        {who}
+                        {address?.city ? (
+                          <span className="block text-[11.5px] text-[var(--text-muted)]">
+                            {address.city}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-2 py-3 text-[13px] text-[var(--text-muted)]">
+                        {relativeTime(order.placedAt)}
+                      </td>
+                      <td className="px-2 py-3 text-[13px] tabular-nums">
+                        {formatMoney(order.total)}
+                      </td>
+                      <td className="px-2 py-3">
+                        <StatusBadge status={order.status} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        )}
+      </Card>
 
-          {recentOrders.length === 0 ? (
-            <EmptyState title="No orders yet" description="They will appear here as they come in." />
-          ) : (
-            <ul className="divide-y divide-[var(--border-subtle)]">
-              {recentOrders.map((order) => (
-                <li key={order.id}>
-                  <Link
-                    href={`/admin/orders/${order.id}`}
-                    className="flex items-center gap-3 py-2.5 transition-colors hover:bg-[var(--surface-sunken)]"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-mono text-xs">{order.orderNumber}</span>
-                      <span className="block truncate text-xs text-[var(--text-muted)]">
-                        {order.email}
-                      </span>
-                    </span>
-                    <StatusBadge status={order.status} />
-                    <span className="w-20 text-right text-sm tabular-nums">
-                      {formatMoney(order.total)}
-                    </span>
-                    <span className="hidden w-16 text-right text-xs text-[var(--text-muted)] sm:block">
-                      {relativeTime(order.placedAt)}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card className="p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="lx-eyebrow">Low stock</h2>
-            <Link href="/admin/inventory" className="text-xs underline underline-offset-4">
-              Manage inventory
+      {/* Stock + integrations */}
+      <div className="grid gap-4.5 lg:grid-cols-2">
+        <Card className="px-6 py-5.5">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <h2 className={cardTitle}>Low stock</h2>
+            <Link href="/admin/inventory" className="text-[12.5px] text-[var(--accent)]">
+              Manage inventory →
             </Link>
           </div>
 
           {lowStock.length === 0 ? (
-            <div className="flex items-center gap-2 py-8 text-sm text-success">
+            <div className="flex items-center gap-2 py-8 text-sm text-sage-600">
               <CheckCircle2 className="h-4 w-4" aria-hidden />
               Everything is above its reorder point.
             </div>
@@ -199,42 +237,38 @@ export default async function AdminDashboard() {
               {lowStock.map((item) => (
                 <li key={item.inventoryItemId} className="flex items-center gap-3 py-2.5">
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{item.productTitle}</span>
-                    <span className="block font-mono text-xs text-[var(--text-muted)]">
+                    <span className="block truncate text-[13.5px]">{item.productTitle}</span>
+                    <span className="block font-mono text-[11.5px] text-[var(--text-muted)]">
                       {item.sku}
                     </span>
                   </span>
                   <Badge tone={item.available <= 0 ? "danger" : "warning"}>
                     {item.available <= 0 ? "Out of stock" : `${item.available} left`}
                   </Badge>
-                  <span className="hidden text-xs text-[var(--text-muted)] sm:block">
-                    reorder {item.reorderQuantity || item.reorderPoint * 2}
-                  </span>
                 </li>
               ))}
             </ul>
           )}
         </Card>
-      </div>
 
-      {/* Integrations */}
-      <Card className="p-5">
-        <h2 className="lx-eyebrow mb-4">Integrations</h2>
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {integrations.map((integration) => (
-            <li key={integration.key} className="flex items-center gap-2 text-sm">
-              {integration.ready ? (
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden />
-              ) : (
-                <Circle className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden />
-              )}
-              <span className={integration.ready ? "" : "text-[var(--text-muted)]"}>
-                {integration.label}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Card>
+        <Card className="px-6 py-5.5">
+          <h2 className={cardTitle}>Integrations</h2>
+          <ul className="mt-4 grid gap-2.5 sm:grid-cols-2">
+            {integrations.map((integration) => (
+              <li key={integration.key} className="flex items-center gap-2 text-[13.5px]">
+                {integration.ready ? (
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-sage-600" aria-hidden />
+                ) : (
+                  <Circle className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden />
+                )}
+                <span className={integration.ready ? "" : "text-[var(--text-muted)]"}>
+                  {integration.label}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
 
       <p className="text-xs text-[var(--text-muted)]">
         {metrics.customerCount} customers · {metrics.activeProducts} active products ·{" "}

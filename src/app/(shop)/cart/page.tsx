@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ShoppingBag } from "lucide-react";
+import { Lock } from "lucide-react";
 import { computeCartTotals, readCart } from "@/lib/cart";
-import { formatMoney } from "@/lib/money";
+import { formatPrice } from "@/lib/money";
+import { getSettings } from "@/lib/settings";
 import { CartLines, DiscountForm } from "@/components/shop/cart-lines";
-import { EmptyState, LinkButton, Card, Alert } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Your bag" };
 export const dynamic = "force-dynamic";
@@ -15,94 +15,95 @@ export default async function CartPage() {
 
   if (!totals || totals.lines.length === 0) {
     return (
-      <div className="lx-container py-20">
-        <EmptyState
-          icon={<ShoppingBag className="h-8 w-8" aria-hidden />}
-          title="Your bag is empty"
-          description="Once you add something it will show up here."
-          action={
-            <LinkButton href="/shop" className="mt-2">
-              Start shopping
-            </LinkButton>
-          }
-        />
+      <div className="lx-container py-24 text-center">
+        <h1 className="text-[clamp(2.25rem,5vw,3.25rem)]">Your bag</h1>
+        <p className="mt-4 text-[15px] font-light text-[var(--text-muted)]">
+          Your bag is empty.{" "}
+          <Link href="/shop" className="text-[var(--accent)] underline underline-offset-4">
+            Browse all products →
+          </Link>
+        </p>
       </div>
     );
   }
 
-  return (
-    <div className="lx-container py-10">
-      <h1 className="mb-8 text-3xl md:text-4xl">Your bag</h1>
+  const settings = await getSettings();
+  const freeGap =
+    settings.freeShippingThreshold && totals.total < settings.freeShippingThreshold
+      ? settings.freeShippingThreshold - totals.total
+      : 0;
 
-      <div className="grid gap-10 lg:grid-cols-[1fr_22rem]">
+  return (
+    <div className="lx-container pb-16 pt-11">
+      <h1 className="mb-6 text-[clamp(2.25rem,5vw,3.25rem)]">Your bag</h1>
+
+      <div className="grid items-start gap-10 lg:grid-cols-[1fr_400px] lg:gap-13">
         <div>
           {totals.problems.length > 0 ? (
-            <div className="mb-6">
-              <Alert tone="warning">
-                Some items need attention before you can check out.
-              </Alert>
-            </div>
+            <p className="mb-5 border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
+              Some items need attention before you can check out.
+            </p>
           ) : null}
+
           <CartLines lines={totals.lines} />
         </div>
 
-        <aside className="lg:sticky lg:top-28 lg:self-start">
-          <Card className="p-5">
-            <h2 className="lx-eyebrow mb-4">Summary</h2>
+        <aside className="border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-6 lg:sticky lg:top-28">
+          <h2 className="mb-5 font-display text-2xl">Order summary</h2>
 
-            <dl className="space-y-2.5 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-[var(--text-secondary)]">
-                  Subtotal ({totals.itemCount} {totals.itemCount === 1 ? "item" : "items"})
-                </dt>
-                <dd className="tabular-nums">{formatMoney(totals.subtotal)}</dd>
-              </div>
+          <DiscountForm appliedCode={totals.discountCode} />
 
-              {totals.discountTotal > 0 ? (
-                <div className="flex justify-between text-success">
-                  <dt>Discount</dt>
-                  <dd className="tabular-nums">-{formatMoney(totals.discountTotal)}</dd>
-                </div>
-              ) : null}
-
-              <div className="flex justify-between">
-                <dt className="text-[var(--text-secondary)]">Delivery</dt>
-                <dd className="text-[var(--text-secondary)]">
-                  {totals.freeShipping ? "Free" : "At checkout"}
-                </dd>
-              </div>
-            </dl>
-
-            <div className="mt-4 border-t border-[var(--border-subtle)] pt-4">
-              <div className="flex items-baseline justify-between">
-                <span className="text-sm">Total</span>
-                <span className="font-display text-2xl tabular-nums">
-                  {formatMoney(totals.total)}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">Delivery added at checkout.</p>
+          <dl className="mt-4">
+            <div className="flex justify-between py-2 text-sm text-[var(--text-secondary)]">
+              <dt>
+                Subtotal ({totals.itemCount} {totals.itemCount === 1 ? "item" : "items"})
+              </dt>
+              <dd className="tabular-nums">{formatPrice(totals.subtotal)}</dd>
             </div>
 
-            <div className="mt-5">
-              <DiscountForm appliedCode={totals.discountCode} />
+            {totals.discountTotal > 0 ? (
+              <div className="flex justify-between py-2 text-sm text-sage-600">
+                <dt>Discount</dt>
+                <dd className="tabular-nums">-{formatPrice(totals.discountTotal)}</dd>
+              </div>
+            ) : null}
+
+            <div className="flex justify-between py-2 text-sm text-[var(--text-secondary)]">
+              <dt>Delivery</dt>
+              <dd>{totals.freeShipping ? "Free" : "At checkout"}</dd>
             </div>
+          </dl>
 
-            <LinkButton
-              href="/checkout"
-              size="lg"
-              className="mt-5 w-full"
-              aria-disabled={totals.problems.length > 0}
-            >
-              Checkout
-            </LinkButton>
+          {freeGap > 0 ? (
+            <p className="pb-2 text-xs text-sage-600">
+              Add {formatPrice(freeGap)} more for free delivery
+            </p>
+          ) : null}
 
-            <Link
-              href="/shop"
-              className="mt-3 block text-center text-xs text-[var(--text-secondary)] underline-offset-4 hover:underline"
-            >
-              Continue shopping
-            </Link>
-          </Card>
+          <div className="mt-2.5 flex items-baseline justify-between border-t border-[var(--border-strong)] pt-4">
+            <span className="text-sm uppercase tracking-[0.06em]">Total</span>
+            <span className="font-display text-3xl tabular-nums">{formatPrice(totals.total)}</span>
+          </div>
+
+          <Link
+            href="/checkout"
+            aria-disabled={totals.problems.length > 0}
+            className="mt-5 flex w-full items-center justify-center bg-[var(--accent)] px-6 py-4 text-xs font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)]"
+          >
+            Checkout
+          </Link>
+
+          <p className="mt-4 flex items-center justify-center gap-2 text-[11.5px] text-[var(--text-muted)]">
+            <Lock className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden />
+            Encrypted &amp; secure
+          </p>
+
+          <Link
+            href="/shop"
+            className="mt-3 block text-center text-xs text-[var(--text-secondary)] underline-offset-4 hover:underline"
+          >
+            Continue shopping
+          </Link>
         </aside>
       </div>
     </div>

@@ -51,7 +51,7 @@ export function ProductBulkBar({
       <form onChange={(event) => sync(event.currentTarget)}>{children}</form>
 
       {selected.length > 0 ? (
-        <div className="sticky bottom-4 z-10 flex flex-wrap items-center gap-3 rounded-[--radius-card] border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-4 py-3 shadow-lg">
+        <div className="sticky bottom-4 z-10 flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-4 py-3 shadow-lg">
           <span className="text-sm">
             {selected.length} selected
           </span>
@@ -76,7 +76,7 @@ export function ProductBulkBar({
             type="button"
             onClick={apply}
             disabled={pending}
-            className="rounded-[--radius-card] bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+            className="rounded-(--radius-card) bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
           >
             {pending ? "Applying…" : "Apply"}
           </button>

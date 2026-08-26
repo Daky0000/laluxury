@@ -62,7 +62,7 @@ export function DiscountManager({
               setCreating(true);
               setEditing(null);
             }}
-            className="flex items-center gap-1.5 rounded-[--radius-card] bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
+            className="flex items-center gap-1.5 rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
           >
             <Plus className="h-4 w-4" aria-hidden />
             New discount code
@@ -355,7 +355,7 @@ function DiscountForm({
         {scope === "SPECIFIC_PRODUCTS" ? (
           <fieldset>
             <legend className="lx-eyebrow mb-2">Products</legend>
-            <div className="grid max-h-48 gap-1.5 overflow-y-auto rounded-[--radius-card] border border-[var(--border-subtle)] p-3 sm:grid-cols-2">
+            <div className="grid max-h-48 gap-1.5 overflow-y-auto rounded-(--radius-card) border border-[var(--border-subtle)] p-3 sm:grid-cols-2">
               {products.map((p) => (
                 <label key={p.id} className="flex items-center gap-1.5 text-sm">
                   <input
@@ -467,7 +467,7 @@ function DiscountForm({
           <button
             type="submit"
             disabled={pending}
-            className="flex items-center gap-2 rounded-[--radius-card] bg-[var(--accent)] px-5 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+            className="flex items-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-5 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
             {discount ? "Save changes" : "Create code"}
@@ -476,7 +476,7 @@ function DiscountForm({
           <button
             type="button"
             onClick={onDone}
-            className="rounded-[--radius-card] border border-[var(--border-subtle)] px-4 py-2.5 text-sm"
+            className="rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-2.5 text-sm"
           >
             {state?.ok ? "Close" : "Cancel"}
           </button>

@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { catalogFacets, searchProducts, PRODUCT_SORTS, type ProductSort } from "@/lib/catalog";
 import { toTile } from "@/lib/product-view";
 import { ProductTile } from "@/components/shop/product-tile";
+import { SortSelect } from "@/components/shop/sort-select";
 import { FilterRail, ActiveFilters, OPTION_PREFIX } from "@/components/shop/filter-rail";
 import { buildQuery } from "@/lib/utils";
 
@@ -11,6 +13,12 @@ export const metadata: Metadata = {
   description:
     "Every LaLuxury piece — bedding, living, windows and student essentials — in one place.",
 };
+
+/** The grid opens on four rows of three and grows a row at a time. */
+const FIRST_PAGE = 12;
+const LOAD_MORE_STEP = 9;
+/** Matches the ceiling `searchProducts` will honour. */
+const MAX_SHOWN = 240;
 
 /** searchParams values arrive as string | string[]; normalise to an array. */
 function toArray(value: string | string[] | undefined): string[] {
@@ -39,8 +47,14 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
   const collectionSlug = toSingle(params.collection);
   const tags = toArray(params.tag);
   const sort = (toSingle(params.sort) ?? "featured") as ProductSort;
-  const page = Number(toSingle(params.page) ?? 1) || 1;
   const inStockOnly = toSingle(params.inStock) === "1";
+  const onSaleOnly = toSingle(params.onSale) === "1";
+
+  const showRaw = Number(toSingle(params.show));
+  const show = Math.min(
+    MAX_SHOWN,
+    Number.isFinite(showRaw) && showRaw > 0 ? Math.floor(showRaw) : FIRST_PAGE,
+  );
 
   const minRaw = Number(toSingle(params.min));
   const maxRaw = Number(toSingle(params.max));
@@ -55,16 +69,16 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
       tags,
       options,
       sort,
-      page,
       minPrice,
       maxPrice,
       inStockOnly,
-      perPage: 24,
+      onSaleOnly,
+      perPage: show,
     }),
     catalogFacets(),
   ]);
 
-  // Preserved across sort changes and pagination.
+  // Preserved across sort changes, filter toggles and load-more.
   const carried = {
     q,
     category: categorySlugs,
@@ -73,67 +87,89 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
     min: toSingle(params.min),
     max: toSingle(params.max),
     inStock: inStockOnly ? "1" : undefined,
+    onSale: onSaleOnly ? "1" : undefined,
     ...Object.fromEntries(
       Object.entries(options).map(([name, values]) => [`${OPTION_PREFIX}${name}`, values]),
     ),
   };
 
   const heading = q ? `Results for “${q}”` : collectionSlug ? "The collection" : "All products";
+  const remaining = results.total - results.items.length;
 
   return (
     <>
       {/* Page head */}
       <section className="lx-container pb-2 pt-11 text-center">
-        <p className="lx-eyebrow">The full collection</p>
-        <h1 className="mt-3 text-[clamp(2.5rem,6vw,3.75rem)] leading-tight">{heading}</h1>
+        <p className="lx-eyebrow">Every piece</p>
+        <h1 className="mt-3 text-[clamp(2.5rem,6vw,3.625rem)] leading-tight">{heading}</h1>
         <p className="mt-2.5 text-[15px] font-light text-[var(--text-muted)]">
-          Every LaLuxury piece — bedding, living, windows and student essentials — in one place.
+          Bedding, living, windows and student essentials — filter your way to it.
         </p>
       </section>
 
-      {/* Toolbar */}
+      {/* Toolbar: search, tally, sort */}
       <div className="lx-container pt-6">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-y border-[var(--border-subtle)] py-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-y border-[var(--border-subtle)] py-3.5">
+          <form
+            method="get"
+            action="/shop"
+            className="flex w-full items-center gap-2.5 border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3.5 py-2 sm:w-[300px]"
+          >
+            {/* Searching starts the results over, so `show` is deliberately dropped. */}
+            {Object.entries(carried).flatMap(([key, value]) =>
+              key === "q"
+                ? []
+                : (Array.isArray(value) ? value : value ? [value] : []).map((v, i) => (
+                    <input key={`${key}-${i}`} type="hidden" name={key} value={v} />
+                  )),
+            )}
+            <label htmlFor="q" className="sr-only">
+              Search all products
+            </label>
+            <Search className="h-[15px] w-[15px] shrink-0 text-[var(--text-muted)]" aria-hidden />
+            <input
+              id="q"
+              name="q"
+              type="search"
+              defaultValue={q}
+              placeholder="Search all products…"
+              className="w-full min-w-0 bg-transparent text-[13px] outline-none placeholder:text-ink-400"
+            />
+            <button type="submit" className="sr-only">
+              Search
+            </button>
+          </form>
+
           <span className="text-[12.5px] tracking-[0.06em] text-[var(--text-secondary)]">
-            {results.total} {results.total === 1 ? "piece" : "pieces"}
+            {results.total} of {facets.productTotal} pieces
           </span>
 
-          <form method="get" className="flex items-center gap-3">
+          <form method="get" action="/shop" className="flex items-center gap-3">
             {/* Carry the current filters through the sort change. */}
             {Object.entries(carried).flatMap(([key, value]) =>
               (Array.isArray(value) ? value : value ? [value] : []).map((v, i) => (
                 <input key={`${key}-${i}`} type="hidden" name={key} value={v} />
               )),
             )}
-            <label
-              htmlFor="sort"
-              className="text-[11.5px] uppercase tracking-[0.14em] text-[var(--text-muted)]"
-            >
-              Sort
-            </label>
-            <select
-              id="sort"
-              name="sort"
-              defaultValue={sort}
-              className="border border-[var(--border-strong)] bg-transparent px-3.5 py-2 text-[13px] outline-none"
-            >
-              {Object.entries(PRODUCT_SORTS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <noscript>
-              <button type="submit" className="text-xs underline">
-                Apply
-              </button>
-            </noscript>
+            <SortSelect
+              value={sort}
+              options={Object.entries(PRODUCT_SORTS).map(([value, label]) => ({ value, label }))}
+            />
           </form>
         </div>
       </div>
 
+      {/* Active filters */}
+      <div className="lx-container pt-4 empty:pt-0">
+        <ActiveFilters
+          selected={{ categorySlugs, tags, options, inStockOnly, onSaleOnly, min: toSingle(params.min), max: toSingle(params.max), q }}
+          facets={facets}
+          carried={carried}
+        />
+      </div>
+
       {/* Body */}
-      <section className="lx-container grid items-start gap-12 pb-16 pt-7 lg:grid-cols-[220px_1fr]">
+      <section className="lx-container grid items-start gap-x-13 gap-y-10 pb-16 pt-7 lg:grid-cols-[238px_1fr]">
         <FilterRail
           facets={facets}
           selected={{
@@ -141,6 +177,7 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
             tags,
             options,
             inStockOnly,
+            onSaleOnly,
             min: toSingle(params.min),
             max: toSingle(params.max),
           }}
@@ -148,16 +185,10 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
         />
 
         <div>
-          <ActiveFilters
-            selected={{ categorySlugs, tags, options, inStockOnly, q }}
-            facets={facets}
-            carried={carried}
-          />
-
           {results.items.length === 0 ? (
             <div className="py-24 text-center">
               <p className="text-[15px] font-light text-[var(--text-muted)]">
-                No pieces match these filters.
+                Nothing matches these filters.
               </p>
               <Link
                 href="/shop"
@@ -167,38 +198,30 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
               </Link>
             </div>
           ) : (
-            <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-3">
-              {results.items.map((product, index) => (
-                <ProductTile key={product.id} product={toTile(product)} priority={index < 3} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-[34px] md:grid-cols-3">
+                {results.items.map((product, index) => (
+                  <ProductTile key={product.id} product={toTile(product)} priority={index < 3} />
+                ))}
+              </div>
+
+              {remaining > 0 ? (
+                <div className="mt-11 flex justify-center">
+                  <Link
+                    href={`/shop${buildQuery({
+                      ...carried,
+                      sort,
+                      show: Math.min(MAX_SHOWN, show + LOAD_MORE_STEP),
+                    })}`}
+                    scroll={false}
+                    className="border border-[var(--border-strong)] px-10 py-4 text-xs uppercase tracking-[0.14em] transition-colors hover:bg-[var(--surface-sunken)]"
+                  >
+                    Load more ({remaining})
+                  </Link>
+                </div>
+              ) : null}
+            </>
           )}
-
-          {results.pageCount > 1 ? (
-            <nav aria-label="Pagination" className="mt-14 flex items-center justify-center gap-3">
-              {results.hasPrevious ? (
-                <Link
-                  href={`/shop${buildQuery({ ...carried, sort, page: page - 1 })}`}
-                  className="border border-[var(--border-subtle)] px-4 py-2 text-xs uppercase tracking-[0.12em] transition-colors hover:bg-[var(--surface-sunken)]"
-                >
-                  Previous
-                </Link>
-              ) : null}
-
-              <span className="px-2 text-[12.5px] tabular-nums text-[var(--text-secondary)]">
-                Page {results.page} of {results.pageCount}
-              </span>
-
-              {results.hasNext ? (
-                <Link
-                  href={`/shop${buildQuery({ ...carried, sort, page: page + 1 })}`}
-                  className="border border-[var(--border-subtle)] px-4 py-2 text-xs uppercase tracking-[0.12em] transition-colors hover:bg-[var(--surface-sunken)]"
-                >
-                  Next
-                </Link>
-              ) : null}
-            </nav>
-          ) : null}
         </div>
       </section>
     </>

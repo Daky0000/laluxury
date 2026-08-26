@@ -283,7 +283,7 @@ function DetailsTab({
           <button
             type="submit"
             disabled={pending}
-            className="flex items-center gap-2 rounded-[--radius-card] bg-[var(--accent)] px-6 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+            className="flex items-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-6 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
             Save changes
@@ -309,7 +309,7 @@ function DetailsTab({
               if (result.message) setDeleteMessage(result.message);
             });
           }}
-          className="mt-3 flex items-center gap-2 rounded-[--radius-card] border border-danger px-4 py-2 text-sm text-danger disabled:opacity-50"
+          className="mt-3 flex items-center gap-2 rounded-(--radius-card) border border-danger px-4 py-2 text-sm text-danger disabled:opacity-50"
         >
           <Trash2 className="h-4 w-4" aria-hidden />
           Delete product
@@ -347,7 +347,7 @@ function VariantsTab({ product }: { product: EditorProduct }) {
             {product.options.map((option) => (
               <li
                 key={option.id}
-                className="flex items-center justify-between gap-4 rounded-[--radius-card] border border-[var(--border-subtle)] px-4 py-3"
+                className="flex items-center justify-between gap-4 rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-3"
               >
                 <div>
                   <p className="text-sm font-medium">{option.name}</p>
@@ -394,7 +394,7 @@ function VariantsTab({ product }: { product: EditorProduct }) {
           <button
             type="submit"
             disabled={optionPending}
-            className="flex items-center gap-1.5 rounded-[--radius-card] border border-[var(--border-subtle)] px-4 py-2.5 text-sm disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-2.5 text-sm disabled:opacity-50"
           >
             <Plus className="h-4 w-4" aria-hidden />
             Add option
@@ -512,7 +512,7 @@ function VariantsTab({ product }: { product: EditorProduct }) {
             <button
               type="submit"
               disabled={pending}
-              className="flex items-center gap-2 rounded-[--radius-card] bg-[var(--accent)] px-5 py-2 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+              className="flex items-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-5 py-2 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
             >
               {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
               Save variants
@@ -581,7 +581,7 @@ function ImagesTab({ product }: { product: EditorProduct }) {
           <button
             type="submit"
             disabled={pending}
-            className="rounded-[--radius-card] bg-[var(--accent)] px-5 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+            className="rounded-(--radius-card) bg-[var(--accent)] px-5 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
           >
             {pending ? "Adding…" : "Add image"}
           </button>

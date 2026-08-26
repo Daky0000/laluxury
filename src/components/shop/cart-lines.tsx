@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Minus, Plus, Trash2, Loader2 } from "lucide-react";
-import { formatMoney } from "@/lib/money";
+import { X, Loader2 } from "lucide-react";
+import { formatPrice } from "@/lib/money";
 import {
   applyDiscountAction,
   removeCartLineAction,
@@ -12,9 +12,14 @@ import {
 } from "@/app/actions/cart";
 import type { CartLineView } from "@/lib/cart";
 
+/**
+ * The bag rows from the cart & checkout artboard: a tall thumbnail, the piece
+ * and the variant it is, a quantity stepper on the baseline and the line total
+ * on the right, with the remove control tucked up beside the name.
+ */
 export function CartLines({ lines }: { lines: CartLineView[] }) {
   return (
-    <ul className="divide-y divide-[var(--border-subtle)]">
+    <ul className="border-t border-[var(--border-subtle)]">
       {lines.map((line) => (
         <CartLine key={line.id} line={line} />
       ))}
@@ -43,27 +48,39 @@ function CartLine({ line }: { line: CartLineView }) {
   const atMax = line.availableStock !== null && line.quantity >= line.availableStock;
 
   return (
-    <li className="flex gap-4 py-5">
-      <Link href={`/product/${line.slug}`} className="lx-media h-28 w-24 shrink-0 rounded-[--radius-card]">
+    <li className="flex gap-5 border-b border-[var(--border-subtle)] py-5.5">
+      <Link
+        href={`/product/${line.slug}`}
+        className="h-28 w-24 shrink-0 overflow-hidden bg-[var(--surface-media)]"
+      >
         {line.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={line.imageUrl} alt="" />
+          <img src={line.imageUrl} alt="" className="h-full w-full object-cover" />
         ) : null}
       </Link>
 
       <div className="flex flex-1 flex-col">
         <div className="flex justify-between gap-4">
           <div>
-            <Link href={`/product/${line.slug}`} className="font-display text-lg hover:underline">
+            <Link href={`/product/${line.slug}`} className="text-[15.5px] hover:underline">
               {line.productTitle}
             </Link>
             {line.variantTitle !== "Default" ? (
-              <p className="text-xs text-[var(--text-secondary)]">{line.variantTitle}</p>
+              <p className="mt-1 text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">
+                {line.variantTitle}
+              </p>
             ) : null}
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">{line.sku}</p>
           </div>
 
-          <p className="shrink-0 text-sm tabular-nums">{formatMoney(line.lineTotal)}</p>
+          <button
+            type="button"
+            onClick={remove}
+            disabled={pending}
+            className="h-fit text-ink-400 transition-colors hover:text-danger disabled:opacity-40"
+          >
+            <X className="h-[17px] w-[17px]" strokeWidth={1.5} aria-hidden />
+            <span className="sr-only">Remove {line.productTitle}</span>
+          </button>
         </div>
 
         {line.stockProblem ? (
@@ -78,45 +95,40 @@ function CartLine({ line }: { line: CartLineView }) {
         ) : null}
 
         <div className="mt-auto flex items-center justify-between pt-3">
-          <div className="flex items-center rounded-[--radius-card] border border-[var(--border-subtle)]">
+          <div className="inline-flex items-center gap-4 border border-[var(--border-subtle)] px-3.5 py-1.5">
             <button
               type="button"
               onClick={() => setQuantity(line.quantity - 1)}
               disabled={pending}
-              className="px-2.5 py-1.5 text-[var(--text-secondary)] disabled:opacity-30"
+              className="text-base leading-none text-[var(--accent)] disabled:opacity-30"
               aria-label={`Decrease quantity of ${line.productTitle}`}
             >
-              <Minus className="h-3.5 w-3.5" aria-hidden />
+              &minus;
             </button>
-            <span className="w-8 text-center text-sm tabular-nums">
+            <span className="min-w-3.5 text-center text-[13.5px] tabular-nums">
               {pending ? <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin" /> : line.quantity}
             </span>
             <button
               type="button"
               onClick={() => setQuantity(line.quantity + 1)}
               disabled={pending || atMax}
-              className="px-2.5 py-1.5 text-[var(--text-secondary)] disabled:opacity-30"
+              className="text-base leading-none text-[var(--accent)] disabled:opacity-30"
               aria-label={`Increase quantity of ${line.productTitle}`}
             >
-              <Plus className="h-3.5 w-3.5" aria-hidden />
+              +
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={remove}
-            disabled={pending}
-            className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-danger"
-          >
-            <Trash2 className="h-3.5 w-3.5" aria-hidden />
-            Remove
-          </button>
+          <span className="font-display text-[19px] tabular-nums">
+            {formatPrice(line.lineTotal)}
+          </span>
         </div>
       </div>
     </li>
   );
 }
 
+/** The inline code field at the top of the order summary. */
 export function DiscountForm({ appliedCode }: { appliedCode: string | null }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -126,7 +138,10 @@ export function DiscountForm({ appliedCode }: { appliedCode: string | null }) {
     setMessage(null);
     startTransition(async () => {
       const result = await applyDiscountAction(code);
-      setMessage({ ok: result.ok, text: result.message ?? (result.ok ? "Applied." : "Invalid code.") });
+      setMessage({
+        ok: result.ok,
+        text: result.message ?? (result.ok ? "Applied." : "Invalid code."),
+      });
     });
   }
 
@@ -139,8 +154,8 @@ export function DiscountForm({ appliedCode }: { appliedCode: string | null }) {
 
   if (appliedCode) {
     return (
-      <div className="flex items-center justify-between rounded-[--radius-card] border border-success/30 bg-success/5 px-3 py-2.5">
-        <p className="text-sm text-success">
+      <div className="flex items-center justify-between border border-sage-600/40 bg-sage-100 px-3.5 py-3">
+        <p className="text-sm text-sage-700">
           <span className="font-medium">{appliedCode}</span> applied
         </p>
         <button
@@ -157,7 +172,7 @@ export function DiscountForm({ appliedCode }: { appliedCode: string | null }) {
 
   return (
     <div>
-      <form action={apply} className="flex gap-2">
+      <form action={apply} className="flex">
         <label htmlFor="code" className="sr-only">
           Discount code
         </label>
@@ -166,20 +181,20 @@ export function DiscountForm({ appliedCode }: { appliedCode: string | null }) {
           name="code"
           placeholder="Discount code"
           autoComplete="off"
-          className="lx-field flex-1 uppercase"
+          className="min-w-0 flex-1 border border-[var(--border-strong)] bg-white px-3.5 py-3 text-[13px] uppercase outline-none placeholder:normal-case placeholder:text-ink-400 focus:border-[var(--accent)]"
         />
         <button
           type="submit"
           disabled={pending}
-          className="rounded-[--radius-card] border border-[var(--border-subtle)] px-4 text-sm hover:bg-[var(--surface-sunken)] disabled:opacity-50"
+          className="shrink-0 bg-[var(--text-primary)] px-4.5 text-[11.5px] uppercase tracking-[0.1em] text-[var(--surface)] disabled:opacity-50"
         >
-          {pending ? "..." : "Apply"}
+          {pending ? "…" : "Apply"}
         </button>
       </form>
       {message ? (
         <p
           role={message.ok ? "status" : "alert"}
-          className={`mt-2 text-xs ${message.ok ? "text-success" : "text-danger"}`}
+          className={`mt-2 text-xs ${message.ok ? "text-sage-600" : "text-danger"}`}
         >
           {message.text}
         </p>

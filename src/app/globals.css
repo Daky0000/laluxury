@@ -73,20 +73,30 @@
   --step-eyebrow: 0.6875rem;
 }
 
-/* The admin runs on a cooler, denser surface so it never gets mistaken for
-   the storefront. */
+/* The admin console runs on its own denser surface so it is never mistaken
+   for the storefront: warmer paper, softened corners, and the same wine as the
+   shop for anything that commits a change. From the admin artboard. */
 [data-theme="admin"] {
-  --surface: #f6f5f2;
-  --surface-raised: #ffffff;
-  --surface-sunken: #ecebe6;
+  --surface: #ebeae5;
+  --surface-raised: #fcfbf8;
+  --surface-sunken: #e9e8e2;
   --surface-media: #e4e3de;
-  --border-subtle: rgba(43, 39, 36, 0.14);
+  --border-subtle: rgba(43, 39, 36, 0.1);
+  --border-strong: rgba(43, 39, 36, 0.18);
   --text-primary: var(--color-ink-900);
-  --text-secondary: var(--color-ink-600);
+  --text-secondary: var(--color-ink-700);
   --text-muted: var(--color-ink-500);
-  --accent: var(--color-ink-900);
-  --accent-hover: var(--color-ink-800);
+  --accent: var(--color-clay-700);
+  --accent-hover: var(--color-clay-600);
   --accent-contrast: #ffffff;
+  /* Every shared surface and control rounds itself off in here. */
+  --radius-card: 12px;
+}
+
+/* The console sidebar is the one dark surface in the app. */
+[data-theme="admin"] .adm-rail {
+  background-color: var(--color-ink-900);
+  color: #b6b3aa;
 }
 
 @layer base {
@@ -240,6 +250,37 @@
     }
     to {
       transform: translateX(-50%);
+    }
+  }
+
+  /* Order confirmation: the badge lands, then the tick draws itself. */
+  .lx-pop {
+    animation: lx-pop 0.5s ease-out both;
+  }
+
+  @keyframes lx-pop {
+    0% {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    60% {
+      transform: scale(1.08);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  .lx-draw path {
+    stroke-dasharray: 30;
+    stroke-dashoffset: 30;
+    animation: lx-draw 0.5s 0.35s ease-out forwards;
+  }
+
+  @keyframes lx-draw {
+    to {
+      stroke-dashoffset: 0;
     }
   }
 }

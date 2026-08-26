@@ -39,7 +39,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={pending}
-        className="mt-2 flex items-center justify-center gap-2 rounded-[--radius-card] bg-[var(--accent)] px-6 py-3 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+        className="mt-2 flex items-center justify-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-6 py-3 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
       >
         {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
         Sign in
@@ -112,7 +112,7 @@ export function RegisterForm() {
       <button
         type="submit"
         disabled={pending}
-        className="mt-2 flex items-center justify-center gap-2 rounded-[--radius-card] bg-[var(--accent)] px-6 py-3 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+        className="mt-2 flex items-center justify-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-6 py-3 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
       >
         {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
         Create account

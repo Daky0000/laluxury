@@ -157,7 +157,7 @@ export function ProductCreateForm({
         <button
           type="submit"
           disabled={pending}
-          className="flex items-center gap-2 rounded-[--radius-card] bg-[var(--accent)] px-6 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+          className="flex items-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-6 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
           Create product

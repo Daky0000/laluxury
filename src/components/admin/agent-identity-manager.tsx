@@ -42,7 +42,7 @@ export function PendingActionsList({
         {actions.map((action) => (
           <li
             key={action.id}
-            className="flex flex-wrap items-center gap-3 rounded-[--radius-card] border border-[var(--border-subtle)] px-4 py-3"
+            className="flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-3"
           >
             <div className="min-w-0 flex-1">
               <p className="font-mono text-xs">{action.tool}</p>
@@ -66,7 +66,7 @@ export function PendingActionsList({
                     setMessage({ ok: result.ok, text: result.message ?? "" });
                   })
                 }
-                className="flex items-center gap-1.5 rounded-[--radius-card] bg-success px-3 py-1.5 text-xs text-white disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-(--radius-card) bg-success px-3 py-1.5 text-xs text-white disabled:opacity-50"
               >
                 <Check className="h-3.5 w-3.5" aria-hidden />
                 Approve
@@ -81,7 +81,7 @@ export function PendingActionsList({
                     setMessage({ ok: result.ok, text: result.message ?? "" });
                   })
                 }
-                className="flex items-center gap-1.5 rounded-[--radius-card] border border-[var(--border-subtle)] px-3 py-1.5 text-xs disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5 text-xs disabled:opacity-50"
               >
                 <X className="h-3.5 w-3.5" aria-hidden />
                 Reject
@@ -147,7 +147,7 @@ export function AgentIdentityManager({
             {identities.map((identity) => (
               <li
                 key={identity.id}
-                className="flex items-center gap-3 rounded-[--radius-card] border border-[var(--border-subtle)] px-3 py-2.5"
+                className="flex items-center gap-3 rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-2.5"
               >
                 <Badge tone={identity.channel === "SLACK" ? "info" : "success"}>
                   {identity.channel.toLowerCase()}
@@ -228,7 +228,7 @@ export function AgentIdentityManager({
           <button
             type="submit"
             disabled={pending}
-            className="flex items-center justify-center gap-2 rounded-[--radius-card] bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
             Link identity
@@ -245,7 +245,7 @@ export function AgentIdentityManager({
 
         <ul className="mb-5 flex flex-col gap-2">
           {webhooks.map((hook) => (
-            <li key={hook.url} className="rounded-[--radius-card] border border-[var(--border-subtle)] p-3">
+            <li key={hook.url} className="rounded-(--radius-card) border border-[var(--border-subtle)] p-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm">{hook.label}</span>
                 <Badge tone={hook.ready ? "success" : "neutral"}>
@@ -276,7 +276,7 @@ export function AgentIdentityManager({
           ))}
         </ul>
 
-        <div className="rounded-[--radius-card] bg-[var(--surface-sunken)] p-3 text-xs text-[var(--text-secondary)]">
+        <div className="rounded-(--radius-card) bg-[var(--surface-sunken)] p-3 text-xs text-[var(--text-secondary)]">
           <p className="mb-1.5 font-medium text-[var(--text-primary)]">Slack scopes needed</p>
           <p className="font-mono">
             app_mentions:read, chat:write, im:history, im:read, im:write, users:read
@@ -294,7 +294,7 @@ export function AgentIdentityManager({
               setTestResult({ ok: result.ok, text: result.message ?? "" });
             })
           }
-          className="mt-4 w-full rounded-[--radius-card] border border-[var(--border-subtle)] px-4 py-2.5 text-sm disabled:opacity-50"
+          className="mt-4 w-full rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-2.5 text-sm disabled:opacity-50"
         >
           {busy ? "Testing…" : "Test the OpenRouter connection"}
         </button>

@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { computeCartTotals, readCart } from "@/lib/cart";
 import { currentUser } from "@/lib/auth";
+import { getSettings } from "@/lib/settings";
 import { env } from "@/lib/env";
 import { CheckoutForm } from "@/components/shop/checkout-form";
-import { Alert } from "@/components/ui";
+import { CartLines, DiscountForm } from "@/components/shop/cart-lines";
 
-export const metadata: Metadata = { title: "Checkout" };
+export const metadata: Metadata = { title: "Your bag" };
 export const dynamic = "force-dynamic";
 
 export default async function CheckoutPage() {
@@ -16,19 +17,17 @@ export default async function CheckoutPage() {
   const totals = await computeCartTotals(cart);
   if (totals.lines.length === 0) redirect("/cart");
 
-  const user = await currentUser();
+  const [user, settings] = await Promise.all([currentUser(), getSettings()]);
 
   return (
-    <div className="lx-container py-10">
-      <h1 className="mb-8 text-3xl md:text-4xl">Checkout</h1>
+    <div className="lx-container pb-16 pt-11">
+      <h1 className="mb-6 text-[clamp(2.25rem,5vw,3.25rem)]">Your bag</h1>
 
       {!env.paystack.isConfigured() ? (
-        <div className="mb-8">
-          <Alert tone="warning">
-            Payments are not switched on yet. Add PAYSTACK_SECRET_KEY and
-            NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY to accept orders.
-          </Alert>
-        </div>
+        <p className="mb-8 border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
+          Payments are not switched on yet. Add PAYSTACK_SECRET_KEY and
+          NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY to accept orders.
+        </p>
       ) : null}
 
       <CheckoutForm
@@ -37,6 +36,9 @@ export default async function CheckoutPage() {
         goodsTotal={totals.total}
         defaultEmail={user?.email ?? cart.email ?? ""}
         isSignedIn={Boolean(user)}
+        freeShippingThreshold={settings.freeShippingThreshold}
+        lines={<CartLines lines={totals.lines} />}
+        discount={<DiscountForm appliedCode={totals.discountCode} />}
       />
     </div>
   );
