@@ -29,7 +29,29 @@ const child = spawn("npm", ["run", "db:seed"], {
   shell: process.platform === "win32",
 });
 
-child.on("exit", (code) => {
+/**
+ * Reads back what the seed claims to have written, over a plain pg connection
+ * using the same DATABASE_URL. If the seed reports rows and this reports none,
+ * the two are not talking to the same database.
+ */
+async function verify() {
+  const { default: pg } = await import("pg");
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  try {
+    await client.connect();
+    const { rows } = await client.query(
+      'SELECT current_database() AS db, inet_server_addr()::text AS host, (SELECT count(*) FROM "Product")::int AS products, (SELECT count(*) FROM "Category")::int AS categories',
+    );
+    console.log(`[seed-once] verify: ${JSON.stringify(rows[0])}`);
+  } catch (error) {
+    console.error(`[seed-once] verify failed: ${error.message}`);
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+child.on("exit", async (code) => {
+  await verify();
   if (code === 0) {
     console.log("[seed-once] Seed finished. Remove RUN_SEED so it does not run again.");
   } else {
