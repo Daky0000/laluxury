@@ -39,8 +39,8 @@ export async function GET(request: Request) {
     // Asked of Postgres directly, so a mismatch between what the seed wrote and
     // what the app reads points at the connection rather than at Prisma.
     const identity = await db.$queryRaw<
-      { database: string; schema: string; user: string }[]
-    >`SELECT current_database() AS database, current_schema() AS schema, current_user AS "user"`;
+      { database: string; schema: string; user: string; host: string }[]
+    >`SELECT current_database() AS database, current_schema() AS schema, current_user AS "user", inet_server_addr()::text AS host`;
 
     const raw = await db.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM "Product"`;
 
@@ -52,6 +52,8 @@ export async function GET(request: Request) {
         categories,
         rawProductRows: Number(raw[0]?.n ?? -1),
         ...identity[0],
+        // Which URL this process actually resolved, credentials stripped.
+        configured: (process.env.DATABASE_URL ?? "unset").replace(/\/\/[^@]*@/, "//"),
       },
     });
   } catch (error) {
