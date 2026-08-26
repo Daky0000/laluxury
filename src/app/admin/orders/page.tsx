@@ -7,6 +7,7 @@ import { formatMoney } from "@/lib/money";
 import { formatDate, buildQuery } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { Card, Badge, EmptyState, SectionHeading } from "@/components/ui";
+import { ManualOrderPanel } from "@/components/admin/manual-order-form";
 import type { OrderStatus, Prisma } from "@/generated/prisma";
 
 export const metadata: Metadata = { title: "Orders" };
@@ -46,11 +47,41 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
     db.order.groupBy({ by: ["status"], _count: true }),
   ]);
 
+  // What a console-raised order can be built from. Capped, because the picker
+  // is a select rather than a search.
+  const sellable = await db.variant.findMany({
+    where: { isActive: true, product: { status: "ACTIVE" } },
+    orderBy: [{ product: { title: "asc" } }, { position: "asc" }],
+    take: 200,
+    select: {
+      id: true,
+      title: true,
+      price: true,
+      product: { select: { title: true } },
+      inventory: { select: { onHand: true, reserved: true, trackInventory: true } },
+    },
+  });
+
   const pageCount = Math.max(1, Math.ceil(total / PER_PAGE));
 
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading title="Orders" description={`${total} matching.`} />
+
+      <ManualOrderPanel
+        variants={sellable.map((variant) => ({
+          id: variant.id,
+          label:
+            variant.title && variant.title !== "Default"
+              ? `${variant.product.title} — ${variant.title}`
+              : variant.product.title,
+          price: variant.price,
+          available:
+            variant.inventory && variant.inventory.trackInventory
+              ? Math.max(0, variant.inventory.onHand - variant.inventory.reserved)
+              : null,
+        }))}
+      />
 
       <Card className="p-4">
         <form method="get" className="flex flex-wrap items-end gap-3">

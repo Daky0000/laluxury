@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
-import { chatCompletion, type ChatMessage, type ToolCall } from "./openrouter";
+import { chatCompletion, type ChatMessage, type ToolCall } from "./provider";
 import {
   executeTool,
   isMutating,

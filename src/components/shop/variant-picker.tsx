@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Heart, Loader2 } from "lucide-react";
-import { addToCartAction } from "@/app/actions/cart";
+import { addToCartAction, buyNowAction } from "@/app/actions/cart";
 import { toggleWishlistAction } from "@/app/actions/misc";
 import { openBag } from "./bag-events";
 import { formatPrice } from "@/lib/money";
@@ -70,6 +70,7 @@ export function VariantPicker({
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [buying, startBuying] = useTransition();
   const [saved, setSaved] = useState(isSaved);
   const [savePending, startSaving] = useTransition();
   const [saveNote, setSaveNote] = useState<string | null>(null);
@@ -133,6 +134,20 @@ export function VariantPicker({
       setTimeout(() => setAdded(false), 2500);
       openBag();
       router.refresh();
+    });
+  }
+
+  /** Quick order: straight from here to the payment screen. */
+  function buyNow() {
+    if (!activeVariant) {
+      setError("Choose an option first.");
+      return;
+    }
+    setError(null);
+    startBuying(async () => {
+      // On success this redirects, so anything returned is a failure.
+      const result = await buyNowAction(activeVariant.id, quantity);
+      if (result && !result.ok) setError(result.message ?? "Could not start that order.");
     });
   }
 
@@ -314,6 +329,17 @@ export function VariantPicker({
           <span className="sr-only">{saved ? "Saved" : "Save for later"}</span>
         </button>
       </div>
+
+      {/* Quick order — skips the bag for a shopper who has already decided. */}
+      <button
+        type="button"
+        onClick={buyNow}
+        disabled={buying || pending || soldOut || !activeVariant}
+        className="mt-3 flex w-full items-center justify-center gap-2 border border-[var(--text-primary)] px-6 py-4 text-xs font-medium uppercase tracking-[0.14em] transition-colors hover:bg-[var(--text-primary)] hover:text-[var(--surface-raised)] disabled:opacity-40"
+      >
+        {buying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+        Buy it now
+      </button>
 
       {activeVariant ? (
         <p className="mt-3 text-xs text-[var(--text-muted)]">SKU {activeVariant.sku}</p>

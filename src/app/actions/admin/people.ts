@@ -106,6 +106,100 @@ export async function updateCustomerAction(
   return { ok: true, message: "Saved." };
 }
 
+/**
+ * Adds a customer by hand — for someone who ordered over WhatsApp or walked
+ * into the showroom and should exist here before their first online order.
+ *
+ * No password is set, so the account cannot be signed into until they reset it
+ * themselves. That keeps a staff-created record from becoming a way in.
+ */
+export async function createCustomerAction(
+  _prev: AdminState | null,
+  formData: FormData,
+): Promise<AdminState> {
+  const actor = await requirePermission("customers:write");
+
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const firstName = String(formData.get("firstName") || "").trim();
+
+  if (!email || !email.includes("@")) return { ok: false, message: "Enter a valid email address." };
+  if (!firstName) return { ok: false, message: "Enter a first name." };
+
+  const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
+  if (existing) {
+    return { ok: false, message: "Someone already has that email address." };
+  }
+
+  const customer = await db.user.create({
+    data: {
+      email,
+      firstName,
+      lastName: String(formData.get("lastName") || "").trim() || null,
+      phone: String(formData.get("phone") || "").trim() || null,
+      notes: String(formData.get("notes") || "").trim() || null,
+      acceptsMarketing: formData.get("acceptsMarketing") === "on",
+      role: "CUSTOMER",
+    },
+  });
+
+  await recordAudit({
+    actorId: actor.id,
+    action: "customer.create",
+    entity: "User",
+    entityId: customer.id,
+    after: { email },
+  });
+
+  revalidatePath("/admin/customers");
+  return { ok: true, message: `Added ${firstName}.` };
+}
+
+/**
+ * Removes a customer. Anyone with order history is deactivated instead, so the
+ * orders keep the name and email they were placed under.
+ */
+export async function deleteCustomerAction(userId: string): Promise<AdminState> {
+  const actor = await requirePermission("customers:write");
+
+  const customer = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, email: true, _count: { select: { orders: true } } },
+  });
+
+  if (!customer) return { ok: false, message: "That customer no longer exists." };
+  if (customer.role !== "CUSTOMER") {
+    return { ok: false, message: "That is a staff account — manage it under Staff." };
+  }
+
+  if (customer._count.orders > 0) {
+    await db.user.update({ where: { id: userId }, data: { isActive: false } });
+    await recordAudit({
+      actorId: actor.id,
+      action: "customer.deactivate",
+      entity: "User",
+      entityId: userId,
+      after: { reason: `${customer._count.orders} orders` },
+    });
+    revalidatePath("/admin/customers");
+    return {
+      ok: true,
+      message: `${customer._count.orders} order${customer._count.orders === 1 ? "" : "s"} belong to this customer, so the account was switched off rather than deleted.`,
+    };
+  }
+
+  await db.user.delete({ where: { id: userId } });
+  await recordAudit({
+    actorId: actor.id,
+    action: "customer.delete",
+    entity: "User",
+    entityId: userId,
+    after: { email: customer.email },
+  });
+
+  revalidatePath("/admin/customers");
+  return { ok: true, message: "Customer removed." };
+}
+
 // ---------------------------------------------------------------------------
 // Staff
 // ---------------------------------------------------------------------------

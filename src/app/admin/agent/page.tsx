@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Bot, Hash, MessageCircle, Globe } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/auth/rbac";
 import { env } from "@/lib/env";
+import { getIntegrations, isReady } from "@/lib/integrations";
 import { getSettings } from "@/lib/settings";
 import { AGENT_TOOLS, toolSchemasFor } from "@/lib/agent/tools";
 import { formatDate } from "@/lib/utils";
@@ -64,10 +66,18 @@ export default async function AdminAgentPage() {
       createdAt: m.createdAt.toISOString(),
     }));
 
+  const integrations = await getIntegrations();
+  const agentReady = isReady(integrations, "ai");
+
   const channels = [
-    { key: "WEB", label: "Admin console", icon: Globe, ready: env.openrouter.isConfigured() },
-    { key: "SLACK", label: "Slack", icon: Hash, ready: env.slack.isConfigured() },
-    { key: "WHATSAPP", label: "WhatsApp", icon: MessageCircle, ready: env.whatsapp.isConfigured() },
+    { key: "WEB", label: "Admin console", icon: Globe, ready: agentReady },
+    { key: "SLACK", label: "Slack", icon: Hash, ready: isReady(integrations, "slack") },
+    {
+      key: "WHATSAPP",
+      label: "WhatsApp",
+      icon: MessageCircle,
+      ready: isReady(integrations, "whatsapp"),
+    },
   ];
 
   return (
@@ -78,10 +88,13 @@ export default async function AdminAgentPage() {
         description="Ask it to look things up or change the store. The same agent answers here, in Slack and on WhatsApp, with the permissions of whoever is talking to it."
       />
 
-      {!env.openrouter.isConfigured() ? (
+      {!agentReady ? (
         <Alert tone="warning">
-          The agent is switched off. Add <code>OPENROUTER_API_KEY</code> to your environment and
-          restart — that single key is all it needs to start working here.
+          The agent is switched off. Paste a Claude or OpenRouter key under{" "}
+          <Link href="/admin/settings" className="underline underline-offset-4">
+            Settings → Integrations
+          </Link>{" "}
+          — one key is all it needs to start working here.
         </Alert>
       ) : null}
 
@@ -128,7 +141,7 @@ export default async function AdminAgentPage() {
         <AgentConsole
           transcript={transcript}
           threadId={thread?.id ?? null}
-          enabled={env.openrouter.isConfigured()}
+          enabled={agentReady}
           requiresApproval={settings.agentRequiresApproval}
         />
 
@@ -212,8 +225,8 @@ export default async function AdminAgentPage() {
             name: [s.firstName, s.lastName].filter(Boolean).join(" ") || s.email,
             role: s.role,
           }))}
-          slackReady={env.slack.isConfigured()}
-          whatsappReady={env.whatsapp.isConfigured()}
+          slackReady={isReady(integrations, "slack")}
+          whatsappReady={isReady(integrations, "whatsapp")}
           siteUrl={env.siteUrl()}
         />
       ) : (

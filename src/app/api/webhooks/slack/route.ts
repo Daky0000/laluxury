@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { env } from "@/lib/env";
+import { getIntegrations } from "@/lib/integrations";
 import {
   verifySlackSignature,
   cleanSlackText,
@@ -41,11 +41,12 @@ function alreadySeen(eventId: string | undefined): boolean {
 export async function POST(request: Request) {
   const rawBody = await request.text();
 
-  if (!env.slack.isConfigured()) {
+  const { slack } = await getIntegrations();
+  if (!slack.botToken || !slack.signingSecret) {
     return NextResponse.json({ error: "Slack is not configured" }, { status: 503 });
   }
 
-  const valid = verifySlackSignature({
+  const valid = await verifySlackSignature({
     rawBody,
     timestamp: request.headers.get("x-slack-request-timestamp"),
     signature: request.headers.get("x-slack-signature"),

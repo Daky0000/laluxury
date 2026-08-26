@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { env } from "@/lib/env";
+import { getIntegrations } from "@/lib/integrations";
 
 /**
  * Slack adapter.
@@ -20,12 +20,12 @@ const API = "https://slack.com/api";
  * Slack signs `v0:{timestamp}:{body}` with HMAC-SHA256.
  * Requests older than five minutes are rejected to stop replay.
  */
-export function verifySlackSignature(args: {
+export async function verifySlackSignature(args: {
   rawBody: string;
   timestamp: string | null;
   signature: string | null;
-}): boolean {
-  const secret = env.slack.signingSecret();
+}): Promise<boolean> {
+  const secret = (await getIntegrations()).slack.signingSecret;
   if (!secret || !args.timestamp || !args.signature) return false;
 
   const age = Math.abs(Date.now() / 1000 - Number(args.timestamp));
@@ -41,8 +41,8 @@ export function verifySlackSignature(args: {
 }
 
 async function slackCall(method: string, body: Record<string, unknown>) {
-  const token = env.slack.botToken();
-  if (!token) throw new Error("Slack is not configured (SLACK_BOT_TOKEN missing).");
+  const token = (await getIntegrations()).slack.botToken;
+  if (!token) throw new Error("Slack is not configured. Add its token under Settings → Integrations.");
 
   const response = await fetch(`${API}/${method}`, {
     method: "POST",
@@ -78,8 +78,9 @@ export async function sendSlackMessage(args: {
 
 /** Posts to the configured alert channel. No-ops when Slack is not set up. */
 export async function postAlert(text: string): Promise<void> {
-  const channel = env.slack.alertChannel();
-  if (!env.slack.isConfigured() || !channel) return;
+  const { slack } = await getIntegrations();
+  if (!slack.botToken || !slack.signingSecret || !slack.alertChannel) return;
+  const channel = slack.alertChannel;
   try {
     await sendSlackMessage({ channel, text });
   } catch {

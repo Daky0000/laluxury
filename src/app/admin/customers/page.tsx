@@ -7,6 +7,7 @@ import { customerSummaries } from "@/lib/analytics";
 import { formatMoney } from "@/lib/money";
 import { formatDate, buildQuery } from "@/lib/utils";
 import { Card, Badge, EmptyState, SectionHeading, Stat } from "@/components/ui";
+import { AddCustomerPanel, RemoveCustomerButton } from "@/components/admin/customer-tools";
 
 export const metadata: Metadata = { title: "Customers" };
 
@@ -34,6 +35,8 @@ export default async function AdminCustomersPage({ searchParams }: PageProps<"/a
         title="Customers"
         description="Lifetime value counts paid orders only."
       />
+
+      <AddCustomerPanel />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat label="Customers" value={String(total)} />
@@ -104,6 +107,9 @@ export default async function AdminCustomersPage({ searchParams }: PageProps<"/a
                   <th className="px-4 py-2.5 font-medium">Avg order</th>
                   <th className="px-4 py-2.5 font-medium">Last order</th>
                   <th className="px-4 py-2.5 font-medium">Joined</th>
+                  <th className="px-4 py-2.5 font-medium">
+                    <span className="sr-only">Remove</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
@@ -148,6 +154,15 @@ export default async function AdminCustomersPage({ searchParams }: PageProps<"/a
                     </td>
                     <td className="px-4 py-3 text-[var(--text-secondary)]">
                       {formatDate(customer.createdAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <RemoveCustomerButton
+                        userId={customer.id}
+                        name={
+                          [customer.firstName, customer.lastName].filter(Boolean).join(" ") ||
+                          customer.email
+                        }
+                      />
                     </td>
                   </tr>
                 ))}

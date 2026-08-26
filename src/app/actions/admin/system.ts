@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { updateSettings, type StoreSettings } from "@/lib/settings";
 import { runAgentTurn } from "@/lib/agent/runtime";
-import { pingOpenRouter } from "@/lib/agent/openrouter";
+import { pingAgent } from "@/lib/agent/provider";
 import { toMinorUnits } from "@/lib/money";
 import { recordAudit } from "@/lib/audit";
 import type { AgentChannel } from "@/generated/prisma";
@@ -123,7 +123,7 @@ export async function askAgentAction(
 export async function testAgentAction(): Promise<AdminState> {
   await requirePermission("agent:configure");
 
-  const result = await pingOpenRouter();
+  const result = await pingAgent();
   return result.ok
     ? { ok: true, message: `Connected. Responding model: ${result.model}` }
     : { ok: false, message: result.error ?? "Could not reach OpenRouter." };

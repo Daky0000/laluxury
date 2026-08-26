@@ -1,88 +1,64 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
-import { integrationStatus, env } from "@/lib/env";
+import { integrationsView } from "@/lib/integrations";
+import { env } from "@/lib/env";
 import { formatMoney } from "@/lib/money";
 import { Card, SectionHeading, Badge } from "@/components/ui";
 import { SettingsForm } from "@/components/admin/settings-form";
+import { IntegrationsForm } from "@/components/admin/integrations-form";
 
 export const metadata: Metadata = { title: "Settings" };
-
-/** Which env vars switch each integration on, shown when one is missing. */
-const ENV_KEYS: Record<string, string[]> = {
-  paystack: ["PAYSTACK_SECRET_KEY", "NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY"],
-  openrouter: ["OPENROUTER_API_KEY"],
-  slack: ["SLACK_BOT_TOKEN", "SLACK_SIGNING_SECRET"],
-  whatsapp: ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_APP_SECRET"],
-  smtp: ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD"],
-  cloudinary: ["CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"],
-};
 
 export default async function AdminSettingsPage() {
   await requirePermission("settings:manage");
 
-  const [settings, zones] = await Promise.all([
+  const [settings, zones, integrations] = await Promise.all([
     getSettings(),
     db.shippingZone.findMany({
       include: { rates: { orderBy: { position: "asc" } } },
       orderBy: { createdAt: "asc" },
     }),
+    integrationsView(),
   ]);
-
-  const integrations = integrationStatus();
 
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading
         title="Settings"
-        description="Store details, policies and integration status."
+        description="Store details, policies, and the keys that switch each integration on."
       />
 
       <SettingsForm settings={settings} />
 
       {/* Integrations */}
-      <Card className="p-5">
-        <h2 className="lx-eyebrow mb-1">Integrations</h2>
-        <p className="mb-4 text-sm text-[var(--text-secondary)]">
-          These are read from the environment, so they change on your host, not here. Restart after
-          editing them.
-        </p>
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-semibold">Integrations</h2>
+        <IntegrationsForm groups={integrations} />
+      </section>
 
-        <ul className="flex flex-col gap-2">
-          {integrations.map((integration) => (
-            <li
-              key={integration.key}
-              className="flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-3"
-            >
-              <span className="min-w-40 flex-1 text-sm">{integration.label}</span>
-              <Badge tone={integration.ready ? "success" : "neutral"}>
-                {integration.ready ? "configured" : "missing"}
-              </Badge>
-              {!integration.ready ? (
-                <code className="text-xs text-[var(--text-muted)]">
-                  {(ENV_KEYS[integration.key] ?? []).join(", ")}
-                </code>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-4 rounded-(--radius-card) bg-[var(--surface-sunken)] p-3">
-          <p className="text-xs text-[var(--text-secondary)]">
-            Public site URL: <code>{env.siteUrl()}</code> · Currency:{" "}
-            <code>{env.currency()}</code>
-          </p>
+      {/* Delivery */}
+      <Card className="px-6 py-5.5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">Delivery zones and rates</h2>
+          <Link
+            href="/admin/settings/delivery"
+            className="inline-flex items-center gap-1.5 text-[12.5px] text-[var(--accent)]"
+          >
+            Manage delivery <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
         </div>
-      </Card>
-
-      {/* Shipping */}
-      <Card className="p-5">
-        <h2 className="lx-eyebrow mb-4">Delivery zones and rates</h2>
 
         {zones.length === 0 ? (
           <p className="text-sm text-[var(--text-muted)]">
-            No zones configured. Run the seed, or add them directly in the database.
+            No zones yet — nobody can check out until at least one exists.{" "}
+            <Link href="/admin/settings/delivery" className="underline underline-offset-4">
+              Add one
+            </Link>
+            .
           </p>
         ) : (
           <ul className="flex flex-col gap-4">
@@ -104,12 +80,12 @@ export default async function AdminSettingsPage() {
                   {zone.rates.map((rate) => (
                     <li
                       key={rate.id}
-                      className="flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-2 text-sm"
+                      className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm"
                     >
                       <span className="min-w-32 flex-1">{rate.name}</span>
                       <span className="tabular-nums">{formatMoney(rate.price)}</span>
                       {rate.freeAboveSubtotal ? (
-                        <span className="text-xs text-success">
+                        <span className="text-xs text-sage-600">
                           free over {formatMoney(rate.freeAboveSubtotal)}
                         </span>
                       ) : null}
@@ -125,6 +101,12 @@ export default async function AdminSettingsPage() {
             ))}
           </ul>
         )}
+
+        <div className="mt-4 rounded-lg bg-[var(--surface-sunken)] p-3">
+          <p className="text-xs text-[var(--text-secondary)]">
+            Public site URL: <code>{env.siteUrl()}</code> · Currency: <code>{env.currency()}</code>
+          </p>
+        </div>
       </Card>
     </div>
   );

@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { env } from "@/lib/env";
+import { getIntegrations } from "@/lib/integrations";
 
 /**
  * WhatsApp Cloud API adapter.
@@ -18,8 +18,11 @@ import { env } from "@/lib/env";
 const GRAPH = "https://graph.facebook.com/v21.0";
 
 /** Meta signs the raw body with HMAC-SHA256 as `sha256=...`. */
-export function verifyWhatsAppSignature(rawBody: string, signature: string | null): boolean {
-  const secret = env.whatsapp.appSecret();
+export async function verifyWhatsAppSignature(
+  rawBody: string,
+  signature: string | null,
+): Promise<boolean> {
+  const secret = (await getIntegrations()).whatsapp.appSecret;
   // Without an app secret we cannot verify; refuse rather than trust.
   if (!secret || !signature) return false;
 
@@ -31,12 +34,12 @@ export function verifyWhatsAppSignature(rawBody: string, signature: string | nul
 }
 
 /** Meta's GET handshake when you first save the webhook URL. */
-export function handleVerification(params: URLSearchParams): string | null {
+export async function handleVerification(params: URLSearchParams): Promise<string | null> {
   const mode = params.get("hub.mode");
   const token = params.get("hub.verify_token");
   const challenge = params.get("hub.challenge");
 
-  const expected = env.whatsapp.verifyToken();
+  const expected = (await getIntegrations()).whatsapp.verifyToken;
   if (mode === "subscribe" && expected && token === expected && challenge) {
     return challenge;
   }
@@ -44,8 +47,8 @@ export function handleVerification(params: URLSearchParams): string | null {
 }
 
 export async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
-  const token = env.whatsapp.accessToken();
-  const phoneId = env.whatsapp.phoneNumberId();
+  const { whatsapp } = await getIntegrations();
+  const { accessToken: token, phoneNumberId: phoneId } = whatsapp;
   if (!token || !phoneId) throw new Error("WhatsApp is not configured.");
 
   const response = await fetch(`${GRAPH}/${phoneId}/messages`, {

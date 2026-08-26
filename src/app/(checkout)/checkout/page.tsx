@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { computeCartTotals, readCart } from "@/lib/cart";
 import { currentUser } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
-import { env } from "@/lib/env";
+import { getIntegrations, isReady } from "@/lib/integrations";
 import { CheckoutForm } from "@/components/shop/checkout-form";
 import { CartLines, DiscountForm } from "@/components/shop/cart-lines";
 
@@ -17,16 +17,20 @@ export default async function CheckoutPage() {
   const totals = await computeCartTotals(cart);
   if (totals.lines.length === 0) redirect("/cart");
 
-  const [user, settings] = await Promise.all([currentUser(), getSettings()]);
+  const [user, settings, integrations] = await Promise.all([
+    currentUser(),
+    getSettings(),
+    getIntegrations(),
+  ]);
 
   return (
     <div className="lx-container pb-16 pt-11">
       <h1 className="mb-6 text-[clamp(2.25rem,5vw,3.25rem)]">Your bag</h1>
 
-      {!env.paystack.isConfigured() ? (
+      {!isReady(integrations, "paystack") ? (
         <p className="mb-8 border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
-          Payments are not switched on yet. Add PAYSTACK_SECRET_KEY and
-          NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY to accept orders.
+          Payments are not switched on yet. Add your Paystack keys under Settings →
+          Integrations to accept orders.
         </p>
       ) : null}
 

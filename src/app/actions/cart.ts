@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import {
   addToCart,
   getOrCreateCart,
@@ -29,6 +30,29 @@ export async function addToCartAction(
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Could not add that." };
   }
+}
+
+/**
+ * Quick order: adds the piece and goes straight to checkout.
+ *
+ * For the shopper who already knows what they want — one tap from the tile to
+ * the payment screen, skipping the bag entirely. The redirect happens here
+ * rather than in the browser so the cart cookie is already written when the
+ * checkout page renders.
+ */
+export async function buyNowAction(variantId: string, quantity = 1): Promise<ActionState> {
+  try {
+    await addToCart(variantId, quantity);
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Could not add that." };
+  }
+
+  revalidatePath("/cart");
+  revalidatePath("/", "layout");
+
+  // Outside the try: redirect() signals by throwing, and catching it here would
+  // turn a successful hand-off into an error message.
+  redirect("/checkout");
 }
 
 export type CartSummary = {

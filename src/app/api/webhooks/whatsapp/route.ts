@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { env } from "@/lib/env";
+import { getIntegrations } from "@/lib/integrations";
 import {
   extractMessages,
   handleVerification,
@@ -34,7 +34,7 @@ function alreadySeen(id: string): boolean {
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const challenge = handleVerification(url.searchParams);
+  const challenge = await handleVerification(url.searchParams);
 
   if (challenge) {
     // Meta requires the raw challenge string, not JSON.
@@ -49,11 +49,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const rawBody = await request.text();
 
-  if (!env.whatsapp.isConfigured()) {
+  const { whatsapp } = await getIntegrations();
+  if (!whatsapp.accessToken || !whatsapp.phoneNumberId) {
     return NextResponse.json({ error: "WhatsApp is not configured" }, { status: 503 });
   }
 
-  if (!verifyWhatsAppSignature(rawBody, request.headers.get("x-hub-signature-256"))) {
+  if (!(await verifyWhatsAppSignature(rawBody, request.headers.get("x-hub-signature-256")))) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 

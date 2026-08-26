@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { getIntegrations, isReady } from "@/lib/integrations";
 import { getOrCreateCart } from "@/lib/cart";
 import { createOrderFromCart } from "@/lib/orders";
 import { getSession } from "@/lib/auth/session";
@@ -71,10 +72,11 @@ export async function placeOrderAction(
     return { ok: false, fieldErrors };
   }
 
-  if (!env.paystack.isConfigured()) {
+  const integrations = await getIntegrations();
+  if (!isReady(integrations, "paystack")) {
     return {
       ok: false,
-      message: "Payments are not switched on yet. Add your Paystack keys to take orders.",
+      message: "Payments are not switched on yet. Add your Paystack keys under Settings → Integrations.",
     };
   }
 

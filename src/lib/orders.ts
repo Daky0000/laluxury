@@ -241,7 +241,7 @@ export async function createOrderFromCart(args: {
   return order;
 }
 
-async function uniqueOrderNumber(): Promise<string> {
+export async function uniqueOrderNumber(): Promise<string> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const candidate = generateOrderNumber();
     const clash = await db.order.findUnique({

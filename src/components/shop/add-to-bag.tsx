@@ -3,8 +3,8 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Plus } from "lucide-react";
-import { addToCartAction } from "@/app/actions/cart";
+import { Check, Loader2, Plus, Zap } from "lucide-react";
+import { addToCartAction, buyNowAction } from "@/app/actions/cart";
 import { openBag } from "./bag-events";
 
 type Props = {
@@ -25,6 +25,7 @@ type Props = {
 export function AddToBag({ variantId, href, label = "Add to bag", soldOut = false }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [buying, startBuying] = useTransition();
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,21 +67,49 @@ export function AddToBag({ variantId, href, label = "Add to bag", soldOut = fals
     });
   }
 
+  /** Quick order: adds the piece and hands straight over to checkout. */
+  function buyNow() {
+    setError(null);
+    startBuying(async () => {
+      const result = await buyNowAction(variantId!, 1);
+      if (result && !result.ok) setError(result.message ?? "Could not start that order.");
+    });
+  }
+
   return (
     <>
-      <button
-        type="button"
-        onClick={add}
-        disabled={pending}
-        className={`${barClass} bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-80`}
-      >
-        {pending ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-        ) : added ? (
-          <Check className="h-3.5 w-3.5" aria-hidden />
-        ) : null}
-        {added ? "Added" : label}
-      </button>
+      {/* Two actions in one bar: the bag for a shopper still browsing, and a
+          quick order for one who has already decided. */}
+      <span className={`${barClass} gap-0 p-0`}>
+        <button
+          type="button"
+          onClick={add}
+          disabled={pending || buying}
+          className="flex flex-1 items-center justify-center gap-2 bg-[var(--accent)] px-3 py-3 text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-80"
+        >
+          {pending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : added ? (
+            <Check className="h-3.5 w-3.5" aria-hidden />
+          ) : null}
+          {added ? "Added" : label}
+        </button>
+
+        <button
+          type="button"
+          onClick={buyNow}
+          disabled={pending || buying}
+          title="Buy now — straight to checkout"
+          className="grid place-items-center border-l border-white/25 bg-[var(--accent)] px-3 py-3 text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-80"
+        >
+          {buying ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : (
+            <Zap className="h-3.5 w-3.5" aria-hidden />
+          )}
+          <span className="sr-only">Buy now</span>
+        </button>
+      </span>
 
       {error ? (
         <span

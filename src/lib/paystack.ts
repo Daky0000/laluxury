@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "./env";
+import { getIntegrations } from "./integrations";
 
 /**
  * Paystack client.
@@ -24,10 +25,10 @@ async function call<T>(
   path: string,
   init: { method: "GET" | "POST"; body?: unknown } = { method: "GET" },
 ): Promise<T> {
-  const secret = env.paystack.secretKey();
+  const secret = (await getIntegrations()).paystack.secretKey;
   if (!secret) {
     throw new PaystackError(
-      "Paystack is not configured. Add PAYSTACK_SECRET_KEY to your environment.",
+      "Paystack is not configured. Add its keys under Settings → Integrations.",
     );
   }
 
@@ -137,8 +138,11 @@ export async function refundTransaction(args: {
  * The comparison is constant-time so the signature cannot be probed byte by
  * byte.
  */
-export function verifyWebhookSignature(rawBody: string, signature: string | null): boolean {
-  const secret = env.paystack.secretKey();
+export async function verifyWebhookSignature(
+  rawBody: string,
+  signature: string | null,
+): Promise<boolean> {
+  const secret = (await getIntegrations()).paystack.secretKey;
   if (!secret || !signature) return false;
 
   const expected = createHmac("sha512", secret).update(rawBody, "utf8").digest("hex");

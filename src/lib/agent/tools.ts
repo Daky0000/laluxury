@@ -7,7 +7,7 @@ import { ensureUniqueCode, describeDiscount } from "@/lib/discounts";
 import { updateOrderStatus, cancelOrder } from "@/lib/orders";
 import { recordAudit } from "@/lib/audit";
 import { uniqueSlug } from "@/lib/slug";
-import type { ToolSchema } from "./openrouter";
+import type { ToolSchema } from "./provider";
 import type { Role, OrderStatus, DiscountType } from "@/generated/prisma";
 
 /**
