@@ -23,7 +23,19 @@ export default async function AdminCustomerPage({ params }: PageProps<"/admin/cu
       include: {
         orders: {
           orderBy: { placedAt: "desc" },
-          include: { items: { select: { quantity: true } } },
+          include: {
+            items: {
+              select: {
+                id: true,
+                quantity: true,
+                total: true,
+                productTitle: true,
+                variantTitle: true,
+                imageUrl: true,
+                product: { select: { slug: true } },
+              },
+            },
+          },
         },
         addresses: { orderBy: { createdAt: "desc" }, take: 3 },
         interactions: { orderBy: { createdAt: "desc" }, take: 30 },
@@ -37,6 +49,34 @@ export default async function AdminCustomerPage({ params }: PageProps<"/admin/cu
   if (!customer) notFound();
 
   const paidOrders = customer.orders.filter((o) => o.paymentStatus === "SUCCESS");
+
+  // What they have actually bought, gathered across every order and counted, so
+  // a repeat purchase reads as one line with a higher count rather than two.
+  const bought = new Map<
+    string,
+    { title: string; slug: string | null; imageUrl: string | null; units: number; spent: number }
+  >();
+
+  for (const order of customer.orders) {
+    for (const item of order.items) {
+      const key = item.productTitle;
+      const existing = bought.get(key);
+      if (existing) {
+        existing.units += item.quantity;
+        existing.spent += item.total;
+      } else {
+        bought.set(key, {
+          title: item.productTitle,
+          slug: item.product?.slug ?? null,
+          imageUrl: item.imageUrl,
+          units: item.quantity,
+          spent: item.total,
+        });
+      }
+    }
+  }
+
+  const purchased = [...bought.values()].sort((a, b) => b.units - a.units);
   const lifetimeValue = paidOrders.reduce((sum, o) => sum + o.total, 0);
   const name = [customer.firstName, customer.lastName].filter(Boolean).join(" ") || customer.email;
   const canWrite = can(staff.role, "customers:write");
@@ -134,6 +174,52 @@ export default async function AdminCustomerPage({ params }: PageProps<"/admin/cu
                         {formatMoney(order.total)}
                       </span>
                     </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          {/* What they have bought */}
+          <Card className="p-5">
+            <h2 className="lx-eyebrow mb-4">Products bought</h2>
+            {purchased.length === 0 ? (
+              <p className="text-sm text-[var(--text-muted)]">
+                Nothing yet. If they ordered over WhatsApp or in the showroom, open that order and
+                assign it to this customer — it will appear here.
+              </p>
+            ) : (
+              <ul className="divide-y divide-[var(--border-subtle)]">
+                {purchased.map((item) => (
+                  <li key={item.title} className="flex items-center gap-3 py-3">
+                    <span className="h-12 w-10 shrink-0 overflow-hidden bg-[var(--surface-media)]">
+                      {item.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.imageUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : null}
+                    </span>
+
+                    <span className="min-w-0 flex-1">
+                      {item.slug ? (
+                        <Link
+                          href={`/product/${item.slug}`}
+                          className="block truncate text-sm hover:underline"
+                        >
+                          {item.title}
+                        </Link>
+                      ) : (
+                        <span className="block truncate text-sm">{item.title}</span>
+                      )}
+                      <span className="text-xs text-[var(--text-muted)]">
+                        {item.units} bought
+                      </span>
+                    </span>
+
+                    <span className="text-sm tabular-nums">{formatMoney(item.spent)}</span>
                   </li>
                 ))}
               </ul>

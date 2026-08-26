@@ -112,6 +112,8 @@ function GroupCard({ group }: { group: IntegrationGroup }) {
         {group.fields.map((field) =>
           field.name === "provider" ? (
             <ProviderField key={field.name} value={field.display} />
+          ) : field.name === "mode" ? (
+            <PaystackModeField key={field.name} value={field.display} />
           ) : (
             <FieldRow
               key={field.name}
@@ -126,6 +128,37 @@ function GroupCard({ group }: { group: IntegrationGroup }) {
         )}
       </div>
     </Card>
+  );
+}
+
+/**
+ * Live or test. Both key pairs are kept, so switching back to live never means
+ * retyping the real keys.
+ */
+function PaystackModeField({ value }: { value: string }) {
+  const [mode, setMode] = useState(value === "test" ? "test" : "live");
+
+  return (
+    <label className="flex flex-col gap-1.5 text-xs text-[var(--text-muted)] sm:col-span-2">
+      Mode
+      <select
+        name="paystack.mode"
+        value={mode}
+        onChange={(event) => setMode(event.target.value)}
+        className={cn(
+          "lx-field cursor-pointer rounded-lg",
+          mode === "test" && "border-warning text-warning",
+        )}
+      >
+        <option value="live">Live — real money</option>
+        <option value="test">Test — nothing is charged</option>
+      </select>
+      <span className={cn("text-[11.5px]", mode === "test" && "text-warning")}>
+        {mode === "test"
+          ? "Checkout will use the test keys below. Orders complete, but no money moves."
+          : "Checkout will use the live keys below."}
+      </span>
+    </label>
   );
 }
 

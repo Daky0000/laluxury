@@ -11,6 +11,7 @@ import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { Card, Badge, Divider } from "@/components/ui";
+import { AssignOrderCustomer } from "@/components/admin/order-customer";
 import { OrderControls } from "@/components/admin/order-controls";
 
 export const metadata: Metadata = { title: "Order" };
@@ -194,6 +195,14 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                 </a>
               ) : null}
             </div>
+
+            {canWrite ? (
+              <AssignOrderCustomer
+                orderId={order.id}
+                defaultEmail={order.email}
+                attached={Boolean(order.user)}
+              />
+            ) : null}
           </Card>
 
           {order.shippingAddress ? (

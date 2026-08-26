@@ -16,6 +16,95 @@ function revalidateOrder(orderId: string) {
   revalidatePath("/admin");
 }
 
+/**
+ * Attaches an order to a customer.
+ *
+ * Guest checkout and orders taken over WhatsApp arrive with no account behind
+ * them, which leaves the customer's history — and the products they have
+ * bought — incomplete. This links the two by email, creating the customer
+ * record when there is not one yet, using the details already on the order.
+ */
+export async function assignOrderCustomerAction(
+  orderId: string,
+  _prev: AdminState | null,
+  formData: FormData,
+): Promise<AdminState> {
+  const actor = await requirePermission("orders:write");
+
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      email: true,
+      phone: true,
+      userId: true,
+      shippingAddress: { select: { firstName: true, lastName: true } },
+    },
+  });
+  if (!order) return { ok: false, message: "That order no longer exists." };
+
+  // Detaching is a valid outcome: an order attributed to the wrong person.
+  if (formData.get("detach") === "1") {
+    await db.order.update({ where: { id: orderId }, data: { userId: null } });
+    await recordAudit({
+      actorId: actor.id,
+      action: "order.customer.detach",
+      entity: "Order",
+      entityId: orderId,
+    });
+    revalidateOrder(orderId);
+    return { ok: true, message: "Order detached from that customer." };
+  }
+
+  const email = String(formData.get("email") || order.email).trim().toLowerCase();
+  if (!email.includes("@")) return { ok: false, message: "Enter a valid email address." };
+
+  let customer = await db.user.findUnique({ where: { email }, select: { id: true, role: true } });
+
+  if (!customer) {
+    if (formData.get("create") !== "1") {
+      return {
+        ok: false,
+        message: `Nobody has ${email}. Tick “create the customer” to make one from this order.`,
+      };
+    }
+
+    customer = await db.user.create({
+      data: {
+        email,
+        firstName: order.shippingAddress?.firstName ?? null,
+        lastName: order.shippingAddress?.lastName ?? null,
+        phone: order.phone,
+        role: "CUSTOMER",
+      },
+      select: { id: true, role: true },
+    });
+  }
+
+  await db.order.update({ where: { id: orderId }, data: { userId: customer.id } });
+
+  await logOrderEvent({
+    orderId,
+    type: "note",
+    message: `Assigned to the customer account for ${email}.`,
+    actorId: actor.id,
+  });
+
+  await recordAudit({
+    actorId: actor.id,
+    action: "order.customer.assign",
+    entity: "Order",
+    entityId: orderId,
+    after: { email },
+  });
+
+  revalidateOrder(orderId);
+  revalidatePath(`/admin/customers/${customer.id}`);
+  revalidatePath("/admin/customers");
+
+  return { ok: true, message: `Order assigned to ${email}.` };
+}
+
 export async function updateOrderStatusAction(
   orderId: string,
   _prev: AdminState | null,

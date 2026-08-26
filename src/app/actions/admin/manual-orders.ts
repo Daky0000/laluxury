@@ -17,11 +17,9 @@ import type { AdminState } from "./products";
  * history, and so the day's revenue is the real number. This writes the same
  * order shape checkout produces, so nothing downstream can tell them apart.
  *
- * Demo orders use the same path and are marked in `staffNote`, so the owner can
- * see the whole flow with realistic data and then clear it in one action.
+ * Orders raised here attach to the customer account automatically when one
+ * already has that email, so their purchase history stays complete.
  */
-
-const DEMO_NOTE = "DEMO ORDER — created from the console to preview the flow.";
 
 function revalidateOrders() {
   revalidatePath("/admin/orders");
@@ -68,7 +66,7 @@ async function writeOrder(args: {
         imageUrl: variant.product.images[0]?.url ?? null,
         quantity,
         unitPrice: variant.price,
-        discountTotal: 0,
+        discountAllocated: 0,
         total: variant.price * quantity,
       },
     ];
@@ -80,9 +78,17 @@ async function writeOrder(args: {
   const total = subtotal + args.shippingTotal;
   const orderNumber = await uniqueOrderNumber();
 
+  // Attach to the customer record when one already has this email, so the
+  // order shows up in their history rather than sitting as a guest order.
+  const customer = await db.user.findUnique({
+    where: { email: args.email },
+    select: { id: true },
+  });
+
   const order = await db.$transaction(async (tx) => {
     const address = await tx.address.create({
       data: {
+        userId: customer?.id ?? null,
         firstName: args.firstName,
         lastName: args.lastName,
         phone: args.phone,
@@ -96,6 +102,7 @@ async function writeOrder(args: {
     return tx.order.create({
       data: {
         orderNumber,
+        userId: customer?.id ?? null,
         email: args.email,
         phone: args.phone,
         status: args.markPaid ? "PAID" : "PENDING",
@@ -217,94 +224,4 @@ export async function createManualOrderAction(
       message: error instanceof Error ? error.message : "The order could not be created.",
     };
   }
-}
-
-/**
- * A realistic order built from whatever is actually in the catalog, so the
- * owner can walk the fulfilment flow before a real customer arrives.
- */
-export async function createDemoOrderAction(): Promise<AdminState> {
-  const user = await requirePermission("orders:write");
-
-  const variants = await db.variant.findMany({
-    where: { isActive: true, product: { status: "ACTIVE" } },
-    orderBy: { price: "desc" },
-    take: 12,
-    select: { id: true },
-  });
-
-  if (variants.length === 0) {
-    return { ok: false, message: "Add a product first — a demo order needs something to sell." };
-  }
-
-  // Two or three lines, from opposite ends of the price list, so the demo shows
-  // a mixed basket rather than one item.
-  const picks = [variants[0], variants[Math.floor(variants.length / 2)], variants.at(-1)]
-    .filter((variant): variant is { id: string } => Boolean(variant))
-    .filter((variant, index, all) => all.findIndex((v) => v.id === variant.id) === index);
-
-  try {
-    const order = await writeOrder({
-      lines: picks.map((variant, index) => ({ variantId: variant.id, quantity: index === 0 ? 1 : 2 })),
-      email: "demo.customer@example.com",
-      phone: "+233 24 000 0000",
-      firstName: "Demo",
-      lastName: "Customer",
-      line1: "12 Lagos Avenue, East Legon",
-      city: "Accra",
-      region: "Greater Accra",
-      shippingTotal: 2500,
-      // Left unpaid on purpose: it shows the whole pipeline from awaiting
-      // payment onward, and it never touches real stock.
-      markPaid: false,
-      staffNote: DEMO_NOTE,
-      actorId: user.id,
-      channel: "demo",
-    });
-
-    revalidateOrders();
-    return {
-      ok: true,
-      message: `Demo order ${order.orderNumber} created. It is unpaid, so no stock moved.`,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : "The demo order could not be created.",
-    };
-  }
-}
-
-/** Removes every demo order in one go. */
-export async function clearDemoOrdersAction(): Promise<AdminState> {
-  const user = await requirePermission("orders:write");
-
-  const demos = await db.order.findMany({
-    where: { staffNote: DEMO_NOTE },
-    select: { id: true, inventoryAppliedAt: true },
-  });
-
-  if (demos.length === 0) return { ok: true, message: "There are no demo orders." };
-
-  // Only ever created unpaid, so nothing needs restocking — but check anyway
-  // rather than assume, in case one was marked paid by hand afterwards.
-  const applied = demos.filter((order) => order.inventoryAppliedAt !== null);
-  if (applied.length > 0) {
-    return {
-      ok: false,
-      message: `${applied.length} demo order${applied.length === 1 ? " has" : "s have"} already moved stock. Cancel ${applied.length === 1 ? "it" : "them"} first so the stock goes back.`,
-    };
-  }
-
-  await db.order.deleteMany({ where: { id: { in: demos.map((order) => order.id) } } });
-
-  await recordAudit({
-    actorId: user.id,
-    action: "order.demo.clear",
-    entity: "Order",
-    after: { removed: demos.length },
-  });
-
-  revalidateOrders();
-  return { ok: true, message: `Removed ${demos.length} demo order${demos.length === 1 ? "" : "s"}.` };
 }

@@ -1,12 +1,8 @@
 "use client";
 
-import { useActionState, useMemo, useState, useTransition } from "react";
-import { Loader2, Plus, Trash2, X, Sparkles } from "lucide-react";
-import {
-  createManualOrderAction,
-  createDemoOrderAction,
-  clearDemoOrdersAction,
-} from "@/app/actions/admin/manual-orders";
+import { useActionState, useMemo, useState } from "react";
+import { Loader2, Plus, Trash2, X } from "lucide-react";
+import { createManualOrderAction } from "@/app/actions/admin/manual-orders";
 import type { AdminState } from "@/app/actions/admin/products";
 import { GHANA_REGIONS } from "@/lib/constants";
 import { formatMoney } from "@/lib/money";
@@ -35,59 +31,28 @@ const label = "flex flex-col gap-1.5 text-xs text-[var(--text-muted)]";
 
 export function ManualOrderPanel({ variants }: { variants: SellableVariant[] }) {
   const [open, setOpen] = useState(false);
-  const [demoing, startDemo] = useTransition();
-  const [demoResult, setDemoResult] = useState<AdminState | null>(null);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-[12.5px] text-white transition-colors hover:bg-[var(--accent-hover)]"
-        >
-          {open ? <X className="h-4 w-4" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
-          {open ? "Close" : "New order"}
-        </button>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex w-fit items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-[12.5px] text-white transition-colors hover:bg-[var(--accent-hover)]"
+      >
+        {open ? <X className="h-4 w-4" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
+        {open ? "Close" : "New order"}
+      </button>
 
-        <button
-          type="button"
-          disabled={demoing}
-          onClick={() => startDemo(async () => setDemoResult(await createDemoOrderAction()))}
-          className="inline-flex items-center gap-2 rounded-lg border border-[var(--border-strong)] px-4 py-2.5 text-[12.5px] transition-colors hover:bg-[var(--surface-sunken)] disabled:opacity-50"
-        >
-          {demoing ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          ) : (
-            <Sparkles className="h-4 w-4" aria-hidden />
-          )}
-          Create a demo order
-        </button>
-
-        <button
-          type="button"
-          disabled={demoing}
-          onClick={() => startDemo(async () => setDemoResult(await clearDemoOrdersAction()))}
-          className="text-[12.5px] text-[var(--text-secondary)] underline underline-offset-4 disabled:opacity-50"
-        >
-          Clear demo orders
-        </button>
-      </div>
-
-      {demoResult?.message ? (
-        <Alert tone={demoResult.ok ? "success" : "danger"}>{demoResult.message}</Alert>
-      ) : null}
-
-      {!open ? (
-        <p className="text-[13px] text-[var(--text-secondary)]">
-          A demo order is built from real products, left unpaid so no stock moves, and can be
-          cleared in one click — it is there to walk the fulfilment flow before a real customer
-          arrives.
-        </p>
-      ) : (
+      {open ? (
         <Card className="px-6 py-5.5">
           <ManualOrderForm variants={variants} onDone={() => setOpen(false)} />
         </Card>
+      ) : (
+        <p className="text-[13px] text-[var(--text-secondary)]">
+          For business that arrives over WhatsApp, by phone or across the counter. Orders raised
+          here behave exactly as checkout orders do, and attach to the customer automatically when
+          their email already has an account.
+        </p>
       )}
     </div>
   );

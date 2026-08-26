@@ -17,14 +17,18 @@
  */
 import { spawn } from "node:child_process";
 
-if (process.env.RUN_SEED !== "1") {
-  console.log("[seed-once] RUN_SEED is not set — skipping.");
+// RUN_SEED fills the catalog; RUN_DEMO_ORDERS adds demo customers and orders so
+// the console has something to show before real trade starts.
+const task = process.env.RUN_SEED === "1" ? "db:seed" : process.env.RUN_DEMO_ORDERS === "1" ? "db:demo" : null;
+
+if (!task) {
+  console.log("[seed-once] Neither RUN_SEED nor RUN_DEMO_ORDERS is set — skipping.");
   process.exit(0);
 }
 
-console.log("[seed-once] RUN_SEED=1 — seeding the database.");
+console.log(`[seed-once] running ${task}.`);
 
-const child = spawn("npm", ["run", "db:seed"], {
+const child = spawn("npm", ["run", task], {
   stdio: "inherit",
   shell: process.platform === "win32",
 });
@@ -53,7 +57,7 @@ async function verify() {
 child.on("exit", async (code) => {
   await verify();
   if (code === 0) {
-    console.log("[seed-once] Seed finished. Remove RUN_SEED so it does not run again.");
+    console.log(`[seed-once] ${task} finished. Remove the flag so it does not run again.`);
   } else {
     console.error(
       `[seed-once] SEED FAILED with exit code ${code}. Booting anyway — the store will come up, but the catalog may be empty or partial.`,

@@ -18,9 +18,17 @@ import type { Prisma } from "@/generated/prisma";
 const KEY = "integrations";
 
 export type AiProvider = "anthropic" | "openrouter";
+export type PaystackMode = "live" | "test";
 
 export type Integrations = {
-  paystack: { secretKey: string; publicKey: string };
+  paystack: {
+    /** Which pair of keys checkout actually uses. */
+    mode: PaystackMode;
+    secretKey: string;
+    publicKey: string;
+    testSecretKey: string;
+    testPublicKey: string;
+  };
   ai: {
     provider: AiProvider;
     anthropicApiKey: string;
@@ -43,6 +51,7 @@ export type Integrations = {
 /** Which fields are secret, so they are masked rather than echoed back. */
 export const SECRET_FIELDS = new Set([
   "paystack.secretKey",
+  "paystack.testSecretKey",
   "ai.anthropicApiKey",
   "ai.openrouterApiKey",
   "slack.botToken",
@@ -58,8 +67,11 @@ export const SECRET_FIELDS = new Set([
 function fromEnv(): Integrations {
   return {
     paystack: {
+      mode: process.env.PAYSTACK_MODE === "test" ? "test" : "live",
       secretKey: env.paystack.secretKey(),
       publicKey: env.paystack.publicKey(),
+      testSecretKey: process.env.PAYSTACK_TEST_SECRET_KEY ?? "",
+      testPublicKey: process.env.PAYSTACK_TEST_PUBLIC_KEY ?? "",
     },
     ai: {
       // OpenRouter was the original provider, so it stays the default when a
@@ -187,11 +199,33 @@ export type IntegrationGroup = {
   fields: IntegrationField[];
 };
 
+/**
+ * The key pair checkout should use right now.
+ *
+ * Test mode is a separate pair rather than a replacement, so switching back to
+ * live does not mean retyping the real keys — and a test key can never be left
+ * behind in the live slot.
+ */
+export function activePaystack(config: Integrations): {
+  mode: PaystackMode;
+  secretKey: string;
+  publicKey: string;
+} {
+  const test = config.paystack.mode === "test";
+  return {
+    mode: config.paystack.mode,
+    secretKey: test ? config.paystack.testSecretKey : config.paystack.secretKey,
+    publicKey: test ? config.paystack.testPublicKey : config.paystack.publicKey,
+  };
+}
+
 /** True when a group has enough filled in to actually work. */
 export function isReady(config: Integrations, group: keyof Integrations): boolean {
   switch (group) {
-    case "paystack":
-      return Boolean(config.paystack.secretKey && config.paystack.publicKey);
+    case "paystack": {
+      const active = activePaystack(config);
+      return Boolean(active.secretKey && active.publicKey);
+    }
     case "ai":
       return config.ai.provider === "anthropic"
         ? Boolean(config.ai.anthropicApiKey)
@@ -228,11 +262,17 @@ export async function integrationsView(): Promise<IntegrationGroup[]> {
     {
       key: "paystack",
       label: "Paystack payments",
-      description: "Takes card, Mobile Money and bank payments at checkout.",
+      description:
+        config.paystack.mode === "test"
+          ? "In test mode — checkout uses the test keys and takes no real money."
+          : "Takes card, Mobile Money and bank payments at checkout.",
       ready: isReady(config, "paystack"),
       fields: [
-        field("paystack", "secretKey", "Secret key", "Starts sk_live_ or sk_test_"),
-        field("paystack", "publicKey", "Public key", "Starts pk_live_ or pk_test_"),
+        field("paystack", "mode", "Mode", "live or test"),
+        field("paystack", "secretKey", "Live secret key", "Starts sk_live_"),
+        field("paystack", "publicKey", "Live public key", "Starts pk_live_"),
+        field("paystack", "testSecretKey", "Test secret key", "Starts sk_test_"),
+        field("paystack", "testPublicKey", "Test public key", "Starts pk_test_"),
       ],
     },
     {

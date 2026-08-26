@@ -9,6 +9,7 @@ import {
   updateIntegrations,
   clearIntegrationField,
   isReady,
+  activePaystack,
   type Integrations,
 } from "@/lib/integrations";
 import { pingAgent } from "@/lib/agent/provider";
@@ -26,7 +27,7 @@ import type { AdminState } from "./products";
 
 /** Only these keys are accepted, so a crafted form cannot write arbitrary settings. */
 const SHAPE: Record<string, string[]> = {
-  paystack: ["secretKey", "publicKey"],
+  paystack: ["mode", "secretKey", "publicKey", "testSecretKey", "testPublicKey"],
   ai: [
     "provider",
     "anthropicApiKey",
@@ -71,6 +72,11 @@ export async function saveIntegrationsAction(
   const provider = patch.ai?.provider;
   if (provider && provider !== "anthropic" && provider !== "openrouter") {
     return { ok: false, message: "Choose either Claude or OpenRouter as the AI provider." };
+  }
+
+  const mode = patch.paystack?.mode;
+  if (mode && mode !== "live" && mode !== "test") {
+    return { ok: false, message: "Paystack mode must be live or test." };
   }
 
   await updateIntegrations(patch as Parameters<typeof updateIntegrations>[0]);
@@ -128,14 +134,17 @@ export async function testIntegrationAction(
   try {
     switch (group) {
       case "paystack": {
-        if (!config.paystack.secretKey) return { ok: false, message: "No secret key saved yet." };
+        const active = activePaystack(config);
+        if (!active.secretKey) {
+          return { ok: false, message: `No ${active.mode} secret key saved yet.` };
+        }
         const response = await fetch("https://api.paystack.co/bank?country=ghana&perPage=1", {
-          headers: { Authorization: `Bearer ${config.paystack.secretKey}` },
+          headers: { Authorization: `Bearer ${active.secretKey}` },
           cache: "no-store",
         });
         return response.ok
-          ? { ok: true, message: "Paystack accepted the key." }
-          : { ok: false, message: `Paystack rejected the key (${response.status}).` };
+          ? { ok: true, message: `Paystack accepted the ${active.mode} key.` }
+          : { ok: false, message: `Paystack rejected the ${active.mode} key (${response.status}).` };
       }
 
       case "ai": {

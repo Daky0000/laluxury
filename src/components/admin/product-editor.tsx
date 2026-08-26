@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Loader2, Trash2, ArrowUp, ArrowDown, ExternalLink, Plus, Upload } from "lucide-react";
+import { Loader2, Trash2, ArrowUp, ArrowDown, ExternalLink, Plus, Upload, X } from "lucide-react";
 import {
   updateProductAction,
   updateVariantsAction,
@@ -537,6 +537,8 @@ function VariantsTab({ product }: { product: EditorProduct }) {
  * Files go to the image CDN and only the delivered URL is stored — a container
  * filesystem would lose them on the next deploy.
  */
+type Picked = { file: File; preview: string };
+
 function UploadImages({
   product,
   allValues,
@@ -544,11 +546,47 @@ function UploadImages({
   product: EditorProduct;
   allValues: { id: string; value: string; optionName: string }[];
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [picked, setPicked] = useState<Picked[]>([]);
+
   const [state, action, pending] = useActionState<AdminState | null, FormData>(
-    uploadProductImagesAction.bind(null, product.id),
+    async (prev, formData) => {
+      // The visible list is the source of truth, not the file input — a picture
+      // removed from the strip must not still be uploaded.
+      formData.delete("files");
+      for (const item of picked) formData.append("files", item.file);
+
+      const result = await uploadProductImagesAction(product.id, prev, formData);
+      if (result.ok) {
+        for (const item of picked) URL.revokeObjectURL(item.preview);
+        setPicked([]);
+        if (inputRef.current) inputRef.current.value = "";
+      }
+      return result;
+    },
     null,
   );
-  const [chosen, setChosen] = useState<string[]>([]);
+
+  function choose(files: FileList | null) {
+    const incoming = Array.from(files ?? []);
+    if (incoming.length === 0) return;
+
+    setPicked((current) => [
+      ...current,
+      // Object URLs render the picture immediately, before anything is uploaded.
+      ...incoming.map((file) => ({ file, preview: URL.createObjectURL(file) })),
+    ]);
+
+    // Cleared so choosing the same file again still fires a change event.
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function remove(index: number) {
+    setPicked((current) => {
+      URL.revokeObjectURL(current[index].preview);
+      return current.filter((_, i) => i !== index);
+    });
+  }
 
   return (
     <Card className="p-5">
@@ -561,40 +599,70 @@ function UploadImages({
       ) : null}
 
       <form action={action} className="flex flex-col gap-4">
-        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--surface-sunken)] px-6 py-8 text-center transition-colors hover:border-[var(--accent)]">
-          <Upload className="h-6 w-6 text-[var(--text-muted)]" aria-hidden />
-          <span className="text-sm">
-            {chosen.length > 0
-              ? `${chosen.length} file${chosen.length === 1 ? "" : "s"} ready`
-              : "Choose images, or drop them here"}
-          </span>
-          <span className="text-xs text-[var(--text-muted)]">
-            JPEG, PNG, WebP or AVIF · up to 8 MB each
-          </span>
-          <input
-            type="file"
-            name="files"
-            accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
-            multiple
-            className="sr-only"
-            onChange={(event) =>
-              setChosen(Array.from(event.target.files ?? []).map((file) => file.name))
-            }
-          />
-        </label>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
+          multiple
+          className="sr-only"
+          onChange={(event) => choose(event.target.files)}
+        />
 
-        {chosen.length > 0 ? (
-          <ul className="flex flex-wrap gap-2">
-            {chosen.map((name) => (
-              <li
-                key={name}
-                className="rounded-full bg-[var(--surface-sunken)] px-3 py-1 text-xs text-[var(--text-secondary)]"
-              >
-                {name}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        {/* Drop zone doubles as the preview strip once something is chosen. */}
+        <div
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            choose(event.dataTransfer.files);
+          }}
+          className="flex flex-col gap-4 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--surface-sunken)] p-4"
+        >
+          {picked.length > 0 ? (
+            <ul className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+              {picked.map((item, index) => (
+                <li
+                  key={item.preview}
+                  className="group relative aspect-square overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)]"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.preview}
+                    alt={item.file.name}
+                    className="h-full w-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => remove(index)}
+                    className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-ink-900/75 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                    aria-label={`Remove ${item.file.name}`}
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                  <span className="absolute inset-x-0 bottom-0 truncate bg-ink-900/70 px-1.5 py-0.5 text-[10px] text-white">
+                    {item.file.name}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex flex-col items-center gap-1.5 py-6 text-center">
+              <Upload className="h-6 w-6 text-[var(--text-muted)]" aria-hidden />
+              <p className="text-sm">Drop images here, or add them below</p>
+              <p className="text-xs text-[var(--text-muted)]">
+                JPEG, PNG, WebP or AVIF · up to 8 MB each
+              </p>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="inline-flex w-fit items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-raised)] px-4 py-2 text-sm transition-colors hover:bg-[var(--surface-sunken)]"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            {picked.length > 0 ? "Add more images" : "Add images"}
+          </button>
+        </div>
 
         <div className="flex flex-wrap items-end gap-3">
           <Field label="Alt text" htmlFor="upload-alt" className="min-w-48 flex-1">
@@ -621,17 +689,20 @@ function UploadImages({
 
           <button
             type="submit"
-            disabled={pending || chosen.length === 0}
+            disabled={pending || picked.length === 0}
             className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            Upload
+            {picked.length > 0
+              ? `Upload ${picked.length} image${picked.length === 1 ? "" : "s"}`
+              : "Upload"}
           </button>
         </div>
       </form>
     </Card>
   );
 }
+
 
 function ImagesTab({ product }: { product: EditorProduct }) {
   const [state, action, pending] = useActionState<AdminState | null, FormData>(
