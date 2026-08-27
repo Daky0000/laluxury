@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { bulkAdjustStockAction } from "@/app/actions/admin/catalog-ops";
 import { Alert } from "@/components/ui";
@@ -20,6 +21,7 @@ export function StockBulkBar({
   children: ReactNode;
   canWrite: boolean;
 }) {
+  const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
   const [mode, setMode] = useState<"add" | "set">("set");
   const [quantity, setQuantity] = useState("");
@@ -60,7 +62,12 @@ export function StockBulkBar({
       });
 
       setMessage({ ok: result.ok, text: result.message ?? "" });
-      if (result.ok) setQuantity("");
+      if (result.ok) {
+        setQuantity("");
+        // The rows each hold their own figure; this is what puts the new one
+        // in front of the person who just typed it.
+        router.refresh();
+      }
     });
   }
 
@@ -68,7 +75,14 @@ export function StockBulkBar({
 
   return (
     <div className="flex flex-col gap-3">
-      <form onChange={sync}>{children}</form>
+      {/*
+        The table's own fields live inside this form so the checkboxes can be
+        read as one. Nothing here is submitted — Enter in a stock field means
+        "write that figure now", not "reload the page".
+      */}
+      <form onChange={sync} onSubmit={(event) => event.preventDefault()}>
+        {children}
+      </form>
 
       {message ? <Alert tone={message.ok ? "success" : "danger"}>{message.text}</Alert> : null}
 

@@ -52,6 +52,33 @@ export async function adjustStockAction(
 }
 
 /**
+ * One stock figure, written as it is typed.
+ *
+ * The inventory table saves each cell on its own rather than behind a button,
+ * so a stock take is walked down the page instead of clicked down it. The
+ * client only calls this when the number actually changed, which keeps the
+ * ledger to one entry per real correction.
+ */
+export async function setStockAction(
+  variantId: string,
+  onHand: number,
+): Promise<AdminState & { onHand?: number }> {
+  const actor = await requirePermission("inventory:write");
+
+  if (!variantId) return { ok: false, message: "No variant selected." };
+  if (!Number.isFinite(onHand)) return { ok: false, message: "Enter a number." };
+  if (onHand < 0) return { ok: false, message: "Stock cannot be negative." };
+
+  const result = await setStockLevel(variantId, Math.floor(onHand), "Stock take", actor.id);
+
+  revalidatePath("/admin/inventory");
+  revalidatePath("/admin");
+  revalidateStorefront();
+
+  return { ok: true, onHand: result.current };
+}
+
+/**
  * The same adjustment across many variants at once.
  *
  * Counting a delivery of one product in eleven colours, or opening a season

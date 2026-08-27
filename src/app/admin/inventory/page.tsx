@@ -73,7 +73,7 @@ export default async function AdminInventoryPage({ searchParams }: PageProps<"/a
     <div className="flex flex-col gap-6">
       <SectionHeading
         title="Inventory"
-        description="Available is on-hand minus units reserved for unshipped orders. Tick rows to set or receive stock for many at once. Every change is written to the stock ledger."
+        description="Type a count straight into On hand — it saves itself. Tick rows to set or receive stock for many at once. Available is on-hand minus units held for unshipped orders, and every change is written to the stock ledger."
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -156,13 +156,16 @@ export default async function AdminInventoryPage({ searchParams }: PageProps<"/a
                   <th className="px-3 py-2.5 font-medium">Reserved</th>
                   <th className="px-3 py-2.5 font-medium">Available</th>
                   <th className="px-3 py-2.5 font-medium">Reorder at</th>
-                  {canWrite ? <th className="px-3 py-2.5 font-medium">Adjust</th> : null}
+                  {canWrite ? <th className="px-3 py-2.5 font-medium">Receive</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
                 {rows.map((variant) => (
                   <StockRow
-                    key={variant.id}
+                    // Keyed by the stored figure as well as the row, so a bulk
+                    // adjustment lands in the fields rather than leaving them
+                    // showing what was there before it.
+                    key={`${variant.id}-${variant.inventory?.onHand ?? 0}`}
                     variantId={variant.id}
                     productId={variant.product.id}
                     productTitle={variant.product.title}
