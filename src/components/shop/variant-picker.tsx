@@ -2,8 +2,8 @@
 
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Heart, Loader2 } from "lucide-react";
-import { addToCartAction, buyNowAction } from "@/app/actions/cart";
+import { Check, Heart, Loader2, X } from "lucide-react";
+import { bulkAddToCartAction, buyNowAction } from "@/app/actions/cart";
 import { toggleWishlistAction } from "@/app/actions/misc";
 import { openBag } from "./bag-events";
 import { formatPrice } from "@/lib/money";
@@ -65,7 +65,16 @@ export function VariantPicker({
     return map;
   });
 
-  const [quantity, setQuantity] = useState(1);
+  /**
+   * How many of each variant the shopper has lined up, keyed by variant id.
+   *
+   * This is the basket-before-the-basket. Someone buying blinds for a house
+   * wants four of the 5ft in ash and two of the 7ft in wine, and having to add
+   * one, wait for the drawer, come back and add the other is how you lose the
+   * second line. Setting a quantity queues it; changing option resets the
+   * stepper to whatever that variant is on, which for an untouched one is zero.
+   */
+  const [queued, setQueued] = useState<Record<string, number>>({});
   const [pending, startTransition] = useTransition();
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,23 +122,60 @@ export function VariantPicker({
 
   const maxQuantity = activeVariant?.available ?? 99;
   const soldOut = activeVariant !== null && activeVariant.available === 0;
+
+  /** The stepper always reads the current variant's own count, zero if new. */
+  const quantity = activeVariant ? (queued[activeVariant.id] ?? 0) : 0;
+
+  function setQuantity(next: number) {
+    if (!activeVariant) return;
+    setError(null);
+    setAdded(false);
+    const clamped = Math.max(0, Math.min(next, activeVariant.available ?? 99));
+    setQueued((prev) => {
+      const copy = { ...prev };
+      // Zero is a removal, not a line of nothing.
+      if (clamped === 0) delete copy[activeVariant.id];
+      else copy[activeVariant.id] = clamped;
+      return copy;
+    });
+  }
+
+  /** Queued lines, in the order the option values are shown. */
+  const lines = useMemo(
+    () =>
+      variants
+        .filter((v) => (queued[v.id] ?? 0) > 0)
+        .map((v) => ({ variant: v, quantity: queued[v.id] })),
+    [queued, variants],
+  );
+
+  const totalItems = lines.reduce((sum, line) => sum + line.quantity, 0);
+  const totalPrice = lines.reduce((sum, line) => sum + line.quantity * line.variant.price, 0);
+  const isBulk = lines.length > 1;
   const compareAt = activeVariant?.compareAtPrice ?? null;
   const saving = activeVariant && compareAt && compareAt > activeVariant.price
     ? compareAt - activeVariant.price
     : 0;
 
   function add() {
-    if (!activeVariant) {
-      setError("Choose an option first.");
+    if (lines.length === 0) {
+      setError(
+        activeVariant ? "Set a quantity first." : "Choose an option first.",
+      );
       return;
     }
     setError(null);
     startTransition(async () => {
-      const result = await addToCartAction(activeVariant.id, quantity);
+      const result = await bulkAddToCartAction(
+        lines.map((line) => ({ variantId: line.variant.id, quantity: line.quantity })),
+      );
       if (!result.ok) {
         setError(result.message ?? "Could not add that to your bag.");
         return;
       }
+      // The queue has moved into the bag; leaving it on screen would invite
+      // adding the same run of blinds a second time.
+      setQueued({});
       setAdded(true);
       setTimeout(() => setAdded(false), 2500);
       openBag();
@@ -146,7 +192,7 @@ export function VariantPicker({
     setError(null);
     startBuying(async () => {
       // On success this redirects, so anything returned is a failure.
-      const result = await buyNowAction(activeVariant.id, quantity);
+      const result = await buyNowAction(activeVariant.id, Math.max(1, quantity));
       if (result && !result.ok) setError(result.message ?? "Could not start that order.");
     });
   }
@@ -269,65 +315,146 @@ export function VariantPicker({
         );
       })}
 
-      {/* Quantity, add, save */}
-      <div className="mt-8 flex items-stretch gap-3.5">
-        <div className="flex items-center gap-4 border border-[var(--border-strong)] px-4">
+      {/* How many of the variant on screen right now */}
+      <div className="mt-7">
+        <p className="mb-2.5 text-[11.5px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+          Quantity
+          {activeVariant ? (
+            <span className="normal-case tracking-normal text-[var(--text-primary)]">
+              {" — "}
+              {activeVariant.title}
+            </span>
+          ) : null}
+        </p>
+
+        <div className="flex items-stretch gap-3.5">
+          <div className="flex items-center gap-3 border border-[var(--border-strong)] px-3">
+            <button
+              type="button"
+              onClick={() => setQuantity(quantity - 1)}
+              disabled={!activeVariant || quantity <= 0}
+              className="px-1 text-lg text-[var(--accent)] disabled:opacity-30"
+              aria-label="Decrease quantity"
+            >
+              &minus;
+            </button>
+
+            {/* Typed as well as stepped: nobody taps + forty times. */}
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={maxQuantity}
+              value={quantity}
+              disabled={!activeVariant || soldOut}
+              onChange={(event) => {
+                const parsed = Number.parseInt(event.target.value, 10);
+                setQuantity(Number.isNaN(parsed) ? 0 : parsed);
+              }}
+              aria-label={
+                activeVariant ? `Quantity of ${activeVariant.title}` : "Quantity"
+              }
+              className="w-12 border-0 bg-transparent p-0 text-center text-[15px] tabular-nums outline-none [appearance:textfield] focus:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+
+            <button
+              type="button"
+              onClick={() => setQuantity(quantity + 1)}
+              disabled={!activeVariant || quantity >= maxQuantity}
+              className="px-1 text-lg text-[var(--accent)] disabled:opacity-30"
+              aria-label="Increase quantity"
+            >
+              +
+            </button>
+          </div>
+
           <button
             type="button"
-            onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-            disabled={quantity <= 1}
-            className="text-lg text-[var(--accent)] disabled:opacity-30"
-            aria-label="Decrease quantity"
+            onClick={add}
+            disabled={pending || lines.length === 0}
+            className="flex flex-1 items-center justify-center gap-2 bg-[var(--accent)] px-6 py-4 text-xs font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
           >
-            &minus;
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+            {added ? <Check className="h-4 w-4" aria-hidden /> : null}
+            {added
+              ? "Added to bag"
+              : soldOut && lines.length === 0
+                ? "Out of stock"
+                : isBulk
+                  ? `Add bulk to bag · ${totalItems}`
+                  : "Add to bag"}
           </button>
-          <span className="min-w-4 text-center text-[15px] tabular-nums" aria-live="polite">
-            {quantity}
-          </span>
+
           <button
             type="button"
-            onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
-            disabled={quantity >= maxQuantity}
-            className="text-lg text-[var(--accent)] disabled:opacity-30"
-            aria-label="Increase quantity"
+            onClick={toggleSave}
+            disabled={savePending}
+            aria-pressed={saved}
+            className={cn(
+              "grid w-[54px] place-items-center border text-[var(--accent)] transition-colors",
+              saved ? "border-[var(--accent)]" : "border-[var(--border-strong)]",
+            )}
           >
-            +
+            {savePending ? (
+              <Loader2 className="h-[19px] w-[19px] animate-spin" aria-hidden />
+            ) : (
+              <Heart
+                className="h-[19px] w-[19px]"
+                strokeWidth={1.5}
+                fill={saved ? "currentColor" : "none"}
+                aria-hidden
+              />
+            )}
+            <span className="sr-only">{saved ? "Saved" : "Save for later"}</span>
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={add}
-          disabled={pending || soldOut || !activeVariant}
-          className="flex flex-1 items-center justify-center gap-2 bg-[var(--accent)] px-6 py-4 text-xs font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
-        >
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-          {added ? <Check className="h-4 w-4" aria-hidden /> : null}
-          {soldOut ? "Out of stock" : added ? "Added to bag" : "Add to bag"}
-        </button>
+        {/*
+          What is lined up so far. Only worth showing once there is more than
+          one line — for a single one the stepper above already says it, and a
+          list of one reads like a bug.
+        */}
+        {isBulk ? (
+          <div className="mt-4 border border-[var(--border-subtle)]">
+            <ul className="divide-y divide-[var(--border-subtle)]">
+              {lines.map((line) => (
+                <li
+                  key={line.variant.id}
+                  className="flex items-center gap-3 px-3.5 py-2.5 text-[13.5px]"
+                >
+                  <span className="flex-1 truncate">{line.variant.title}</span>
+                  <span className="tabular-nums text-[var(--text-secondary)]">
+                    {line.quantity} × {formatPrice(line.variant.price)}
+                  </span>
+                  <span className="w-20 text-right tabular-nums">
+                    {formatPrice(line.quantity * line.variant.price)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setQueued((prev) => {
+                        const copy = { ...prev };
+                        delete copy[line.variant.id];
+                        return copy;
+                      })
+                    }
+                    className="text-[var(--text-muted)] transition-colors hover:text-danger"
+                    aria-label={`Remove ${line.variant.title}`}
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
 
-        <button
-          type="button"
-          onClick={toggleSave}
-          disabled={savePending}
-          aria-pressed={saved}
-          className={cn(
-            "grid w-[54px] place-items-center border text-[var(--accent)] transition-colors",
-            saved ? "border-[var(--accent)]" : "border-[var(--border-strong)]",
-          )}
-        >
-          {savePending ? (
-            <Loader2 className="h-[19px] w-[19px] animate-spin" aria-hidden />
-          ) : (
-            <Heart
-              className="h-[19px] w-[19px]"
-              strokeWidth={1.5}
-              fill={saved ? "currentColor" : "none"}
-              aria-hidden
-            />
-          )}
-          <span className="sr-only">{saved ? "Saved" : "Save for later"}</span>
-        </button>
+            <div className="flex items-center justify-between border-t border-[var(--border-strong)] px-3.5 py-2.5 text-[13.5px]">
+              <span className="text-[var(--text-secondary)]">
+                {totalItems} {totalItems === 1 ? "item" : "items"} ready
+              </span>
+              <span className="font-medium tabular-nums">{formatPrice(totalPrice)}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Quick order — skips the bag for a shopper who has already decided. */}

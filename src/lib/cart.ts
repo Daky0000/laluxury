@@ -222,6 +222,78 @@ export async function addToCart(variantId: string, quantity = 1): Promise<CartWi
   return reload(cart.id);
 }
 
+/**
+ * Adds several variants in one go, all or nothing.
+ *
+ * Adding them one at a time would half-fill the bag when the fourth line turns
+ * out to be short of stock: the shopper gets an error, and three things they
+ * did not knowingly confirm are in the bag anyway. So every line is checked
+ * first and nothing is written until all of them pass.
+ *
+ * The same variant appearing twice is summed before it is checked, so two lines
+ * of six cannot slip past a stock level of ten.
+ */
+export async function addManyToCart(
+  items: { variantId: string; quantity: number }[],
+): Promise<CartWithItems> {
+  const wanted = new Map<string, number>();
+  for (const item of items) {
+    if (item.quantity < 1) continue;
+    wanted.set(item.variantId, (wanted.get(item.variantId) ?? 0) + item.quantity);
+  }
+  if (wanted.size === 0) throw new Error("Choose a quantity first.");
+
+  const cart = await getOrCreateCart();
+  const variants = await db.variant.findMany({
+    where: { id: { in: [...wanted.keys()] } },
+    include: { inventory: true, product: { select: { status: true, title: true } } },
+  });
+
+  const planned: { variantId: string; quantity: number; unitPrice: number }[] = [];
+
+  for (const [variantId, quantity] of wanted) {
+    const variant = variants.find((v) => v.id === variantId);
+    if (!variant || !variant.isActive) throw new Error("One of those items is unavailable.");
+    if (variant.product.status !== "ACTIVE") {
+      throw new Error(`${variant.product.title} is not on sale.`);
+    }
+
+    const existing = cart.items.find((i) => i.variantId === variantId);
+    const desired = (existing?.quantity ?? 0) + quantity;
+
+    const inv = variant.inventory;
+    if (inv && inv.trackInventory && !inv.allowBackorder) {
+      const available = availableOf(inv);
+      if (available <= 0) throw new Error(`${variant.title} is out of stock.`);
+      if (desired > available) {
+        throw new Error(`Only ${available} left of ${variant.title}.`);
+      }
+    }
+
+    planned.push({ variantId, quantity: desired, unitPrice: variant.price });
+  }
+
+  await db.$transaction(
+    planned.map((line) =>
+      db.cartItem.upsert({
+        where: { cartId_variantId: { cartId: cart.id, variantId: line.variantId } },
+        create: {
+          cartId: cart.id,
+          variantId: line.variantId,
+          // `quantity` here is already the running total, which is what the
+          // update branch wants; a brand new line has nothing to add it to.
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+        },
+        update: { quantity: line.quantity, unitPrice: line.unitPrice },
+      }),
+    ),
+  );
+
+  await touch(cart.id);
+  return reload(cart.id);
+}
+
 export async function updateCartLine(itemId: string, quantity: number): Promise<CartWithItems> {
   const cart = await getOrCreateCart();
   const item = cart.items.find((i) => i.id === itemId);

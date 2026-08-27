@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   addToCart,
+  addManyToCart,
   getOrCreateCart,
   readCart,
   removeCartLine,
@@ -29,6 +30,29 @@ export async function addToCartAction(
     return { ok: true };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Could not add that." };
+  }
+}
+
+export type BulkCartItem = { variantId: string; quantity: number };
+
+/**
+ * Adds several variant+quantity pairs from one pass of the picker — the
+ * storefront sends this when a shopper has queued up a colour, a qty, bumped
+ * to the next colour, and so on before tapping "Add bulk to bag".
+ *
+ * All or nothing: if one line is short of stock, none of them are added. A
+ * partial success would leave things in the bag the shopper never saw
+ * confirmed, under an error message telling them it had failed.
+ */
+export async function bulkAddToCartAction(items: BulkCartItem[]): Promise<ActionState> {
+  if (!items.length) return { ok: true };
+  try {
+    await addManyToCart(items);
+    revalidatePath("/cart");
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Could not add items." };
   }
 }
 
