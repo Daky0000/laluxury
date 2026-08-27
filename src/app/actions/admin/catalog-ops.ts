@@ -51,6 +51,78 @@ export async function adjustStockAction(
   return { ok: true, message: "Stock updated." };
 }
 
+/**
+ * The same adjustment across many variants at once.
+ *
+ * Counting a delivery of one product in eleven colours, or opening a season
+ * with fifty of everything, is one number typed once — doing it a row at a
+ * time is how a stock take ends up half finished. Every variant still gets its
+ * own ledger entry, so the history reads exactly as it would have.
+ */
+export async function bulkAdjustStockAction(
+  variantIds: string[],
+  options: { mode: "add" | "set"; quantity: number; track?: boolean; reason?: string },
+): Promise<AdminState> {
+  const actor = await requirePermission("inventory:write");
+
+  const ids = [...new Set(variantIds.filter(Boolean))];
+  if (ids.length === 0) return { ok: false, message: "Nothing selected." };
+
+  const { mode, quantity } = options;
+  if (!Number.isFinite(quantity)) return { ok: false, message: "Enter a number." };
+  if (mode === "add" && quantity <= 0) {
+    return { ok: false, message: "Enter a positive number to receive." };
+  }
+  if (mode === "set" && quantity < 0) return { ok: false, message: "Stock cannot be negative." };
+
+  // Only variants that exist, so a stale page cannot write to something the
+  // catalog no longer has.
+  const variants = await db.variant.findMany({
+    where: { id: { in: ids } },
+    select: { id: true },
+  });
+  if (variants.length === 0) return { ok: false, message: "Those variants are gone." };
+
+  const reason =
+    options.reason?.trim() || (mode === "add" ? "Bulk delivery received" : "Bulk stock take");
+
+  for (const variant of variants) {
+    if (mode === "add") await restockVariant(variant.id, quantity, reason, actor.id);
+    else await setStockLevel(variant.id, quantity, reason, actor.id);
+  }
+
+  // Setting a count on an untracked variant is meaningless until the storefront
+  // is told to count it, so the caller can turn tracking on in the same pass.
+  if (options.track !== undefined) {
+    for (const variant of variants) await ensureInventoryItem(variant.id);
+    await db.inventoryItem.updateMany({
+      where: { variantId: { in: variants.map((v) => v.id) } },
+      data: { trackInventory: options.track },
+    });
+  }
+
+  await recordAudit({
+    actorId: actor.id,
+    action: mode === "add" ? "inventory.bulkRestock" : "inventory.bulkSet",
+    entity: "InventoryItem",
+    after: { variants: variants.length, quantity, track: options.track ?? null },
+  });
+
+  revalidatePath("/admin/inventory");
+  revalidatePath("/admin");
+  revalidatePath("/admin/products", "layout");
+  revalidateStorefront();
+
+  const noun = variants.length === 1 ? "variant" : "variants";
+  return {
+    ok: true,
+    message:
+      mode === "add"
+        ? `Received ${quantity} into ${variants.length} ${noun}.`
+        : `Set ${variants.length} ${noun} to ${quantity} in stock.`,
+  };
+}
+
 export async function updateInventorySettingsAction(
   _prev: AdminState | null,
   formData: FormData,

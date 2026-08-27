@@ -8,6 +8,7 @@ import { availableOf } from "@/lib/inventory";
 import { formatDate } from "@/lib/utils";
 import { Card, Badge, EmptyState, SectionHeading, Stat } from "@/components/ui";
 import { StockRow } from "@/components/admin/stock-row";
+import { StockBulkBar } from "@/components/admin/stock-bulk-bar";
 import type { Prisma } from "@/generated/prisma";
 
 export const metadata: Metadata = { title: "Inventory" };
@@ -72,7 +73,7 @@ export default async function AdminInventoryPage({ searchParams }: PageProps<"/a
     <div className="flex flex-col gap-6">
       <SectionHeading
         title="Inventory"
-        description="Available is on-hand minus units reserved for unshipped orders. Every change is written to the stock ledger."
+        description="Available is on-hand minus units reserved for unshipped orders. Tick rows to set or receive stock for many at once. Every change is written to the stock ledger."
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -133,11 +134,22 @@ export default async function AdminInventoryPage({ searchParams }: PageProps<"/a
       {rows.length === 0 ? (
         <EmptyState title="Nothing to show" description="Try clearing the filters." />
       ) : (
-        <Card className="overflow-hidden">
+        <StockBulkBar canWrite={canWrite}>
+          <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-[var(--border-subtle)] bg-[var(--surface-sunken)] text-left">
                 <tr>
+                  {canWrite ? (
+                    <th className="w-10 px-4 py-2.5">
+                      <input
+                        type="checkbox"
+                        data-select-all=""
+                        className="accent-[var(--accent)]"
+                        aria-label={`Select all ${rows.length} rows`}
+                      />
+                    </th>
+                  ) : null}
                   <th className="px-4 py-2.5 font-medium">Product</th>
                   <th className="px-3 py-2.5 font-medium">SKU</th>
                   <th className="px-3 py-2.5 font-medium">On hand</th>
@@ -166,7 +178,8 @@ export default async function AdminInventoryPage({ searchParams }: PageProps<"/a
               </tbody>
             </table>
           </div>
-        </Card>
+          </Card>
+        </StockBulkBar>
       )}
 
       <Card className="p-5">

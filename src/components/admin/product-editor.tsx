@@ -28,6 +28,7 @@ import {
   type AdminState,
 } from "@/app/actions/admin/products";
 import { uploadProductImagesAction } from "@/app/actions/admin/media";
+import { bulkAdjustStockAction } from "@/app/actions/admin/catalog-ops";
 import { UPLOAD_ACCEPT } from "@/lib/media-format";
 import { MediaPicker } from "@/components/admin/media-picker";
 import { Card, Field, Alert, Badge } from "@/components/ui";
@@ -546,6 +547,104 @@ function OptionEditor({
   );
 }
 
+/**
+ * One stock figure for every variant of this product.
+ *
+ * Inventory can do this too, by searching for the product and ticking its
+ * rows, but a rug in eleven colours is usually stocked as a batch and the
+ * person typing that number is already here. Every variant still gets its own
+ * ledger entry.
+ */
+function BulkStock({ product }: { product: EditorProduct }) {
+  const router = useRouter();
+  const [mode, setMode] = useState<"set" | "add">("set");
+  const [quantity, setQuantity] = useState("");
+  const [pending, startPending] = useTransition();
+  const [state, setState] = useState<AdminState | null>(null);
+
+  const ids = product.variants.map((variant) => variant.id);
+
+  function apply() {
+    const value = Number(quantity);
+    if (quantity === "" || !Number.isFinite(value)) {
+      setState({ ok: false, message: "Enter a number." });
+      return;
+    }
+
+    startPending(async () => {
+      const result = await bulkAdjustStockAction(ids, {
+        mode,
+        quantity: value,
+        track: mode === "set" ? true : undefined,
+        reason: mode === "add" ? "Delivery received" : "Stock take",
+      });
+      setState(result);
+      if (result.ok) {
+        setQuantity("");
+        router.refresh();
+      }
+    });
+  }
+
+  if (ids.length === 0) return null;
+
+  return (
+    <Card className="p-5">
+      <h3 className="lx-eyebrow mb-1.5">Stock for every variant</h3>
+      <p className="mb-4 text-sm text-[var(--text-secondary)]">
+        Applies to all {ids.length} variant{ids.length === 1 ? "" : "s"} at once. Setting a figure
+        also tells the storefront to count it; single corrections are still best made in
+        Inventory.
+      </p>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="lx-eyebrow">Adjustment</span>
+          <select
+            value={mode}
+            onChange={(event) => setMode(event.target.value as "set" | "add")}
+            className="lx-field w-40"
+          >
+            <option value="set">Set stock to</option>
+            <option value="add">Receive units</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="lx-eyebrow">Units</span>
+          <input
+            type="number"
+            min="0"
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") apply();
+            }}
+            placeholder="0"
+            className="lx-field w-28"
+          />
+        </label>
+
+        <button
+          type="button"
+          onClick={apply}
+          disabled={pending || quantity === ""}
+          className="flex items-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-5 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+        >
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+          Apply to all
+        </button>
+      </div>
+
+      {state?.message ? (
+        <p className={cn("mt-3 text-sm", state.ok ? "text-success" : "text-danger")}>
+          {state.message}
+        </p>
+      ) : null}
+    </Card>
+  );
+}
+
 function VariantsTab({ product }: { product: EditorProduct }) {
   const [state, action, pending] = useActionState<AdminState | null, FormData>(
     updateVariantsAction.bind(null, product.id),
@@ -619,6 +718,8 @@ function VariantsTab({ product }: { product: EditorProduct }) {
           </p>
         ) : null}
       </Card>
+
+      <BulkStock product={product} />
 
       {/* Variant table */}
       <form action={action}>

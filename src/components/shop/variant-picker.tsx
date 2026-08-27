@@ -136,6 +136,21 @@ export function VariantPicker({
   /** Option groups still waiting on a choice, named as the shopper sees them. */
   const awaiting = options.filter((option) => !selected[option.id]);
 
+  /** Value id to the words a shopper recognises, for the queued lines below. */
+  const valueById = useMemo(() => {
+    const map = new Map<string, { optionName: string; value: string; hexColor: string | null }>();
+    for (const option of options) {
+      for (const value of option.values) {
+        map.set(value.id, {
+          optionName: option.name,
+          value: value.value,
+          hexColor: value.hexColor,
+        });
+      }
+    }
+    return map;
+  }, [options]);
+
   const maxQuantity = activeVariant?.available ?? 99;
   const soldOut = activeVariant !== null && activeVariant.available === 0;
 
@@ -471,12 +486,37 @@ export function VariantPicker({
         {isBulk ? (
           <div className="mt-4 border border-[var(--border-subtle)]">
             <ul className="divide-y divide-[var(--border-subtle)]">
-              {lines.map((line) => (
+              {lines.map((line) => {
+                // What was actually chosen, spelled out: a queue of four reads
+                // as four prices unless each line says which colour it is.
+                const details = line.variant.optionValueIds
+                  .map((id) => valueById.get(id))
+                  .filter((detail) => detail !== undefined);
+                const swatch = details.find((detail) => detail.hexColor)?.hexColor ?? null;
+
+                return (
                 <li
                   key={line.variant.id}
                   className="flex items-center gap-3 px-3.5 py-2.5 text-[13.5px]"
                 >
-                  <span className="flex-1 truncate">{line.variant.title}</span>
+                  {swatch ? (
+                    <span
+                      aria-hidden
+                      className="h-4 w-4 shrink-0 rounded-full border border-[var(--border-strong)]"
+                      style={{ backgroundColor: swatch }}
+                    />
+                  ) : null}
+
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{line.variant.title}</span>
+                    {details.length > 0 ? (
+                      <span className="block truncate text-[11.5px] text-[var(--text-muted)]">
+                        {details
+                          .map((detail) => `${detail.optionName}: ${detail.value}`)
+                          .join(" · ")}
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="tabular-nums text-[var(--text-secondary)]">
                     {line.quantity} × {formatPrice(line.variant.price)}
                   </span>
@@ -498,7 +538,8 @@ export function VariantPicker({
                     <X className="h-3.5 w-3.5" aria-hidden />
                   </button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
 
             <div className="flex items-center justify-between border-t border-[var(--border-strong)] px-3.5 py-2.5 text-[13.5px]">

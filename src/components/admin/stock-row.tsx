@@ -71,6 +71,18 @@ export function StockRow({
 
   return (
     <tr className="hover:bg-[var(--surface-sunken)]">
+      {canWrite ? (
+        <td className="px-4 py-3">
+          <input
+            type="checkbox"
+            name="variantIds"
+            value={variantId}
+            className="accent-[var(--accent)]"
+            aria-label={`Select ${productTitle} ${sku}`}
+          />
+        </td>
+      ) : null}
+
       <td className="px-4 py-3">
         <Link href={`/admin/products/${productId}`} className="hover:underline">
           {productTitle}
