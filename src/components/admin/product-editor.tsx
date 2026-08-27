@@ -7,8 +7,10 @@ import {
   updateProductAction,
   updateVariantsAction,
   addOptionAction,
+  updateOptionAction,
   deleteOptionAction,
   addImageAction,
+  setImageOptionValueAction,
   deleteImageAction,
   moveImageAction,
   deleteProductAction,
@@ -322,6 +324,215 @@ function DetailsTab({
 
 // ---------------------------------------------------------------------------
 
+/** A value being edited. `id` is absent until it has been saved once. */
+type ValueRow = { key: string; id?: string; value: string; hex: string | null };
+
+/** What the colour input falls back to before a colour has been chosen. */
+const DEFAULT_SWATCH = "#8B7355";
+
+let rowSeq = 0;
+const nextKey = () => `row-${(rowSeq += 1)}`;
+
+/**
+ * One option, editable in place: rename it, retype its values, reorder them,
+ * give the colour ones a colour, add and remove.
+ *
+ * Values are edited rather than replaced wholesale because the value's id is
+ * what variants — and any image pinned to a colour — hang off. Retyping
+ * "Sea Blue" as "Ocean Blue" keeps the variants and their stock, and keeps the
+ * photograph attached; deleting and re-adding would lose both.
+ *
+ * The whole list posts as one JSON field. Per-row form names would have to
+ * encode the id, the colour and whether the row was new into the name itself,
+ * and reordering would then mean renaming the fields.
+ */
+function OptionEditor({
+  productId,
+  option,
+  onRemove,
+  removing,
+}: {
+  productId: string;
+  option: EditorProduct["options"][number];
+  onRemove: () => void;
+  removing: boolean;
+}) {
+  const [state, action, pending] = useActionState<AdminState | null, FormData>(
+    updateOptionAction.bind(null, productId, option.id),
+    null,
+  );
+
+  const [name, setName] = useState(option.name);
+  const [rows, setRows] = useState<ValueRow[]>(() =>
+    option.values.map((v) => ({ key: v.id, id: v.id, value: v.value, hex: v.hexColor })),
+  );
+
+  function patch(key: string, change: Partial<ValueRow>) {
+    setRows((current) => current.map((row) => (row.key === key ? { ...row, ...change } : row)));
+  }
+
+  function move(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= rows.length) return;
+    setRows((current) => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  const payload = JSON.stringify(
+    rows
+      .filter((row) => row.value.trim().length > 0)
+      .map((row) => ({ id: row.id, value: row.value.trim(), hex: row.hex })),
+  );
+
+  return (
+    <form
+      action={action}
+      className="rounded-(--radius-card) border border-[var(--border-subtle)] p-4"
+    >
+      <input type="hidden" name="values" value={payload} />
+
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <Field label="Option name" htmlFor={`name-${option.id}`} className="w-48">
+          <input
+            id={`name-${option.id}`}
+            name="optionName"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            className="lx-field py-1.5"
+          />
+        </Field>
+
+        <button
+          type="button"
+          disabled={removing}
+          onClick={onRemove}
+          className="mb-1 flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-danger disabled:opacity-50"
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+          Remove option
+        </button>
+      </div>
+
+      <ul className="mt-4 flex flex-col gap-2">
+        {rows.map((row, index) => (
+          <li key={row.key} className="flex flex-wrap items-center gap-2">
+            <span className="flex shrink-0 flex-col">
+              <button
+                type="button"
+                onClick={() => move(index, -1)}
+                disabled={index === 0}
+                className="rounded px-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-25"
+                aria-label={`Move ${row.value || "value"} up`}
+              >
+                <ArrowUp className="h-3 w-3" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => move(index, 1)}
+                disabled={index === rows.length - 1}
+                className="rounded px-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-25"
+                aria-label={`Move ${row.value || "value"} down`}
+              >
+                <ArrowDown className="h-3 w-3" aria-hidden />
+              </button>
+            </span>
+
+            {/* Free text, stored exactly as typed — "3ft" stays "3ft". */}
+            <input
+              value={row.value}
+              onChange={(event) => patch(row.key, { value: event.target.value })}
+              placeholder="Sea Blue"
+              aria-label="Value"
+              className="lx-field w-44 py-1.5"
+            />
+
+            {row.hex === null ? (
+              <button
+                type="button"
+                onClick={() => patch(row.key, { hex: DEFAULT_SWATCH })}
+                className="rounded-(--radius-card) border border-dashed border-[var(--border-strong)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              >
+                Add colour
+              </button>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <input
+                  type="color"
+                  value={row.hex}
+                  onChange={(event) => patch(row.key, { hex: event.target.value })}
+                  aria-label={`Colour for ${row.value || "value"}`}
+                  className="h-8 w-9 cursor-pointer rounded border border-[var(--border-subtle)] bg-transparent p-0.5"
+                />
+                {/* Typed as well as picked, so a brand hex can be pasted in. */}
+                <input
+                  value={row.hex}
+                  onChange={(event) => patch(row.key, { hex: event.target.value })}
+                  aria-label={`Colour code for ${row.value || "value"}`}
+                  spellCheck={false}
+                  className="lx-field w-24 py-1.5 font-mono text-xs uppercase"
+                />
+                <button
+                  type="button"
+                  onClick={() => patch(row.key, { hex: null })}
+                  className="rounded p-1 text-[var(--text-muted)] hover:text-danger"
+                  aria-label={`Remove the colour from ${row.value || "value"}`}
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setRows((current) => current.filter((r) => r.key !== row.key))}
+              disabled={rows.length === 1}
+              className="ml-auto rounded p-1.5 text-[var(--text-secondary)] hover:text-danger disabled:opacity-30"
+              aria-label={`Remove ${row.value || "value"}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() =>
+            setRows((current) => [...current, { key: nextKey(), value: "", hex: null }])
+          }
+          className="flex items-center gap-1.5 rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5 text-xs"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          Add value
+        </button>
+
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-(--radius-card) bg-[var(--accent)] px-4 py-1.5 text-xs text-[var(--accent-contrast)] disabled:opacity-50"
+        >
+          {pending ? "Saving…" : "Save option"}
+        </button>
+
+        {state?.message ? (
+          <span className={cn("text-xs", state.ok ? "text-success" : "text-danger")}>
+            {state.message}
+          </span>
+        ) : null}
+      </div>
+
+      <p className="mt-3 text-xs text-[var(--text-muted)]">
+        Values are stored exactly as typed, units and all. Adding or removing one rebuilds the
+        variant list; the ones that still apply keep their price and stock.
+      </p>
+    </form>
+  );
+}
+
 function VariantsTab({ product }: { product: EditorProduct }) {
   const [state, action, pending] = useActionState<AdminState | null, FormData>(
     updateVariantsAction.bind(null, product.id),
@@ -344,35 +555,22 @@ function VariantsTab({ product }: { product: EditorProduct }) {
         </p>
 
         {product.options.length > 0 ? (
-          <ul className="mb-5 flex flex-col gap-2">
+          <div className="mb-5 flex flex-col gap-3">
             {product.options.map((option) => (
-              <li
+              <OptionEditor
                 key={option.id}
-                className="flex items-center justify-between gap-4 rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-3"
-              >
-                <div>
-                  <p className="text-sm font-medium">{option.name}</p>
-                  <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                    {option.values.map((v) => v.value).join(", ")}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={removing}
-                  onClick={() => {
-                    if (!confirm(`Remove the ${option.name} option and rebuild variants?`)) return;
-                    startRemove(async () => {
-                      await deleteOptionAction(product.id, option.id);
-                    });
-                  }}
-                  className="text-[var(--text-secondary)] hover:text-danger"
-                  aria-label={`Remove ${option.name}`}
-                >
-                  <Trash2 className="h-4 w-4" aria-hidden />
-                </button>
-              </li>
+                productId={product.id}
+                option={option}
+                onRemove={() => {
+                  if (!confirm(`Remove the ${option.name} option and rebuild variants?`)) return;
+                  startRemove(async () => {
+                    await deleteOptionAction(product.id, option.id);
+                  });
+                }}
+                removing={removing}
+              />
             ))}
-          </ul>
+          </div>
         ) : null}
 
         <form action={optionAction} className="flex flex-wrap items-end gap-3">
@@ -792,10 +990,39 @@ function ImagesTab({ product }: { product: EditorProduct }) {
                 </div>
 
                 <div className="flex flex-col gap-2 p-3">
-                  {tiedTo ? (
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      {tiedTo.optionName}: {tiedTo.value}
-                    </p>
+                  {allValues.length > 0 ? (
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                        Shows for
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        {tiedTo?.hexColor ? (
+                          <span
+                            aria-hidden
+                            className="h-4 w-4 shrink-0 rounded-full border border-[var(--border-strong)]"
+                            style={{ backgroundColor: tiedTo.hexColor }}
+                          />
+                        ) : null}
+                        <select
+                          value={image.optionValueId ?? ""}
+                          disabled={busy}
+                          onChange={(event) => {
+                            const next = event.target.value || null;
+                            startBusy(async () => {
+                              await setImageOptionValueAction(product.id, image.id, next);
+                            });
+                          }}
+                          className="lx-field w-full py-1.5 text-xs"
+                        >
+                          <option value="">All variants</option>
+                          {allValues.map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {v.optionName}: {v.value}
+                            </option>
+                          ))}
+                        </select>
+                      </span>
+                    </label>
                   ) : (
                     <p className="text-xs text-[var(--text-muted)]">All variants</p>
                   )}

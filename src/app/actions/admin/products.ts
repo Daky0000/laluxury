@@ -322,6 +322,180 @@ export async function deleteOptionAction(
 }
 
 /**
+ * One row of an option's value list, as the editor submits it.
+ *
+ * `id` present means an existing value being edited; absent means a new one.
+ * Editing rather than replacing matters: the id is what variants, and the
+ * images pinned to a colour, are attached to. Retyping a value keeps both.
+ *
+ * `value` is free text and is stored exactly as typed. Sizes here are things
+ * like `3ft` and `2m · single or 2-in-one`, which any attempt to read as a
+ * number would flatten to `3` and `2`.
+ */
+const optionValueRowSchema = z.object({
+  id: z.string().optional(),
+  value: z.string().trim().min(1),
+  /** `#rgb` or `#rrggbb`; null for an option that is not a colour. */
+  hex: z
+    .string()
+    .trim()
+    .regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "Use a colour like #8B7355.")
+    .nullable(),
+});
+
+export async function updateOptionAction(
+  productId: string,
+  optionId: string,
+  _prev: AdminState | null,
+  formData: FormData,
+): Promise<AdminState> {
+  await requirePermission("products:write");
+
+  const name = String(formData.get("optionName") || "").trim();
+  if (!name) return fail("Name the option, e.g. Colour.");
+
+  let rows: z.infer<typeof optionValueRowSchema>[];
+  try {
+    rows = z.array(optionValueRowSchema).min(1).parse(JSON.parse(String(formData.get("values"))));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return fail(error.issues[0]?.message ?? "Check the values and try again.");
+    }
+    return fail("Add at least one value.");
+  }
+
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const key = row.value.toLowerCase();
+    if (seen.has(key)) return fail(`There are two values called ${row.value}.`);
+    seen.add(key);
+  }
+
+  const option = await db.productOption.findFirst({
+    where: { id: optionId, productId },
+    include: { values: { select: { id: true } } },
+  });
+  if (!option) return fail("That option no longer exists.");
+
+  if (name !== option.name) {
+    const clash = await db.productOption.findUnique({
+      where: { productId_name: { productId, name } },
+      select: { id: true },
+    });
+    if (clash) return fail(`This product already has an option called ${name}.`);
+  }
+
+  // An id is only an edit if it is one of this option's own values. Anything
+  // else — a stale row, an id pasted from another product — is created fresh
+  // rather than used to reach across into a record this form does not own.
+  const ownIds = new Set(option.values.map((v) => v.id));
+  const edits = rows.map((row) => ({
+    ...row,
+    id: row.id && ownIds.has(row.id) ? row.id : undefined,
+  }));
+
+  const keptIds = new Set(edits.map((row) => row.id).filter(Boolean) as string[]);
+  const dropped = option.values.filter((v) => !keptIds.has(v.id)).map((v) => v.id);
+
+  await db.$transaction(async (tx) => {
+    await tx.productOption.update({ where: { id: optionId }, data: { name } });
+
+    // Deleting a value cascades to the variant links that used it, leaving
+    // those variants to be cleaned up by the regeneration below.
+    if (dropped.length > 0) {
+      await tx.productOptionValue.deleteMany({ where: { id: { in: dropped } } });
+    }
+
+    for (const [position, row] of edits.entries()) {
+      if (row.id) {
+        await tx.productOptionValue.update({
+          where: { id: row.id },
+          data: { value: row.value, hexColor: row.hex, position },
+        });
+      } else {
+        await tx.productOptionValue.create({
+          data: { optionId, value: row.value, hexColor: row.hex, position },
+        });
+      }
+    }
+  });
+
+  await regenerateVariants(productId);
+  // Variant titles are stored, so renaming a value leaves them stale.
+  await refreshVariantTitles(productId);
+
+  revalidateProduct(productId);
+  return { ok: true, message: `Saved ${name}.` };
+}
+
+/**
+ * Points an image at an option value, or at nothing.
+ *
+ * An image tied to a value is shown when a shopper picks it, and takes over as
+ * the main image; one tied to nothing shows for every variant.
+ */
+export async function setImageOptionValueAction(
+  productId: string,
+  imageId: string,
+  optionValueId: string | null,
+): Promise<AdminState> {
+  await requirePermission("products:write");
+
+  // Confirm the value belongs to this product, so an id from another product
+  // cannot be pasted in to hide an image on every variant.
+  if (optionValueId) {
+    const value = await db.productOptionValue.findFirst({
+      where: { id: optionValueId, option: { productId } },
+      select: { id: true },
+    });
+    if (!value) return fail("That option value is not on this product.");
+  }
+
+  await db.productImage.updateMany({
+    where: { id: imageId, productId },
+    data: { optionValueId },
+  });
+
+  revalidateProduct(productId);
+  return { ok: true };
+}
+
+/**
+ * Rewrites every variant title from the option values it actually carries.
+ *
+ * The title is a stored label rather than a computed one, so it survives an
+ * option being deleted — but it also means renaming a value leaves every
+ * variant still spelling the old one.
+ */
+async function refreshVariantTitles(productId: string): Promise<void> {
+  const product = await db.product.findUnique({
+    where: { id: productId },
+    include: {
+      options: { orderBy: { position: "asc" }, select: { id: true } },
+      variants: {
+        include: { optionValues: { include: { optionValue: true } } },
+      },
+    },
+  });
+  if (!product) return;
+
+  const order = new Map(product.options.map((option, i) => [option.id, i]));
+
+  for (const variant of product.variants) {
+    const title =
+      variant.optionValues
+        .map((ov) => ov.optionValue)
+        .sort((a, b) => (order.get(a.optionId) ?? 0) - (order.get(b.optionId) ?? 0))
+        .map((value) => value.value)
+        .join(" / ") || "Default";
+
+    if (title !== variant.title) {
+      await db.variant.update({ where: { id: variant.id }, data: { title } });
+    }
+  }
+}
+
+/**
  * Builds the cartesian product of all option values and creates any variant
  * that does not exist yet. Existing variants keep their price and stock.
  */
