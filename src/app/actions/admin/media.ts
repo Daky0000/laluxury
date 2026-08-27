@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
-import { uploadImage, isCdnConfigured, UploadError } from "@/lib/cdn";
+import { uploadImage, UploadError } from "@/lib/cdn";
 import type { AdminState } from "./products";
 
 /**
@@ -19,14 +19,6 @@ export async function uploadProductImagesAction(
   formData: FormData,
 ): Promise<AdminState> {
   await requirePermission("products:write");
-
-  if (!(await isCdnConfigured())) {
-    return {
-      ok: false,
-      message:
-        "Uploading needs the image CDN. Add Cloudinary details under Settings → Integrations, or paste an image URL instead.",
-    };
-  }
 
   const files = formData.getAll("files").filter((entry): entry is File => entry instanceof File);
   const chosen = files.filter((file) => file.size > 0);
@@ -78,10 +70,6 @@ export async function uploadSettingImageAction(
   formData: FormData,
 ): Promise<AdminState & { url?: string }> {
   await requirePermission("settings:manage");
-
-  if (!(await isCdnConfigured())) {
-    return { ok: false, message: "Add Cloudinary details under Settings → Integrations first." };
-  }
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
