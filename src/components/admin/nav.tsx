@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Package,
+  Images,
   ShoppingCart,
   Boxes,
   Users,
@@ -23,6 +24,7 @@ const ICONS = {
   dashboard: LayoutDashboard,
   orders: ShoppingCart,
   products: Package,
+  media: Images,
   inventory: Boxes,
   customers: Users,
   discounts: Ticket,

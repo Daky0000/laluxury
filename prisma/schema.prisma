@@ -49,6 +49,7 @@ model User {
   auditLogs    AuditLog[]
   tokens       VerificationToken[]
   agentThreads AgentThread[]
+  mediaUploads MediaAsset[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -225,9 +226,15 @@ model ProductImage {
   optionValueId String?
   optionValue   ProductOptionValue? @relation(fields: [optionValueId], references: [id], onDelete: SetNull)
 
+  // The library asset this picture came from. Pasted links have none; the URL
+  // above stays the one that renders either way.
+  mediaId String?
+  media   MediaAsset? @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
 
   @@index([productId, position])
+  @@index([mediaId])
 }
 
 // e.g. "Size", "Colour", "Scent"
@@ -917,5 +924,60 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Media library
+// ---------------------------------------------------------------------------
+
+enum MediaSource {
+  DATABASE // bytes live in this row and are served from /api/media/<id>
+  CDN // uploaded to Cloudinary; `url` is the delivered asset
+  EXTERNAL // a link someone pasted; only the address is ours
+}
+
+/**
+ * Every picture the store has, in one place.
+ *
+ * Uploads used to be written to the container's public/ folder, which meant
+ * they were gone on the next deploy and were never served in production at
+ * all. Bytes now live in Postgres unless a CDN is configured, so an upload is
+ * visible in the console and on the storefront the moment it finishes and
+ * survives every deploy.
+ */
+model MediaAsset {
+  id       String      @id @default(cuid())
+  source   MediaSource @default(DATABASE)
+  /// What an <img> should point at: /api/media/<id>, or the CDN/external URL.
+  url      String
+  filename String
+  mimeType String      @default("image/jpeg")
+  alt      String?
+  /// Free-form grouping, e.g. "products" or "store".
+  folder   String      @default("products")
+  size     Int         @default(0)
+  width    Int         @default(0)
+  height   Int         @default(0)
+
+  /// The image itself, for DATABASE assets. Omitted from reads by default —
+  /// only /api/media/<id> selects it.
+  data Bytes?
+
+  /// Cloudinary public id, so deleting here also deletes there.
+  publicId String?
+
+  /// sha256 of the bytes. Uploading the same picture twice reuses the row.
+  checksum String? @unique
+
+  uploadedById String?
+  uploadedBy   User?   @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  productImages ProductImage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([folder, createdAt])
   @@index([createdAt])
 }

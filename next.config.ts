@@ -18,6 +18,13 @@ const nextConfig: NextConfig = {
     root: __dirname,
   },
 
+  // A single server action carries the whole upload, and the default cap is
+  // 1 MB — less than one photo off a phone. The media library refuses anything
+  // over 8 MB itself; the rest is multipart overhead.
+  experimental: {
+    serverActions: { bodySizeLimit: "12mb" },
+  },
+
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "res.cloudinary.com" },

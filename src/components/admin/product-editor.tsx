@@ -18,6 +18,8 @@ import {
   type AdminState,
 } from "@/app/actions/admin/products";
 import { uploadProductImagesAction } from "@/app/actions/admin/media";
+import { UPLOAD_ACCEPT } from "@/lib/media-format";
+import { MediaPicker } from "@/components/admin/media-picker";
 import { Card, Field, Alert, Badge } from "@/components/ui";
 import { toMajorUnits } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -733,8 +735,9 @@ function VariantsTab({ product }: { product: EditorProduct }) {
 /**
  * Upload straight from the machine you are on.
  *
- * Files go to the image CDN and only the delivered URL is stored — a container
- * filesystem would lose them on the next deploy.
+ * Every file lands in the media library first and is then hung on this
+ * product, so the same photo can be reused elsewhere without uploading it
+ * again — and so it is still there after the next deploy.
  */
 type Picked = { file: File; preview: string };
 
@@ -791,7 +794,12 @@ function UploadImages({
 
   return (
     <Card className="p-5">
-      <h3 className="lx-eyebrow mb-3">Upload photos</h3>
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <h3 className="lx-eyebrow">Upload photos</h3>
+        <span className="ml-auto">
+          <MediaPicker productId={product.id} optionValues={allValues} />
+        </span>
+      </div>
 
       {state?.message ? (
         <div className="mb-4">
@@ -803,7 +811,7 @@ function UploadImages({
         <input
           ref={inputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
+          accept={UPLOAD_ACCEPT}
           multiple
           className="sr-only"
           onChange={(event) => choose(event.target.files)}

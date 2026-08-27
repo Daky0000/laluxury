@@ -77,7 +77,7 @@ readiness on the admin dashboard, so the store boots and runs with just a databa
 | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET` | — | Agent in Slack |
 | `WHATSAPP_*` | — | Agent on WhatsApp |
 | `SMTP_*` | — | Transactional email |
-| `CLOUDINARY_*` | — | Image CDN |
+| `CLOUDINARY_*` | — | Optional image CDN; without it uploads are stored in Postgres |
 
 See `.env.example` for the full list with setup notes.
 
@@ -192,6 +192,15 @@ the database; the hero, the bundle banner and the section headings come from sto
 the edit grid; the badge on a tile is the product's `bestseller` / `new` / `luxe` / `deal`
 tag. Artwork lives in `public/catalog`, produced by `npm run catalog:images`.
 
+**Uploads live in the media library.** `/admin/media` is every picture the store owns:
+drag files in, search them, edit alt text, and reuse one photo across products from the
+editor's "Choose from library" picker. Bytes go into Postgres and are served from
+`/api/media/<id>` with a year-long immutable cache, so an upload is visible immediately and
+survives a deploy. Set the Cloudinary keys in `/admin/settings` → Integrations and new
+uploads go there instead; everything already in the library keeps working. Nothing is ever
+written to the container's filesystem — that was the old path, and it lost every upload on
+the next deploy.
+
 **Two kinds of picture, two pipelines.** `public/catalog/*.webp` is the commissioned
 storefront artwork — heroes, room tiles and stand-in product renders — fetched by
 `npm run catalog:images`. `public/catalog/products/*.webp` is photography of the real stock,
@@ -272,8 +281,6 @@ ranges match their variants, and that no password is stored in plain text.
   "Efie Home Storefront v2 Light". The other artboards (admin, archive, thank-you) are
   still on the earlier visual layer, which shares the same tokens in
   `src/app/globals.css`.
-- **Product images are URL-based.** Paste a hosted URL in the editor. Direct upload needs
-  the Cloudinary keys and an upload widget.
 - **Transactional email is wired but not sent.** SMTP config is read and reported; the
   send calls are not yet hooked into order confirmation.
 - **Reviews are collected and moderated but have no submission form** on the product page yet.

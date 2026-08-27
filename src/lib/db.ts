@@ -7,7 +7,7 @@ import { env } from "./env";
  * cached on globalThis so Next.js dev hot-reloads do not exhaust the pool.
  */
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
+  prisma: ReturnType<typeof createClient> | undefined;
 };
 
 function createClient() {
@@ -15,6 +15,9 @@ function createClient() {
   return new PrismaClient({
     adapter,
     log: env.isProduction() ? ["error"] : ["error", "warn"],
+    // Image bytes are megabytes each and are only ever wanted by the route
+    // that serves them, which asks for them explicitly.
+    omit: { mediaAsset: { data: true } },
   });
 }
 
