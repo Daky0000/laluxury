@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useRef, useState, useTransition } from "react";
+import { useActionState, useRef, useState, useTransition, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, Trash2, ArrowUp, ArrowDown, ExternalLink, Plus, Upload, X } from "lucide-react";
 import {
@@ -744,6 +745,7 @@ function UploadImages({
   product: EditorProduct;
   allValues: { id: string; value: string; optionName: string }[];
 }) {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [picked, setPicked] = useState<Picked[]>([]);
 
@@ -759,6 +761,7 @@ function UploadImages({
         for (const item of picked) URL.revokeObjectURL(item.preview);
         setPicked([]);
         if (inputRef.current) inputRef.current.value = "";
+        router.refresh();
       }
       return result;
     },
