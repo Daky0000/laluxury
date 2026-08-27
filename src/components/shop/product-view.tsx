@@ -78,6 +78,19 @@ export function ProductView({
   const safeIndex = Math.min(activeIndex, Math.max(0, visible.length - 1));
   const hero = visible[safeIndex];
 
+  /** The picture each option value is shown by, for the picker's swatches. */
+  const valueImages = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const image of images) {
+      // The first one wins: it is the same picture the gallery opens on when
+      // that value is chosen.
+      if (image.optionValueId && !map[image.optionValueId]) {
+        map[image.optionValueId] = image.url;
+      }
+    }
+    return map;
+  }, [images]);
+
   function selectValues(valueIds: string[]) {
     setSelectedValueIds(valueIds);
     // Back to the first picture of whatever is now on show.
@@ -150,6 +163,7 @@ export function ProductView({
           options={options}
           variants={variants}
           onSelectionChange={selectValues}
+          valueImages={valueImages}
           productId={productId}
           isSaved={isSaved}
           description={description}

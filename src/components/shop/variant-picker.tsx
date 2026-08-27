@@ -51,12 +51,15 @@ export function VariantPicker({
   options,
   variants,
   onSelectionChange,
+  valueImages,
   productId,
   isSaved,
   description,
 }: {
   options: PickerOption[];
   variants: PickerVariant[];
+  /** First photograph tied to each option value, keyed by value id. */
+  valueImages?: Record<string, string>;
   /** Every option value picked so far, so the gallery can follow along. */
   onSelectionChange?: (valueIds: string[]) => void;
   productId: string;
@@ -290,6 +293,10 @@ export function VariantPicker({
       {options.map((option) => {
         const isColour = option.values.some((v) => v.hexColor);
         const chosenValue = option.values.find((v) => v.id === selected[option.id]);
+        const hasThumbnails = option.values.some((value) => valueImages?.[value.id]);
+        // Ten patterns of a rug should not push the price and the bag button
+        // off the screen: past two rows the group scrolls in place.
+        const crowded = option.values.length > 8;
 
         return (
           <fieldset key={option.id} className="mt-7">
@@ -307,11 +314,20 @@ export function VariantPicker({
               )}
             </legend>
 
-            <div className="flex flex-wrap gap-3">
+            <div
+              className={cn(
+                "flex flex-wrap gap-3",
+                crowded && "overflow-y-auto pr-1",
+                crowded && (hasThumbnails ? "max-h-[268px]" : isColour ? "max-h-[112px]" : "max-h-[164px]"),
+              )}
+            >
               {option.values.map((value) => {
                 const isSelected = selected[option.id] === value.id;
                 const reachable = isReachable(option.id, value.id);
                 const valuePrice = priceOf(value.id);
+                // A value with its own photograph shows it: on a rug in ten
+                // patterns, "1" and "2" are not choices anyone can make.
+                const thumbnail = valueImages?.[value.id] ?? null;
 
                 return (
                   <button
@@ -323,8 +339,10 @@ export function VariantPicker({
                     className={cn(
                       "relative border transition-all",
                       isColour
-                        ? "h-11 w-11 rounded-full"
-                        : "flex min-w-[104px] flex-col items-center justify-center px-4 py-3",
+                        ? "h-11 w-11 overflow-hidden rounded-full bg-cover bg-center"
+                        : thumbnail
+                          ? "flex w-[104px] flex-col items-center justify-start overflow-hidden p-0"
+                          : "flex min-w-[104px] flex-col items-center justify-center px-4 py-3",
                       // The chosen value has to be obvious at a glance: a ring
                       // that clears the swatch, and a tick on top of it.
                       isSelected
@@ -333,15 +351,38 @@ export function VariantPicker({
                       isSelected && !isColour && "bg-[var(--surface-raised)]",
                       !reachable && "opacity-35",
                     )}
-                    style={isColour ? { backgroundColor: value.hexColor ?? undefined } : undefined}
+                    style={
+                      isColour
+                        ? {
+                            backgroundColor: value.hexColor ?? undefined,
+                            backgroundImage: thumbnail ? `url(${thumbnail})` : undefined,
+                          }
+                        : undefined
+                    }
                   >
                     {isColour ? (
                       <span className="sr-only">{value.value}</span>
                     ) : (
                       <>
-                        <span className="text-[13.5px] font-medium">{value.value}</span>
+                        {thumbnail ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={thumbnail}
+                            alt=""
+                            loading="lazy"
+                            className="h-[72px] w-full bg-[var(--surface-media)] object-cover"
+                          />
+                        ) : null}
+                        <span className={cn("text-[13.5px] font-medium", thumbnail && "mt-2")}>
+                          {value.value}
+                        </span>
                         {valuePrice !== null ? (
-                          <span className="mt-0.5 text-[11.5px] text-[var(--text-muted)] tabular-nums">
+                          <span
+                            className={cn(
+                              "mt-0.5 text-[11.5px] text-[var(--text-muted)] tabular-nums",
+                              thumbnail && "mb-2.5",
+                            )}
+                          >
                             {formatPrice(valuePrice)}
                           </span>
                         ) : null}
