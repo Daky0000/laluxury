@@ -1,9 +1,19 @@
 "use client";
 
-import { useActionState, useRef, useState, useTransition, useCallback } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Trash2, ArrowUp, ArrowDown, ExternalLink, Plus, Upload, X } from "lucide-react";
+import {
+  Loader2,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+  Check,
+  ExternalLink,
+  Plus,
+  Upload,
+  X,
+} from "lucide-react";
 import {
   updateProductAction,
   updateVariantsAction,
@@ -913,6 +923,150 @@ function UploadImages({
 }
 
 
+/**
+ * Hanging photographs on option values, one value at a time.
+ *
+ * The per-image dropdown further down is fine for a correction, but a rug in
+ * eight colours means eight passes through it. Here you pick the colour once
+ * and tick its photographs off a contact sheet — small tiles, four across, two
+ * rows deep, scrolled for the rest.
+ */
+function OptionImageAssigner({
+  product,
+  allValues,
+}: {
+  product: EditorProduct;
+  allValues: { id: string; value: string; optionName: string; hexColor: string | null }[];
+}) {
+  const [valueId, setValueId] = useState<string>(allValues[0]?.id ?? "");
+  const [busy, startBusy] = useTransition();
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const active = allValues.find((value) => value.id === valueId);
+  const assigned = product.images.filter((image) => image.optionValueId === valueId).length;
+
+  function assign(imageId: string, current: string | null) {
+    // A second click on a picture already tied to this value lets it go back
+    // to being shown for everything.
+    const next = current === valueId ? null : valueId;
+    setPendingId(imageId);
+    startBusy(async () => {
+      await setImageOptionValueAction(product.id, imageId, next);
+      setPendingId(null);
+    });
+  }
+
+  return (
+    <Card className="p-5">
+      <h3 className="lx-eyebrow mb-1.5">Show images for an option</h3>
+      <p className="mb-4 text-sm text-[var(--text-secondary)]">
+        Pick a value, then tick the photographs that belong to it. Anything left unticked shows
+        for every variant, and the gallery falls back to those when a value has none of its own.
+      </p>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {allValues.map((value) => {
+          const count = product.images.filter((image) => image.optionValueId === value.id).length;
+          const selected = value.id === valueId;
+
+          return (
+            <button
+              key={value.id}
+              type="button"
+              onClick={() => setValueId(value.id)}
+              aria-pressed={selected}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors",
+                selected
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]"
+                  : "border-[var(--border-subtle)] hover:bg-[var(--surface-sunken)]",
+              )}
+            >
+              {value.hexColor ? (
+                <span
+                  aria-hidden
+                  className="h-3.5 w-3.5 shrink-0 rounded-full border border-[var(--border-strong)]"
+                  style={{ backgroundColor: value.hexColor }}
+                />
+              ) : null}
+              <span className="text-[var(--text-muted)]">{value.optionName}</span>
+              <span className={selected ? "" : "text-[var(--text-primary)]"}>{value.value}</span>
+              {count > 0 ? <span className="tabular-nums">· {count}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {product.images.length === 0 ? (
+        <p className="text-sm text-[var(--text-muted)]">Upload some photographs first.</p>
+      ) : (
+        <>
+          <ul className="grid max-h-52 grid-cols-4 gap-2 overflow-y-auto pr-1">
+            {product.images.map((image) => {
+              const mine = image.optionValueId === valueId;
+              const other = allValues.find(
+                (value) => value.id === image.optionValueId && value.id !== valueId,
+              );
+
+              return (
+                <li key={image.id}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => assign(image.id, image.optionValueId)}
+                    aria-pressed={mine}
+                    title={
+                      mine
+                        ? `Shown for ${active?.value} — click to release`
+                        : other
+                          ? `Currently shown for ${other.value} — click to move it`
+                          : `Shown for every variant — click to tie it to ${active?.value ?? ""}`
+                    }
+                    className={cn(
+                      "relative block h-24 w-full overflow-hidden rounded-lg border-2 bg-[var(--surface-sunken)] transition-colors disabled:opacity-60",
+                      mine ? "border-[var(--accent)]" : "border-transparent hover:border-[var(--border-strong)]",
+                    )}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={image.url}
+                      alt={image.alt ?? ""}
+                      loading="lazy"
+                      className={cn("h-full w-full object-cover", !mine && other && "opacity-45")}
+                    />
+
+                    {pendingId === image.id ? (
+                      <span className="absolute inset-0 grid place-items-center bg-ink-900/40">
+                        <Loader2 className="h-4 w-4 animate-spin text-white" aria-hidden />
+                      </span>
+                    ) : mine ? (
+                      <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-[var(--accent)] text-[var(--accent-contrast)]">
+                        <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
+                      </span>
+                    ) : other ? (
+                      <span className="absolute inset-x-0 bottom-0 truncate bg-ink-900/70 px-1 py-0.5 text-[10px] text-white">
+                        {other.value}
+                      </span>
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          <p className="mt-3 text-xs text-[var(--text-muted)]">
+            {active
+              ? assigned === 0
+                ? `${active.value} has no photographs of its own yet — it shows the general ones.`
+                : `${assigned} photograph${assigned === 1 ? "" : "s"} show for ${active.value}.`
+              : null}
+          </p>
+        </>
+      )}
+    </Card>
+  );
+}
+
 function ImagesTab({ product }: { product: EditorProduct }) {
   const [state, action, pending] = useActionState<AdminState | null, FormData>(
     addImageAction.bind(null, product.id),
@@ -927,6 +1081,10 @@ function ImagesTab({ product }: { product: EditorProduct }) {
   return (
     <div className="flex flex-col gap-6">
       <UploadImages product={product} allValues={allValues} />
+
+      {allValues.length > 0 ? (
+        <OptionImageAssigner product={product} allValues={allValues} />
+      ) : null}
 
       <Card className="p-5">
         <h3 className="lx-eyebrow mb-3">Or paste a link</h3>

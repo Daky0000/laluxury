@@ -19,6 +19,10 @@ export type GalleryImage = {
  * choosing a colour swaps the gallery to that colour's photography. The static
  * copy around the picker arrives as slots from the server page, so the
  * description, perks and accordions are not shipped as client JavaScript.
+ *
+ * The gallery follows the option values picked, not the resolved variant: on a
+ * product with a colour and a size, picking the colour alone is already enough
+ * to know which photographs to show.
  */
 export function ProductView({
   images,
@@ -46,30 +50,37 @@ export function ProductView({
   /** Perks and the detail accordions. */
   footer: ReactNode;
 }) {
-  const [activeVariantId, setActiveVariantId] = useState<string | null>(
-    variants.find((v) => v.available === null || v.available > 0)?.id ?? variants[0]?.id ?? null,
-  );
+  const [selectedValueIds, setSelectedValueIds] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // Show only the images tied to the selected variant's option values, falling
-  // back to the unassigned images so a product without per-colour shots works.
+  /**
+   * Which photographs belong on screen.
+   *
+   * Nothing chosen shows the whole gallery, primary first. Once a value is
+   * chosen the gallery is that value's shots followed by the ones tied to no
+   * value in particular — and never another colour's, which was the bug that
+   * had one variant showing every picture and the next showing two.
+   */
   const visible = useMemo(() => {
-    const variant = variants.find((v) => v.id === activeVariantId);
-    if (!variant) return images;
+    if (selectedValueIds.length === 0) return images;
 
     const matching = images.filter(
-      (img) => img.optionValueId && variant.optionValueIds.includes(img.optionValueId),
+      (img) => img.optionValueId && selectedValueIds.includes(img.optionValueId),
     );
     const generic = images.filter((img) => !img.optionValueId);
 
-    return matching.length > 0 ? [...matching, ...generic] : images;
-  }, [activeVariantId, images, variants]);
+    if (matching.length > 0) return [...matching, ...generic];
+    // Nothing was assigned to this value: the general shots are the honest
+    // answer, and the full gallery only if there are none of those either.
+    return generic.length > 0 ? generic : images;
+  }, [images, selectedValueIds]);
 
   const safeIndex = Math.min(activeIndex, Math.max(0, visible.length - 1));
   const hero = visible[safeIndex];
 
-  function selectVariant(variantId: string) {
-    setActiveVariantId(variantId);
+  function selectValues(valueIds: string[]) {
+    setSelectedValueIds(valueIds);
+    // Back to the first picture of whatever is now on show.
     setActiveIndex(0);
   }
 
@@ -138,7 +149,7 @@ export function ProductView({
         <VariantPicker
           options={options}
           variants={variants}
-          onVariantChange={selectVariant}
+          onSelectionChange={selectValues}
           productId={productId}
           isSaved={isSaved}
           description={description}

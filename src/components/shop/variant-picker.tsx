@@ -17,6 +17,11 @@ import { cn } from "@/lib/utils";
  * The picker resolves a variant from the selected option values rather than
  * making the shopper pick a variant directly, and greys out combinations that
  * do not exist so they cannot select their way into a dead end.
+ *
+ * Nothing is chosen for the shopper. Landing on a preselected colour makes the
+ * page look decided, hides the price range and swaps the gallery to one
+ * variant's photography before anyone has asked for it — so the picker opens
+ * empty, shows what the range costs, and waits.
  */
 
 export type PickerOption = {
@@ -35,35 +40,33 @@ export type PickerVariant = {
   available: number | null;
 };
 
+/** "a colour", "a colour and a size" — read out in the order they are shown. */
+function listNames(names: string[]): string {
+  const lower = names.map((name) => `a ${name.toLowerCase()}`);
+  if (lower.length <= 1) return lower[0] ?? "an option";
+  return `${lower.slice(0, -1).join(", ")} and ${lower[lower.length - 1]}`;
+}
+
 export function VariantPicker({
   options,
   variants,
-  onVariantChange,
+  onSelectionChange,
   productId,
   isSaved,
   description,
 }: {
   options: PickerOption[];
   variants: PickerVariant[];
-  onVariantChange?: (variantId: string) => void;
+  /** Every option value picked so far, so the gallery can follow along. */
+  onSelectionChange?: (valueIds: string[]) => void;
   productId: string;
   isSaved: boolean;
   description?: ReactNode;
 }) {
   const router = useRouter();
 
-  // Start on the first variant that can actually be bought.
-  const initial = variants.find((v) => v.available === null || v.available > 0) ?? variants[0];
-
-  const [selected, setSelected] = useState<Record<string, string>>(() => {
-    const map: Record<string, string> = {};
-    if (!initial) return map;
-    for (const option of options) {
-      const match = option.values.find((v) => initial.optionValueIds.includes(v.id));
-      if (match) map[option.id] = match.id;
-    }
-    return map;
-  });
+  // Empty on purpose: the shopper chooses, we do not choose for them.
+  const [selected, setSelected] = useState<Record<string, string>>({});
 
   /**
    * How many of each variant the shopper has lined up, keyed by variant id.
@@ -112,13 +115,26 @@ export function VariantPicker({
     setError(null);
     setAdded(false);
     setSelected((prev) => {
-      const next = { ...prev, [optionId]: valueId };
-      const chosen = Object.values(next);
-      const match = variants.find((v) => chosen.every((id) => v.optionValueIds.includes(id)));
-      if (match) onVariantChange?.(match.id);
+      const next = { ...prev };
+      // Tapping the chosen value again clears it, which is the only way back
+      // to the full gallery and the range price.
+      if (next[optionId] === valueId) delete next[optionId];
+      else next[optionId] = valueId;
+
+      onSelectionChange?.(Object.values(next));
       return next;
     });
   }
+
+  /** What the range costs, shown until a variant is settled. */
+  const priceRange = useMemo(() => {
+    const prices = variants.map((v) => v.price);
+    if (prices.length === 0) return null;
+    return { min: Math.min(...prices), max: Math.max(...prices) };
+  }, [variants]);
+
+  /** Option groups still waiting on a choice, named as the shopper sees them. */
+  const awaiting = options.filter((option) => !selected[option.id]);
 
   const maxQuantity = activeVariant?.available ?? 99;
   const soldOut = activeVariant !== null && activeVariant.available === 0;
@@ -214,7 +230,13 @@ export function VariantPicker({
       {/* Price */}
       <div className="mt-5 flex flex-wrap items-baseline gap-3.5">
         <span className="font-display text-[38px] leading-none tabular-nums">
-          {activeVariant ? formatPrice(activeVariant.price) : "—"}
+          {activeVariant
+            ? formatPrice(activeVariant.price)
+            : priceRange
+              ? priceRange.min === priceRange.max
+                ? formatPrice(priceRange.min)
+                : `${formatPrice(priceRange.min)} – ${formatPrice(priceRange.max)}`
+              : "—"}
         </span>
         {saving > 0 && compareAt ? (
           <>
@@ -230,7 +252,11 @@ export function VariantPicker({
 
       {/* Stock line */}
       <p className="mt-2 text-[12.5px] font-medium">
-        {!activeVariant ? (
+        {!activeVariant && awaiting.length > 0 ? (
+          <span className="text-[var(--text-secondary)]">
+            Choose {listNames(awaiting.map((option) => option.name))} to see the price and stock.
+          </span>
+        ) : !activeVariant ? (
           <span className="text-[var(--text-secondary)]">
             That combination is not available — try another.
           </span>
@@ -255,11 +281,15 @@ export function VariantPicker({
             <legend className="mb-3 text-[11.5px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
               {option.name}
               {chosenValue ? (
-                <span className="normal-case tracking-normal text-[var(--text-primary)]">
+                <span className="font-medium normal-case tracking-normal text-[var(--text-primary)]">
                   {" — "}
                   {chosenValue.value}
                 </span>
-              ) : null}
+              ) : (
+                <span className="normal-case tracking-normal text-[var(--text-muted)]">
+                  {" — choose one"}
+                </span>
+              )}
             </legend>
 
             <div className="flex flex-wrap gap-3">
@@ -276,13 +306,16 @@ export function VariantPicker({
                     aria-pressed={isSelected}
                     title={reachable ? value.value : `${value.value} — unavailable`}
                     className={cn(
-                      "relative border transition-colors",
+                      "relative border transition-all",
                       isColour
                         ? "h-11 w-11 rounded-full"
                         : "flex min-w-[104px] flex-col items-center justify-center px-4 py-3",
+                      // The chosen value has to be obvious at a glance: a ring
+                      // that clears the swatch, and a tick on top of it.
                       isSelected
-                        ? "border-[var(--accent)] bg-[var(--surface-raised)]"
+                        ? "border-[var(--accent)] ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--surface)]"
                         : "border-[var(--border-strong)] hover:border-[var(--text-muted)]",
+                      isSelected && !isColour && "bg-[var(--surface-raised)]",
                       !reachable && "opacity-35",
                     )}
                     style={isColour ? { backgroundColor: value.hexColor ?? undefined } : undefined}
@@ -299,6 +332,27 @@ export function VariantPicker({
                         ) : null}
                       </>
                     )}
+
+                    {isSelected ? (
+                      isColour ? (
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute inset-0 grid place-items-center"
+                        >
+                          <Check
+                            className="h-4 w-4 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]"
+                            strokeWidth={3}
+                          />
+                        </span>
+                      ) : (
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full bg-[var(--accent)] text-[var(--accent-contrast)]"
+                        >
+                          <Check className="h-3 w-3" strokeWidth={3} />
+                        </span>
+                      )
+                    ) : null}
                     {!reachable ? (
                       <span
                         aria-hidden
