@@ -135,7 +135,7 @@ export default async function AdminCustomersPage({ searchParams }: PageProps<"/a
                         {customer.tags.map((tag) => (
                           <span
                             key={tag.id}
-                            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+                            className="rounded-full px-2 py-0.5 text-sm font-medium text-white"
                             style={{ backgroundColor: tag.color }}
                           >
                             {tag.name}

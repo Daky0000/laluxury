@@ -215,12 +215,12 @@ export function MediaPicker({
                           />
 
                           {picked ? (
-                            <span className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-[var(--accent)] text-[11px] font-semibold text-[var(--accent-contrast)]">
+                            <span className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-[var(--accent)] text-sm font-semibold text-[var(--accent-contrast)]">
                               {index + 1}
                             </span>
                           ) : null}
 
-                          <span className="absolute inset-x-0 bottom-0 truncate bg-ink-900/70 px-1.5 py-0.5 text-left text-[10px] text-white">
+                          <span className="absolute inset-x-0 bottom-0 truncate bg-ink-900/70 px-1.5 py-0.5 text-left text-sm text-white">
                             {asset.filename}
                           </span>
                         </button>

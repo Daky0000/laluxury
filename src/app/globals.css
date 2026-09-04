@@ -53,6 +53,13 @@
   --font-display: var(--font-display), Georgia, "Times New Roman", serif;
   --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, sans-serif;
 
+  /* 14px is the floor for type anywhere in the app, storefront and console
+     alike: below that a price, a stock count or an order reference is a squint
+     on a phone. `text-xs` is redefined rather than removed so the smallest step
+     the utilities can reach is still the floor, whoever reaches for it. */
+  --text-xs: 0.875rem;
+  --text-xs--line-height: calc(1.25 / 0.875);
+
   --radius-card: 0px;
 }
 

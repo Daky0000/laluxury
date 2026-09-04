@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Dashboard" };
 
 const cardTitle = "text-sm font-semibold";
 const tableHead =
-  "border-b border-[var(--border-subtle)] px-2 py-2.5 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]";
+  "border-b border-[var(--border-subtle)] px-2 py-2.5 text-left text-sm font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]";
 
 export default async function AdminDashboard() {
   await requirePermission("dashboard:view");
@@ -115,7 +115,7 @@ export default async function AdminDashboard() {
         <Card className="px-6 py-5.5">
           <div className="mb-5 flex items-center justify-between gap-4">
             <h2 className={cardTitle}>Revenue · last 30 days</h2>
-            <span className="text-[13px] font-semibold text-sage-600 tabular-nums">
+            <span className="text-sm font-semibold text-sage-600 tabular-nums">
               {formatMoney(metrics.revenue)} total
             </span>
           </div>
@@ -136,12 +136,12 @@ export default async function AdminDashboard() {
                     {index + 1}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px]">{product.title}</span>
-                    <span className="text-[11.5px] text-[var(--text-muted)]">
+                    <span className="block truncate text-sm">{product.title}</span>
+                    <span className="text-sm text-[var(--text-muted)]">
                       {product.units} sold
                     </span>
                   </span>
-                  <span className="text-[13.5px] font-medium tabular-nums">
+                  <span className="text-sm font-medium tabular-nums">
                     {formatMoney(product.revenue)}
                   </span>
                 </li>
@@ -155,7 +155,7 @@ export default async function AdminDashboard() {
       <Card className="px-6 py-5.5">
         <div className="mb-2 flex items-center justify-between gap-4">
           <h2 className={cardTitle}>Recent orders</h2>
-          <Link href="/admin/orders" className="text-[12.5px] text-[var(--accent)]">
+          <Link href="/admin/orders" className="text-sm text-[var(--accent)]">
             View all →
           </Link>
         </div>
@@ -186,23 +186,23 @@ export default async function AdminDashboard() {
                       <td className="px-2 py-3">
                         <Link
                           href={`/admin/orders/${order.id}`}
-                          className="text-[13px] font-medium text-[var(--accent)] underline underline-offset-4"
+                          className="text-sm font-medium text-[var(--accent)] underline underline-offset-4"
                         >
                           {order.orderNumber}
                         </Link>
                       </td>
-                      <td className="px-2 py-3 text-[13px] text-[var(--text-secondary)]">
+                      <td className="px-2 py-3 text-sm text-[var(--text-secondary)]">
                         {who}
                         {address?.city ? (
-                          <span className="block text-[11.5px] text-[var(--text-muted)]">
+                          <span className="block text-sm text-[var(--text-muted)]">
                             {address.city}
                           </span>
                         ) : null}
                       </td>
-                      <td className="px-2 py-3 text-[13px] text-[var(--text-muted)]">
+                      <td className="px-2 py-3 text-sm text-[var(--text-muted)]">
                         {relativeTime(order.placedAt)}
                       </td>
-                      <td className="px-2 py-3 text-[13px] tabular-nums">
+                      <td className="px-2 py-3 text-sm tabular-nums">
                         {formatMoney(order.total)}
                       </td>
                       <td className="px-2 py-3">
@@ -222,7 +222,7 @@ export default async function AdminDashboard() {
         <Card className="px-6 py-5.5">
           <div className="mb-4 flex items-center justify-between gap-4">
             <h2 className={cardTitle}>Low stock</h2>
-            <Link href="/admin/inventory" className="text-[12.5px] text-[var(--accent)]">
+            <Link href="/admin/inventory" className="text-sm text-[var(--accent)]">
               Manage inventory →
             </Link>
           </div>
@@ -237,8 +237,8 @@ export default async function AdminDashboard() {
               {lowStock.map((item) => (
                 <li key={item.inventoryItemId} className="flex items-center gap-3 py-2.5">
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px]">{item.productTitle}</span>
-                    <span className="block font-mono text-[11.5px] text-[var(--text-muted)]">
+                    <span className="block truncate text-sm">{item.productTitle}</span>
+                    <span className="block font-mono text-sm text-[var(--text-muted)]">
                       {item.sku}
                     </span>
                   </span>
@@ -255,7 +255,7 @@ export default async function AdminDashboard() {
           <h2 className={cardTitle}>Integrations</h2>
           <ul className="mt-4 grid gap-2.5 sm:grid-cols-2">
             {integrations.map((integration) => (
-              <li key={integration.key} className="flex items-center gap-2 text-[13.5px]">
+              <li key={integration.key} className="flex items-center gap-2 text-sm">
                 {integration.ready ? (
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-sage-600" aria-hidden />
                 ) : (

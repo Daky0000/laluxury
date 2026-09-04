@@ -75,7 +75,7 @@ export function DeliveryManager({ zones }: { zones: ZoneView[] }) {
         <button
           type="button"
           onClick={() => setAddingZone(true)}
-          className="inline-flex w-fit items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-[12.5px] text-white transition-colors hover:bg-[var(--accent-hover)]"
+          className="inline-flex w-fit items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm text-white transition-colors hover:bg-[var(--accent-hover)]"
         >
           <Plus className="h-4 w-4" aria-hidden />
           Add zone
@@ -101,7 +101,7 @@ function ZoneCard({ zone }: { zone: ZoneView }) {
               {zone.isActive ? "active" : "off"}
             </Badge>
           </h3>
-          <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
             {zone.regions.length > 0
               ? zone.regions.join(", ")
               : "Catch-all — anywhere not covered by another zone"}
@@ -144,7 +144,7 @@ function ZoneCard({ zone }: { zone: ZoneView }) {
       {/* Rates */}
       <div className="flex flex-col gap-2">
         {zone.rates.length === 0 ? (
-          <p className="text-[13px] text-[var(--text-muted)]">
+          <p className="text-sm text-[var(--text-muted)]">
             No rates yet — this zone will not appear at checkout until it has one.
           </p>
         ) : (
@@ -159,7 +159,7 @@ function ZoneCard({ zone }: { zone: ZoneView }) {
           <button
             type="button"
             onClick={() => setAddingRate(true)}
-            className="inline-flex w-fit items-center gap-1.5 text-[12.5px] text-[var(--accent)]"
+            className="inline-flex w-fit items-center gap-1.5 text-sm text-[var(--accent)]"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden />
             Add rate
@@ -277,7 +277,7 @@ function ZoneForm({ zone, onDone }: { zone?: ZoneView; onDone: () => void }) {
         </legend>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
           {GHANA_REGIONS.map((region) => (
-            <label key={region} className="flex items-center gap-2 text-[13px]">
+            <label key={region} className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 name="regions"
@@ -295,12 +295,12 @@ function ZoneForm({ zone, onDone }: { zone?: ZoneView; onDone: () => void }) {
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-[12.5px] text-white disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm text-white disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
           {zone ? "Save zone" : "Create zone"}
         </button>
-        <button type="button" onClick={onDone} className="text-[12.5px] text-[var(--text-secondary)]">
+        <button type="button" onClick={onDone} className="text-sm text-[var(--text-secondary)]">
           Cancel
         </button>
       </div>
@@ -417,12 +417,12 @@ function RateForm({
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-[12.5px] text-white disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm text-white disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
           {rate ? "Save rate" : "Add rate"}
         </button>
-        <button type="button" onClick={onDone} className="text-[12.5px] text-[var(--text-secondary)]">
+        <button type="button" onClick={onDone} className="text-sm text-[var(--text-secondary)]">
           Cancel
         </button>
       </div>

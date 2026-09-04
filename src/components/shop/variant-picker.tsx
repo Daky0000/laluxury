@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { useId, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Heart, Loader2, X } from "lucide-react";
 import { bulkAddToCartAction, buyNowAction } from "@/app/actions/cart";
@@ -47,6 +47,30 @@ function listNames(names: string[]): string {
   return `${lower.slice(0, -1).join(", ")} and ${lower[lower.length - 1]}`;
 }
 
+/**
+ * Why a call to action will not fire, said on hover and on focus.
+ *
+ * A greyed-out button with nothing to explain it is how a product page loses a
+ * sale: the shopper cannot tell whether the piece is sold out or whether they
+ * simply have not picked a size yet. So the buttons stay hoverable, name the
+ * choice that is missing, and repeat it in the error line if clicked anyway.
+ */
+function BlockedHint({ id, reason }: { id: string; reason: string }) {
+  return (
+    <span
+      id={id}
+      role="tooltip"
+      className="pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 z-20 w-max max-w-[240px] -translate-x-1/2 bg-[var(--text-primary)] px-3 py-2 text-sm font-normal normal-case leading-snug tracking-normal text-[var(--surface-raised)] opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+    >
+      {reason}
+      <span
+        aria-hidden
+        className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 bg-[var(--text-primary)]"
+      />
+    </span>
+  );
+}
+
 export function VariantPicker({
   options,
   variants,
@@ -67,6 +91,7 @@ export function VariantPicker({
   description?: ReactNode;
 }) {
   const router = useRouter();
+  const hintId = useId();
 
   // Empty on purpose: the shopper chooses, we do not choose for them.
   const [selected, setSelected] = useState<Record<string, string>>({});
@@ -191,11 +216,29 @@ export function VariantPicker({
     ? compareAt - activeVariant.price
     : 0;
 
+  /**
+   * What stands between the shopper and a purchase, in the order they meet it:
+   * the options still unchosen -- named, so it reads "Choose a size" and never
+   * "Choose an option" -- then a combination nobody stocks, then no stock.
+   */
+  const blockedFromBuying =
+    awaiting.length > 0
+      ? `Choose ${listNames(awaiting.map((option) => option.name))} first.`
+      : !activeVariant
+        ? "That combination is not available - try another."
+        : soldOut
+          ? "This one is out of stock."
+          : null;
+
+  /** The bag also needs a quantity, which quick order takes as one. */
+  const blockedFromBag =
+    lines.length > 0
+      ? null
+      : (blockedFromBuying ?? "Set a quantity - tap + or type a number.");
+
   function add() {
-    if (lines.length === 0) {
-      setError(
-        activeVariant ? "Set a quantity first." : "Choose an option first.",
-      );
+    if (blockedFromBag) {
+      setError(blockedFromBag);
       return;
     }
     setError(null);
@@ -219,14 +262,15 @@ export function VariantPicker({
 
   /** Quick order: straight from here to the payment screen. */
   function buyNow() {
-    if (!activeVariant) {
-      setError("Choose an option first.");
+    if (blockedFromBuying || !activeVariant) {
+      setError(blockedFromBuying ?? "Choose an option first.");
       return;
     }
+    const variant = activeVariant;
     setError(null);
     startBuying(async () => {
       // On success this redirects, so anything returned is a failure.
-      const result = await buyNowAction(activeVariant.id, Math.max(1, quantity));
+      const result = await buyNowAction(variant.id, Math.max(1, quantity));
       if (result && !result.ok) setError(result.message ?? "Could not start that order.");
     });
   }
@@ -478,22 +522,37 @@ export function VariantPicker({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={add}
-            disabled={pending || lines.length === 0}
-            className="flex flex-1 items-center justify-center gap-2 bg-[var(--accent)] px-6 py-4 text-sm font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
-          >
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            {added ? <Check className="h-4 w-4" aria-hidden /> : null}
-            {added
-              ? "Added to bag"
-              : soldOut && lines.length === 0
-                ? "Out of stock"
-                : isBulk
-                  ? `Add bulk to bag · ${totalItems}`
-                  : "Add to bag"}
-          </button>
+          {/* Blocked rather than disabled: a disabled button swallows the
+              hover, and with it the one explanation the shopper needs. */}
+          <div className="group relative flex flex-1">
+            <button
+              type="button"
+              onClick={add}
+              disabled={pending}
+              aria-disabled={blockedFromBag !== null}
+              aria-describedby={blockedFromBag ? `${hintId}-bag` : undefined}
+              className={cn(
+                "flex w-full items-center justify-center gap-2 bg-[var(--accent)] px-6 py-4 text-sm font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors",
+                blockedFromBag
+                  ? "cursor-not-allowed opacity-50"
+                  : "hover:bg-[var(--accent-hover)]",
+                pending && "opacity-50",
+              )}
+            >
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+              {added ? <Check className="h-4 w-4" aria-hidden /> : null}
+              {added
+                ? "Added to bag"
+                : soldOut && lines.length === 0
+                  ? "Out of stock"
+                  : isBulk
+                    ? `Add bulk to bag · ${totalItems}`
+                    : "Add to bag"}
+            </button>
+            {blockedFromBag ? (
+              <BlockedHint id={`${hintId}-bag`} reason={blockedFromBag} />
+            ) : null}
+          </div>
 
           <button
             type="button"
@@ -594,15 +653,28 @@ export function VariantPicker({
       </div>
 
       {/* Quick order — skips the bag for a shopper who has already decided. */}
-      <button
-        type="button"
-        onClick={buyNow}
-        disabled={buying || pending || soldOut || !activeVariant}
-        className="mt-3 flex w-full items-center justify-center gap-2 border border-[var(--text-primary)] px-6 py-4 text-sm font-medium uppercase tracking-[0.14em] transition-colors hover:bg-[var(--text-primary)] hover:text-[var(--surface-raised)] disabled:opacity-40"
-      >
-        {buying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-        Buy it now
-      </button>
+      <div className="group relative mt-3 flex">
+        <button
+          type="button"
+          onClick={buyNow}
+          disabled={buying || pending}
+          aria-disabled={blockedFromBuying !== null}
+          aria-describedby={blockedFromBuying ? `${hintId}-buy` : undefined}
+          className={cn(
+            "flex w-full items-center justify-center gap-2 border border-[var(--text-primary)] px-6 py-4 text-sm font-medium uppercase tracking-[0.14em] transition-colors",
+            blockedFromBuying
+              ? "cursor-not-allowed opacity-40"
+              : "hover:bg-[var(--text-primary)] hover:text-[var(--surface-raised)]",
+            (buying || pending) && "opacity-40",
+          )}
+        >
+          {buying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+          Buy it now
+        </button>
+        {blockedFromBuying ? (
+          <BlockedHint id={`${hintId}-buy`} reason={blockedFromBuying} />
+        ) : null}
+      </div>
 
       {activeVariant ? (
         <p className="mt-3 text-sm text-[var(--text-muted)]">SKU {activeVariant.sku}</p>

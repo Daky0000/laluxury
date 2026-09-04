@@ -65,7 +65,7 @@ export default async function AdminSettingsPage() {
           <h2 className="text-sm font-semibold">Delivery zones and rates</h2>
           <Link
             href="/admin/settings/delivery"
-            className="inline-flex items-center gap-1.5 text-[12.5px] text-[var(--accent)]"
+            className="inline-flex items-center gap-1.5 text-sm text-[var(--accent)]"
           >
             Manage delivery <ArrowRight className="h-3.5 w-3.5" aria-hidden />
           </Link>

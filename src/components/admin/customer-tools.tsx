@@ -32,7 +32,7 @@ export function AddCustomerPanel() {
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-[12.5px] text-white transition-colors hover:bg-[var(--accent-hover)]"
+          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm text-white transition-colors hover:bg-[var(--accent-hover)]"
         >
           {open ? <X className="h-4 w-4" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
           {open ? "Close" : "Add customer"}
@@ -81,7 +81,7 @@ export function AddCustomerPanel() {
             <button
               type="submit"
               disabled={pending}
-              className="inline-flex w-fit items-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-3 text-[12.5px] text-white disabled:opacity-60"
+              className="inline-flex w-fit items-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-3 text-sm text-white disabled:opacity-60"
             >
               {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
               Add customer

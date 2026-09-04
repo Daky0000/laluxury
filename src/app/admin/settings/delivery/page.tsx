@@ -20,7 +20,7 @@ export default async function AdminDeliveryPage() {
     <div className="flex flex-col gap-6">
       <Link
         href="/admin/settings"
-        className="inline-flex w-fit items-center gap-1.5 text-[12.5px] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+        className="inline-flex w-fit items-center gap-1.5 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
       >
         <ChevronLeft className="h-4 w-4" aria-hidden />
         Settings

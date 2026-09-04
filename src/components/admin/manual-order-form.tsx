@@ -37,7 +37,7 @@ export function ManualOrderPanel({ variants }: { variants: SellableVariant[] }) 
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex w-fit items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-[12.5px] text-white transition-colors hover:bg-[var(--accent-hover)]"
+        className="inline-flex w-fit items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm text-white transition-colors hover:bg-[var(--accent-hover)]"
       >
         {open ? <X className="h-4 w-4" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
         {open ? "Close" : "New order"}
@@ -48,7 +48,7 @@ export function ManualOrderPanel({ variants }: { variants: SellableVariant[] }) 
           <ManualOrderForm variants={variants} onDone={() => setOpen(false)} />
         </Card>
       ) : (
-        <p className="text-[13px] text-[var(--text-secondary)]">
+        <p className="text-sm text-[var(--text-secondary)]">
           For business that arrives over WhatsApp, by phone or across the counter. Orders raised
           here behave exactly as checkout orders do, and attach to the customer automatically when
           their email already has an account.
@@ -134,7 +134,7 @@ function ManualOrderForm({
           <button
             type="button"
             onClick={addLine}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] px-4 py-2.5 text-[12.5px] transition-colors hover:bg-[var(--surface-sunken)]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] px-4 py-2.5 text-sm transition-colors hover:bg-[var(--surface-sunken)]"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden />
             Add line
@@ -142,7 +142,7 @@ function ManualOrderForm({
         </div>
 
         {lines.length === 0 ? (
-          <p className="text-[13px] text-[var(--text-muted)]">No lines yet.</p>
+          <p className="text-sm text-[var(--text-muted)]">No lines yet.</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
             {lines.map((line) => {
@@ -278,12 +278,12 @@ function ManualOrderForm({
         <button
           type="submit"
           disabled={pending || lines.length === 0}
-          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-3 text-[12.5px] text-white disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-3 text-sm text-white disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
           Create order
         </button>
-        <button type="button" onClick={onDone} className="text-[12.5px] text-[var(--text-secondary)]">
+        <button type="button" onClick={onDone} className="text-sm text-[var(--text-secondary)]">
           Cancel
         </button>
       </div>

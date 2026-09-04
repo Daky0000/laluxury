@@ -52,7 +52,7 @@ export function AdminTopbar() {
                 name="q"
                 type="search"
                 placeholder="Search…"
-                className="w-full min-w-0 bg-transparent text-[13px] outline-none placeholder:text-[var(--text-muted)]"
+                className="w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-[var(--text-muted)]"
               />
               <button type="submit" className="sr-only">
                 Search

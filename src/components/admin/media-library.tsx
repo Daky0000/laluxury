@@ -138,7 +138,7 @@ export function MediaUploader({
                 >
                   <X className="h-3.5 w-3.5" aria-hidden />
                 </button>
-                <span className="absolute inset-x-0 bottom-0 truncate bg-ink-900/70 px-1.5 py-0.5 text-[10px] text-white">
+                <span className="absolute inset-x-0 bottom-0 truncate bg-ink-900/70 px-1.5 py-0.5 text-sm text-white">
                   {item.file.name}
                 </span>
               </li>
@@ -315,7 +315,7 @@ function MediaCard({ asset }: { asset: MediaListItem }) {
           {asset.filename}
         </p>
 
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
+        <div className="flex flex-wrap items-center gap-1.5 text-sm text-[var(--text-muted)]">
           <Badge tone={asset.source === "EXTERNAL" ? "neutral" : "info"}>
             {SOURCE_LABEL[asset.source] ?? asset.source}
           </Badge>
@@ -324,7 +324,7 @@ function MediaCard({ asset }: { asset: MediaListItem }) {
           {asset.size ? <span>· {humanSize(asset.size)}</span> : null}
         </div>
 
-        <p className="text-[11px] text-[var(--text-muted)]">
+        <p className="text-sm text-[var(--text-muted)]">
           {asset.usedBy === 0
             ? "Not used yet"
             : `Used on ${asset.usedBy} product image${asset.usedBy === 1 ? "" : "s"}`}

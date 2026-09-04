@@ -958,7 +958,7 @@ function UploadImages({
                   >
                     <X className="h-3.5 w-3.5" aria-hidden />
                   </button>
-                  <span className="absolute inset-x-0 bottom-0 truncate bg-ink-900/70 px-1.5 py-0.5 text-[10px] text-white">
+                  <span className="absolute inset-x-0 bottom-0 truncate bg-ink-900/70 px-1.5 py-0.5 text-sm text-white">
                     {item.file.name}
                   </span>
                 </li>
@@ -1145,7 +1145,7 @@ function OptionImageAssigner({
                         <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
                       </span>
                     ) : other ? (
-                      <span className="absolute inset-x-0 bottom-0 truncate bg-ink-900/70 px-1 py-0.5 text-[10px] text-white">
+                      <span className="absolute inset-x-0 bottom-0 truncate bg-ink-900/70 px-1 py-0.5 text-sm text-white">
                         {other.value}
                       </span>
                     ) : null}
@@ -1262,7 +1262,7 @@ function ImagesTab({ product }: { product: EditorProduct }) {
                 <div className="flex flex-col gap-2 p-3">
                   {allValues.length > 0 ? (
                     <label className="flex flex-col gap-1">
-                      <span className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                      <span className="text-sm uppercase tracking-[0.12em] text-[var(--text-muted)]">
                         Shows for
                       </span>
                       <span className="flex items-center gap-1.5">

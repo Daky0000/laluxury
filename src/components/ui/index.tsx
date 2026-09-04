@@ -83,7 +83,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-sm font-medium",
         badgeTones[tone],
         className,
       )}
@@ -242,13 +242,13 @@ export function Stat({
   return (
     <Card className="px-5 py-5">
       <div className="flex items-start justify-between gap-3">
-        <span className="text-[11.5px] uppercase tracking-[0.1em] text-[var(--text-muted)]">
+        <span className="text-sm uppercase tracking-[0.1em] text-[var(--text-muted)]">
           {label}
         </span>
         {delta ? (
           <span
             className={cn(
-              "text-[11.5px] font-semibold tabular-nums",
+              "text-sm font-semibold tabular-nums",
               delta.positive ? "text-sage-600" : "text-[var(--accent)]",
             )}
           >

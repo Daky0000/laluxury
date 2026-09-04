@@ -46,7 +46,7 @@ export function IntegrationsForm({ groups }: { groups: IntegrationGroup[] }) {
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-3 text-[12.5px] tracking-[0.04em] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-3 text-sm tracking-[0.04em] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
           Save changes
@@ -77,7 +77,7 @@ function GroupCard({ group }: { group: IntegrationGroup }) {
               {group.ready ? "live" : "not set"}
             </Badge>
           </h3>
-          <p className="mt-1 text-[13px] text-[var(--text-secondary)]">{group.description}</p>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">{group.description}</p>
         </div>
 
         <button
@@ -95,7 +95,7 @@ function GroupCard({ group }: { group: IntegrationGroup }) {
         <p
           role="status"
           className={cn(
-            "flex items-start gap-2 text-[13px]",
+            "flex items-start gap-2 text-sm",
             result.ok ? "text-sage-600" : "text-danger",
           )}
         >
@@ -153,7 +153,7 @@ function PaystackModeField({ value }: { value: string }) {
         <option value="live">Live — real money</option>
         <option value="test">Test — nothing is charged</option>
       </select>
-      <span className={cn("text-[11.5px]", mode === "test" && "text-warning")}>
+      <span className={cn("text-sm", mode === "test" && "text-warning")}>
         {mode === "test"
           ? "Checkout will use the test keys below. Orders complete, but no money moves."
           : "Checkout will use the live keys below."}
@@ -175,7 +175,7 @@ function ProviderField({ value }: { value: string }) {
         <option value="anthropic">Claude — direct from Anthropic</option>
         <option value="openrouter">OpenRouter — any model, including Ox Alpha</option>
       </select>
-      <span className="text-[11.5px]">
+      <span className="text-sm">
         Whichever you pick, fill in that provider&rsquo;s key below. The other can stay set as a
         spare.
       </span>
@@ -218,7 +218,7 @@ function FieldRow({
                 if (result.ok) setCleared(true);
               })
             }
-            className="text-[11px] text-[var(--accent)] underline underline-offset-2 disabled:opacity-50"
+            className="text-sm text-[var(--accent)] underline underline-offset-2 disabled:opacity-50"
           >
             Clear
           </button>
@@ -241,7 +241,7 @@ function FieldRow({
                   : "Not set"
               : undefined
           }
-          className="lx-field rounded-lg pr-10 font-mono text-[13px]"
+          className="lx-field rounded-lg pr-10 font-mono text-sm"
         />
         {secret ? (
           <button
@@ -255,7 +255,7 @@ function FieldRow({
         ) : null}
       </span>
 
-      {hint ? <span className="text-[11.5px]">{hint}</span> : null}
+      {hint ? <span className="text-sm">{hint}</span> : null}
     </label>
   );
 }

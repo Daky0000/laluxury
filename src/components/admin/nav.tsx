@@ -62,7 +62,7 @@ export function AdminNav({
         <Link href="/admin" className="font-display text-[26px] font-medium uppercase leading-none tracking-[0.16em] text-[#f5f4ef]">
           LaLuxury
         </Link>
-        <span className="mt-1 text-[8.5px] uppercase tracking-[0.34em] text-[#85827a]">
+        <span className="mt-1 text-sm uppercase tracking-[0.34em] text-[#85827a]">
           Admin console
         </span>
       </div>
@@ -79,7 +79,7 @@ export function AdminNav({
                 onClick={() => setOpen(false)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-3 rounded-r-lg border-l-[3px] px-4 py-2.5 text-[13.5px] transition-colors",
+                  "flex items-center gap-3 rounded-r-lg border-l-[3px] px-4 py-2.5 text-sm transition-colors",
                   active
                     ? "border-[var(--color-clay-700)] bg-white/9 text-[#f5f4ef]"
                     : "border-transparent text-[#b6b3aa] hover:bg-white/5 hover:text-[#f5f4ef]",
@@ -88,7 +88,7 @@ export function AdminNav({
                 <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.6} aria-hidden />
                 {item.label}
                 {item.badge ? (
-                  <span className="ml-auto rounded-full bg-[var(--color-clay-700)] px-2 py-0.5 text-[11px] text-white tabular-nums">
+                  <span className="ml-auto rounded-full bg-[var(--color-clay-700)] px-2 py-0.5 text-sm text-white tabular-nums">
                     {item.badge}
                   </span>
                 ) : null}
@@ -99,12 +99,12 @@ export function AdminNav({
       </ul>
 
       <div className="flex items-center gap-3 border-t border-white/8 px-5 pt-4">
-        <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-[var(--color-clay-700)] text-[13px] font-semibold text-white">
+        <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-[var(--color-clay-700)] text-sm font-semibold text-white">
           {user.initials}
         </span>
         <span className="min-w-0 leading-tight">
-          <span className="block truncate text-[13px] text-[#f5f4ef]">{user.name}</span>
-          <span className="block text-[11px] text-[#85827a]">{user.role}</span>
+          <span className="block truncate text-sm text-[#f5f4ef]">{user.name}</span>
+          <span className="block text-sm text-[#85827a]">{user.role}</span>
         </span>
       </div>
     </>
