@@ -13,7 +13,13 @@ import { formatMoney } from "@/lib/money";
 
 type Point = { date: string; revenue: number; orders: number };
 
-/** Daily paid revenue. Values arrive in minor units and format on display. */
+/**
+ * Daily paid revenue. Values arrive in minor units and format on display.
+ *
+ * Recharts draws its axis and tooltip text as SVG, so the 14px floor the rest
+ * of the app gets from the type scale has to be passed in by hand here. The
+ * axis width and tick gap are sized for labels at that step.
+ */
 export function RevenueChart({ data }: { data: Point[] }) {
   const hasRevenue = data.some((d) => d.revenue > 0);
 
@@ -43,25 +49,25 @@ export function RevenueChart({ data }: { data: Point[] }) {
             tickFormatter={(value: string) =>
               new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
             }
-            tick={{ fontSize: 11, fill: "#8a8a7e" }}
+            tick={{ fontSize: 14, fill: "#8a8a7e" }}
             axisLine={false}
             tickLine={false}
-            minTickGap={28}
+            minTickGap={40}
           />
 
           <YAxis
             tickFormatter={(value: number) => `${Math.round(value / 100)}`}
-            tick={{ fontSize: 11, fill: "#8a8a7e" }}
+            tick={{ fontSize: 14, fill: "#8a8a7e" }}
             axisLine={false}
             tickLine={false}
-            width={44}
+            width={52}
           />
 
           <Tooltip
             contentStyle={{
               borderRadius: 4,
               border: "1px solid #e7e7e4",
-              fontSize: 12,
+              fontSize: 14,
             }}
             labelFormatter={(label) =>
               new Date(String(label)).toLocaleDateString("en-GB", {
