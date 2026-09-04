@@ -145,7 +145,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
           <h1 className="mt-3 text-[clamp(2.25rem,5vw,3.25rem)] leading-[1.05]">
             Thank you{firstName ? `, ${firstName}` : ""}.
           </h1>
-          <p className="mx-auto mt-3.5 max-w-[460px] text-[15.5px] font-light leading-relaxed text-[var(--text-secondary)]">
+          <p className="mx-auto mt-3.5 max-w-[460px] text-base font-light leading-relaxed text-[var(--text-secondary)]">
             Your order is in. A receipt is on its way to {fresh.email}, and our team will call you
             shortly to arrange delivery.
           </p>
@@ -163,7 +163,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
                 <dt className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   {item.label}
                 </dt>
-                <dd className="mt-1 text-[15px] font-medium">{item.value}</dd>
+                <dd className="mt-1 text-base font-medium">{item.value}</dd>
               </div>
             ))}
           </dl>
@@ -189,7 +189,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
                     ) : null}
                   </span>
                   <span className="flex-1">
-                    <span className="block text-[14.5px]">{item.productTitle}</span>
+                    <span className="block text-base">{item.productTitle}</span>
                     <span className="mt-0.5 block text-sm uppercase tracking-[0.08em] text-[var(--text-muted)]">
                       {item.variantTitle !== "Default" ? `${item.variantTitle} · ` : ""}
                       Qty {item.quantity}

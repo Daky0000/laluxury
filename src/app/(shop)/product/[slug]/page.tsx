@@ -190,7 +190,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
         }
         description={
           product.shortDescription ? (
-            <p className="mt-6 max-w-[460px] text-[15px] font-light leading-relaxed text-[var(--text-secondary)]">
+            <p className="mt-6 max-w-[460px] text-base font-light leading-relaxed text-[var(--text-secondary)]">
               {product.shortDescription}
             </p>
           ) : null

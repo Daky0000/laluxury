@@ -503,7 +503,7 @@ export function VariantPicker({
               aria-label={
                 activeVariant ? `Quantity of ${activeVariant.title}` : "Quantity"
               }
-              className="w-12 border-0 bg-transparent p-0 text-center text-[15px] tabular-nums outline-none [appearance:textfield] focus:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="w-12 border-0 bg-transparent p-0 text-center text-base tabular-nums outline-none [appearance:textfield] focus:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
 
             <button

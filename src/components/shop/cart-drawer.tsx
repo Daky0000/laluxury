@@ -113,7 +113,7 @@ export function CartDrawer() {
                 >
                   <div className="flex-1">
                     <Link href={`/product/${line.slug}`} onClick={() => setOpen(false)}>
-                      <p className="text-[0.9rem]">{line.productTitle}</p>
+                      <p className="text-base">{line.productTitle}</p>
                     </Link>
                     <p className="mt-0.5 text-sm font-light text-[var(--text-muted)]">
                       {formatPrice(line.unitPrice)} each
@@ -127,7 +127,7 @@ export function CartDrawer() {
                         type="button"
                         onClick={() => changeQuantity(line.id, line.quantity - 1)}
                         disabled={pending}
-                        className="text-[15px] leading-none text-[var(--accent)] disabled:opacity-40"
+                        className="text-base leading-none text-[var(--accent)] disabled:opacity-40"
                       >
                         −<span className="sr-only">Remove one {line.productTitle}</span>
                       </button>
@@ -138,7 +138,7 @@ export function CartDrawer() {
                         type="button"
                         onClick={() => changeQuantity(line.id, line.quantity + 1)}
                         disabled={pending}
-                        className="text-[15px] leading-none text-[var(--accent)] disabled:opacity-40"
+                        className="text-base leading-none text-[var(--accent)] disabled:opacity-40"
                       >
                         +<span className="sr-only">Add one {line.productTitle}</span>
                       </button>

@@ -53,12 +53,16 @@
   --font-display: var(--font-display), Georgia, "Times New Roman", serif;
   --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, sans-serif;
 
-  /* 14px is the floor for type anywhere in the app, storefront and console
+  /* 16px is the floor for type anywhere in the app, storefront and console
      alike: below that a price, a stock count or an order reference is a squint
-     on a phone. `text-xs` is redefined rather than removed so the smallest step
-     the utilities can reach is still the floor, whoever reaches for it. */
-  --text-xs: 0.875rem;
-  --text-xs--line-height: calc(1.25 / 0.875);
+     on a phone. The two steps under `text-base` are redefined rather than
+     removed, so the smallest size the utilities can reach is still the floor,
+     whoever reaches for it — `text-xs`, `text-sm` and `text-base` all land on
+     16px with the leading that step has always carried. */
+  --text-xs: 1rem;
+  --text-xs--line-height: calc(1.5 / 1);
+  --text-sm: 1rem;
+  --text-sm--line-height: calc(1.5 / 1);
 
   --radius-card: 0px;
 }
@@ -77,9 +81,9 @@
   --accent-hover: #96525e;
   --accent-contrast: #ffffff;
   /* Type scale for the editorial headings on the storefront.
-     Nothing in the app sets type below 14px — the tracked-out small caps read
+     Nothing in the app sets type below 16px — the tracked-out small caps read
      as a label at that size just as well, and stay legible on a phone. */
-  --step-eyebrow: 0.875rem;
+  --step-eyebrow: 1rem;
 }
 
 /* The admin console runs on its own denser surface so it is never mistaken
@@ -167,7 +171,7 @@
 
   /* Wide-tracked uppercase used on buttons and meta rows. */
   .lx-caps {
-    font-size: 0.875rem;
+    font-size: 1rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
   }
@@ -180,7 +184,7 @@
     background-color: var(--accent);
     color: var(--accent-contrast);
     padding: 1rem 2.125rem;
-    font-size: 0.875rem;
+    font-size: 1rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     font-weight: 500;
@@ -198,7 +202,7 @@
     border: 1px solid rgba(253, 250, 244, 0.55);
     color: #fbfaf6;
     padding: 1rem 2.125rem;
-    font-size: 0.875rem;
+    font-size: 1rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     font-weight: 500;
@@ -216,7 +220,7 @@
     background-color: var(--surface-raised);
     border-radius: var(--radius-card);
     padding: 0.625rem 0.75rem;
-    font-size: 0.9375rem;
+    font-size: 1rem;
     color: var(--text-primary);
     transition: border-color 120ms ease;
   }

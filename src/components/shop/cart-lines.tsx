@@ -60,7 +60,7 @@ function CartLine({ line }: { line: CartLineView }) {
       <div className="flex flex-1 flex-col">
         <div className="flex justify-between gap-4">
           <div>
-            <Link href={`/product/${line.slug}`} className="text-[15.5px] hover:underline">
+            <Link href={`/product/${line.slug}`} className="text-base hover:underline">
               {line.productTitle}
             </Link>
             {line.variantTitle !== "Default" ? (

@@ -25,7 +25,7 @@ export default function NotFound() {
           We can&rsquo;t find that page
         </h1>
 
-        <p className="mt-4 text-[15px] font-light leading-relaxed text-[var(--text-muted)]">
+        <p className="mt-4 text-base font-light leading-relaxed text-[var(--text-muted)]">
           The link may be out of date. Everything we stock is still on the storefront.
         </p>
 

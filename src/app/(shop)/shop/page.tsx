@@ -102,7 +102,7 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
       <section className="lx-container pb-2 pt-11 text-center">
         <p className="lx-eyebrow">Every piece</p>
         <h1 className="mt-3 text-[clamp(2.5rem,6vw,3.625rem)] leading-tight">{heading}</h1>
-        <p className="mt-2.5 text-[15px] font-light text-[var(--text-muted)]">
+        <p className="mt-2.5 text-base font-light text-[var(--text-muted)]">
           Bedding, living, windows and student essentials — filter your way to it.
         </p>
       </section>
@@ -187,7 +187,7 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
         <div>
           {results.items.length === 0 ? (
             <div className="py-24 text-center">
-              <p className="text-[15px] font-light text-[var(--text-muted)]">
+              <p className="text-base font-light text-[var(--text-muted)]">
                 Nothing matches these filters.
               </p>
               <Link

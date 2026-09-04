@@ -54,7 +54,7 @@ export default async function ShopNotFound() {
           We can&rsquo;t find that page
         </h1>
 
-        <p className="mx-auto mt-4 max-w-[460px] text-[15.5px] font-light leading-relaxed text-[var(--text-muted)]">
+        <p className="mx-auto mt-4 max-w-[460px] text-base font-light leading-relaxed text-[var(--text-muted)]">
           The link may be out of date, or the piece may have been renamed as our range changed.
           Everything we stock is still one of the rooms below.
         </p>
@@ -77,7 +77,7 @@ export default async function ShopNotFound() {
               href={`/shop?category=${category.slug}`}
               className="group flex flex-col gap-1.5 bg-[var(--surface)] p-6 transition-colors hover:bg-[var(--surface-sunken)]"
             >
-              <span className="flex items-center gap-2 text-[15px] text-[var(--text-primary)]">
+              <span className="flex items-center gap-2 text-base text-[var(--text-primary)]">
                 {category.name}
                 <ArrowRight
                   className="h-3.5 w-3.5 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100"

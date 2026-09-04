@@ -17,7 +17,7 @@ export default async function CartPage() {
     return (
       <div className="lx-container py-24 text-center">
         <h1 className="text-[clamp(2.25rem,5vw,3.25rem)]">Your bag</h1>
-        <p className="mt-4 text-[15px] font-light text-[var(--text-muted)]">
+        <p className="mt-4 text-base font-light text-[var(--text-muted)]">
           Your bag is empty.{" "}
           <Link href="/shop" className="text-[var(--accent)] underline underline-offset-4">
             Browse all products →

@@ -75,7 +75,7 @@ export default async function ContactPage() {
       <section className="lx-container pb-2 pt-14 text-center">
         <p className="lx-eyebrow">We&rsquo;re here to help</p>
         <h1 className="mt-3 text-[clamp(2.5rem,6vw,3.875rem)] leading-tight">Get in touch</h1>
-        <p className="mx-auto mt-3 max-w-[520px] text-[15.5px] font-light leading-relaxed text-[var(--text-muted)]">
+        <p className="mx-auto mt-3 max-w-[520px] text-base font-light leading-relaxed text-[var(--text-muted)]">
           Questions about an order, sizing, or wholesale? Reach us any way you like — we usually
           reply within the hour.
         </p>
@@ -94,7 +94,7 @@ export default async function ContactPage() {
                     <span className="block text-sm uppercase tracking-[0.14em] text-[var(--text-muted)]">
                       {channel.label}
                     </span>
-                    <span className="mt-1.5 block text-[15.5px] text-[var(--text-primary)]">
+                    <span className="mt-1.5 block text-base text-[var(--text-primary)]">
                       {channel.value}
                     </span>
                   </span>
@@ -144,7 +144,7 @@ export default async function ContactPage() {
                 <dt className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   {row.label}
                 </dt>
-                <dd className="mt-1.5 text-[14.5px] font-light leading-relaxed">{row.value}</dd>
+                <dd className="mt-1.5 text-base font-light leading-relaxed">{row.value}</dd>
               </div>
             ))}
           </dl>
@@ -158,7 +158,7 @@ export default async function ContactPage() {
         <div className="border-t border-[var(--border-subtle)]">
           {faqs.map((faq) => (
             <details key={faq.q} className="group border-b border-[var(--border-subtle)]">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-[15px] marker:hidden [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-base marker:hidden [&::-webkit-details-marker]:hidden">
                 {faq.q}
                 <span
                   aria-hidden
