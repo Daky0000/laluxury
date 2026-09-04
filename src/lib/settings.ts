@@ -1,4 +1,9 @@
 import { db } from "./db";
+import {
+  DEFAULT_HOME_SECTIONS,
+  normaliseSections,
+  type HomeSection,
+} from "./home-sections";
 
 /**
  * Store settings live in a key/value table so the owner can change copy,
@@ -36,10 +41,13 @@ export type StoreSettings = {
   bundleCompareAtPrice: number | null;
   bundleImageUrl: string;
   bundleHref: string;
-  studentEyebrow: string;
-  studentTitle: string;
   newsletterTitle: string;
   newsletterBody: string;
+  /**
+   * The home page, section by section, in the order they are rendered. Edited
+   * at /admin/settings/home.
+   */
+  homeSections: HomeSection[];
   /** Ask the agent to confirm before it changes anything on the live store. */
   agentRequiresApproval: boolean;
 };
@@ -77,11 +85,10 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   bundleCompareAtPrice: null,
   bundleImageUrl: "/catalog/bundle-bed-set.webp",
   bundleHref: "",
-  studentEyebrow: "Back to campus",
-  studentTitle: "Student essentials from ₵50",
   newsletterTitle: "Join the LALUXURY list",
   newsletterBody:
     "Private access to restocks and a ₵20 welcome credit on your first order.",
+  homeSections: DEFAULT_HOME_SECTIONS,
   agentRequiresApproval: true,
 };
 
@@ -90,7 +97,15 @@ const SETTINGS_KEY = "store";
 export async function getSettings(): Promise<StoreSettings> {
   const row = await db.setting.findUnique({ where: { key: SETTINGS_KEY } });
   if (!row) return DEFAULT_SETTINGS;
-  return { ...DEFAULT_SETTINGS, ...(row.value as Partial<StoreSettings>) };
+
+  const stored = row.value as Partial<StoreSettings>;
+  return {
+    ...DEFAULT_SETTINGS,
+    ...stored,
+    // The section list is the one setting written as free-form JSON, so it is
+    // checked on the way out rather than trusted.
+    homeSections: normaliseSections(stored.homeSections),
+  };
 }
 
 export async function updateSettings(patch: Partial<StoreSettings>): Promise<StoreSettings> {

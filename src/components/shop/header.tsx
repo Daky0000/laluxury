@@ -27,7 +27,7 @@ export async function Header() {
     <>
       {/* Announcement marquee. The list is duplicated so the loop has no seam. */}
       {announcements.length > 0 ? (
-        <div className="overflow-hidden whitespace-nowrap border-b border-[var(--border-subtle)] text-[11px] uppercase tracking-[0.28em] text-[var(--text-muted)]">
+        <div className="overflow-hidden whitespace-nowrap border-b border-[var(--border-subtle)] text-sm uppercase tracking-[0.28em] text-[var(--text-muted)]">
           <div className="lx-marquee py-2.5">
             {[0, 1].map((run) => (
               <span key={run} className="flex shrink-0 gap-16 pr-16" aria-hidden={run === 1}>
@@ -53,7 +53,7 @@ export async function Header() {
 
             <nav
               aria-label="Categories"
-              className="hidden items-center gap-7 text-[12.5px] tracking-[0.06em] md:flex"
+              className="hidden items-center gap-7 text-sm tracking-[0.06em] md:flex"
             >
               {categories.map((category) => (
                 <Link
@@ -72,7 +72,7 @@ export async function Header() {
             <span className="font-display text-2xl font-medium uppercase tracking-[0.18em] md:text-3xl">
               {settings.storeName}
             </span>
-            <span className="mt-1 text-[8.5px] uppercase tracking-[0.44em] text-[var(--accent)]">
+            <span className="mt-1 text-sm uppercase tracking-[0.44em] text-[var(--accent)]">
               Home · Living
             </span>
           </Link>

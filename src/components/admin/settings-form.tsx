@@ -105,9 +105,14 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
       <Card className="flex flex-col gap-4 p-5">
         <h2 className="lx-eyebrow">Home page</h2>
         <p className="-mt-2 text-sm text-[var(--text-secondary)]">
-          The hero, the bundle banner and the section headings on the storefront home page.
-          Images can be any URL, or a file under <code>/public</code> such as{" "}
-          <code>/catalog/hero-bedroom.webp</code>.
+          The wording for the hero, the bundle banner and the newsletter. Images can be any URL,
+          or a file under <code>/public</code> such as <code>/catalog/hero-bedroom.webp</code>.
+          Which sections appear, in what order, and the rooms and products inside them are set
+          under{" "}
+          <a href="/admin/settings/home" className="underline underline-offset-4">
+            Home page sections
+          </a>
+          .
         </p>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -235,24 +240,6 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Student eyebrow" htmlFor="studentEyebrow">
-            <input
-              id="studentEyebrow"
-              name="studentEyebrow"
-              defaultValue={settings.studentEyebrow}
-              className="lx-field"
-            />
-          </Field>
-
-          <Field label="Student heading" htmlFor="studentTitle">
-            <input
-              id="studentTitle"
-              name="studentTitle"
-              defaultValue={settings.studentTitle}
-              className="lx-field"
-            />
-          </Field>
-
           <Field label="Newsletter heading" htmlFor="newsletterTitle">
             <input
               id="newsletterTitle"

@@ -64,14 +64,14 @@ export async function Footer() {
           <p className="font-display text-[28px] uppercase tracking-[0.16em]">
             {settings.storeName}
           </p>
-          <p className="mt-4 max-w-[280px] text-[13px] font-light leading-[1.7] text-[var(--text-secondary)]">
+          <p className="mt-4 max-w-[280px] text-sm font-light leading-[1.7] text-[var(--text-secondary)]">
             {intro} Order online or by WhatsApp — cash on delivery welcome.
           </p>
         </div>
 
         {columns.map((column) => (
           <nav key={column.head} aria-label={column.head}>
-            <p className="mb-4 text-[11px] uppercase tracking-[0.18em] text-[var(--text-primary)]">
+            <p className="mb-4 text-sm uppercase tracking-[0.18em] text-[var(--text-primary)]">
               {column.head}
             </p>
             <ul>
@@ -79,7 +79,7 @@ export async function Footer() {
                 <li key={link.label} className="mb-2.5">
                   <Link
                     href={link.href}
-                    className="text-[13px] font-light text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+                    className="text-sm font-light text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
                   >
                     {link.label}
                   </Link>
@@ -91,7 +91,7 @@ export async function Footer() {
       </div>
 
       <div className="border-t border-[var(--border-subtle)]">
-        <div className="lx-container flex flex-col items-start justify-between gap-2 py-5 text-[11.5px] tracking-[0.04em] text-[var(--text-muted)] sm:flex-row sm:items-center">
+        <div className="lx-container flex flex-col items-start justify-between gap-2 py-5 text-sm tracking-[0.04em] text-[var(--text-muted)] sm:flex-row sm:items-center">
           <p>
             © {year} {settings.storeName} Home &amp; Living
           </p>

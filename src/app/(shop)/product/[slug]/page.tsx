@@ -121,7 +121,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
   return (
     <div className="lx-container py-8">
       {/* Breadcrumb */}
-      <nav aria-label="Breadcrumb" className="mb-6 text-xs tracking-[0.04em] text-[var(--text-muted)]">
+      <nav aria-label="Breadcrumb" className="mb-6 text-sm tracking-[0.04em] text-[var(--text-muted)]">
         <ol className="flex flex-wrap items-center gap-2">
           <li>
             <Link href="/" className="hover:text-[var(--text-primary)]">
@@ -157,7 +157,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
         header={
           <>
             {category ? (
-              <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--accent)]">
+              <p className="text-sm uppercase tracking-[0.2em] text-[var(--accent)]">
                 {category.name}
               </p>
             ) : null}
@@ -167,7 +167,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
             </h1>
 
             {rating.count > 0 ? (
-              <p className="mt-3.5 flex items-center gap-2.5 text-[13px]">
+              <p className="mt-3.5 flex items-center gap-2.5 text-sm">
                 <span className="flex" aria-hidden>
                   {[1, 2, 3, 4, 5].map((n) => (
                     <Star
@@ -180,7 +180,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
                     />
                   ))}
                 </span>
-                <span className="text-[12.5px] text-[var(--text-muted)]">
+                <span className="text-sm text-[var(--text-muted)]">
                   {rating.average.toFixed(1)} · {rating.count}{" "}
                   {rating.count === 1 ? "review" : "reviews"}
                 </span>
@@ -204,7 +204,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
                 return (
                   <li
                     key={perk.label}
-                    className="flex items-center gap-2.5 text-[13px] text-[var(--text-secondary)]"
+                    className="flex items-center gap-2.5 text-sm text-[var(--text-secondary)]"
                   >
                     <Icon
                       className="h-[19px] w-[19px] shrink-0 text-[var(--accent)]"
@@ -225,14 +225,14 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
                   open={index === 0}
                   className="group border-b border-[var(--border-subtle)]"
                 >
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4.5 text-[13.5px] tracking-[0.04em] marker:hidden [&::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4.5 text-sm tracking-[0.04em] marker:hidden [&::-webkit-details-marker]:hidden">
                     {section.title}
                     <span aria-hidden className="text-lg leading-none text-[var(--accent-hover)]">
                       <span className="group-open:hidden">+</span>
                       <span className="hidden group-open:inline">&minus;</span>
                     </span>
                   </summary>
-                  <div className="max-w-[480px] space-y-2.5 pb-5 text-[13.5px] font-light leading-relaxed text-[var(--text-secondary)]">
+                  <div className="max-w-[480px] space-y-2.5 pb-5 text-sm font-light leading-relaxed text-[var(--text-secondary)]">
                     {section.body
                       .split("\n")
                       .filter(Boolean)
@@ -271,12 +271,12 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
                     ))}
                   </span>
                   {review.isVerifiedPurchase ? (
-                    <span className="text-[11px] text-success">Verified purchase</span>
+                    <span className="text-sm text-success">Verified purchase</span>
                   ) : null}
                 </div>
                 {review.title ? <p className="mt-2 font-medium">{review.title}</p> : null}
                 <p className="mt-1.5 text-sm text-[var(--text-secondary)]">{review.body}</p>
-                <p className="mt-3 text-xs text-[var(--text-muted)]">{review.authorName}</p>
+                <p className="mt-3 text-sm text-[var(--text-muted)]">{review.authorName}</p>
               </li>
             ))}
           </ul>

@@ -19,7 +19,7 @@ export function SortSelect({
     <>
       <label
         htmlFor="sort"
-        className="text-[11.5px] uppercase tracking-[0.14em] text-[var(--text-muted)]"
+        className="text-sm uppercase tracking-[0.14em] text-[var(--text-muted)]"
       >
         Sort
       </label>
@@ -28,7 +28,7 @@ export function SortSelect({
         name="sort"
         defaultValue={value}
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
-        className="cursor-pointer border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3.5 py-2 text-[13px] outline-none"
+        className="cursor-pointer border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3.5 py-2 text-sm outline-none"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -39,7 +39,7 @@ export function SortSelect({
       <noscript>
         <button
           type="submit"
-          className="border border-[var(--border-strong)] px-3 py-2 text-xs uppercase tracking-[0.12em]"
+          className="border border-[var(--border-strong)] px-3 py-2 text-sm uppercase tracking-[0.12em]"
         >
           Apply
         </button>

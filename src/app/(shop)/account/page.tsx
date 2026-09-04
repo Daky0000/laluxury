@@ -108,7 +108,7 @@ export default async function AccountPage() {
                       <span className="text-sm text-[var(--text-secondary)]">
                         {formatDate(order.placedAt)}
                       </span>
-                      <span className="ml-auto font-display text-lg tabular-nums">
+                      <span className="ml-auto text-lg tabular-nums">
                         {formatMoney(order.total)}
                       </span>
                     </div>
@@ -126,7 +126,7 @@ export default async function AccountPage() {
                               />
                             ) : null}
                           </span>
-                          <span className="text-xs">
+                          <span className="text-sm">
                             <span className="block">{item.productTitle}</span>
                             <span className="block text-[var(--text-muted)]">×{item.quantity}</span>
                           </span>
@@ -135,7 +135,7 @@ export default async function AccountPage() {
                     </ul>
 
                     {order.trackingNumber ? (
-                      <p className="mt-3 text-xs text-[var(--text-secondary)]">
+                      <p className="mt-3 text-sm text-[var(--text-secondary)]">
                         Tracking: {order.trackingCompany} {order.trackingNumber}
                       </p>
                     ) : null}
@@ -175,7 +175,7 @@ export default async function AccountPage() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{item.product.title}</span>
-                        <span className="block text-xs text-[var(--text-muted)] tabular-nums">
+                        <span className="block text-sm text-[var(--text-muted)] tabular-nums">
                           {formatMoney(item.product.minPrice)}
                         </span>
                       </span>
@@ -214,7 +214,7 @@ export default async function AccountPage() {
             <h2 className="lx-eyebrow mb-2">Details</h2>
             <p className="text-[var(--text-secondary)]">{user.email}</p>
             {user.phone ? <p className="text-[var(--text-secondary)]">{user.phone}</p> : null}
-            <p className="mt-2 text-xs text-[var(--text-muted)]">
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
               Member since {formatDate(user.createdAt)}
             </p>
           </Card>

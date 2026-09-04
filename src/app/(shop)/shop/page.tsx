@@ -133,14 +133,14 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
               type="search"
               defaultValue={q}
               placeholder="Search all products…"
-              className="w-full min-w-0 bg-transparent text-[13px] outline-none placeholder:text-ink-400"
+              className="w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-ink-400"
             />
             <button type="submit" className="sr-only">
               Search
             </button>
           </form>
 
-          <span className="text-[12.5px] tracking-[0.06em] text-[var(--text-secondary)]">
+          <span className="text-sm tracking-[0.06em] text-[var(--text-secondary)]">
             {results.total} of {facets.productTotal} pieces
           </span>
 
@@ -192,7 +192,7 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
               </p>
               <Link
                 href="/shop"
-                className="mt-3.5 inline-block text-[13px] text-[var(--accent)] underline underline-offset-4"
+                className="mt-3.5 inline-block text-sm text-[var(--accent)] underline underline-offset-4"
               >
                 Clear filters
               </Link>
@@ -214,7 +214,7 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
                       show: Math.min(MAX_SHOWN, show + LOAD_MORE_STEP),
                     })}`}
                     scroll={false}
-                    className="border border-[var(--border-strong)] px-10 py-4 text-xs uppercase tracking-[0.14em] transition-colors hover:bg-[var(--surface-sunken)]"
+                    className="border border-[var(--border-strong)] px-10 py-4 text-sm uppercase tracking-[0.14em] transition-colors hover:bg-[var(--surface-sunken)]"
                   >
                     Load more ({remaining})
                   </Link>

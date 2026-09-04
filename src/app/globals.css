@@ -69,8 +69,10 @@
   --accent: #7a2e3c;
   --accent-hover: #96525e;
   --accent-contrast: #ffffff;
-  /* Type scale for the editorial headings on the storefront. */
-  --step-eyebrow: 0.6875rem;
+  /* Type scale for the editorial headings on the storefront.
+     Nothing in the app sets type below 14px — the tracked-out small caps read
+     as a label at that size just as well, and stay legible on a phone. */
+  --step-eyebrow: 0.875rem;
 }
 
 /* The admin console runs on its own denser surface so it is never mistaken
@@ -158,7 +160,7 @@
 
   /* Wide-tracked uppercase used on buttons and meta rows. */
   .lx-caps {
-    font-size: 0.6875rem;
+    font-size: 0.875rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
   }
@@ -171,7 +173,7 @@
     background-color: var(--accent);
     color: var(--accent-contrast);
     padding: 1rem 2.125rem;
-    font-size: 0.78rem;
+    font-size: 0.875rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     font-weight: 500;
@@ -189,7 +191,7 @@
     border: 1px solid rgba(253, 250, 244, 0.55);
     color: #fbfaf6;
     padding: 1rem 2.125rem;
-    font-size: 0.78rem;
+    font-size: 0.875rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     font-weight: 500;

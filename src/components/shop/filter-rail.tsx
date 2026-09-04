@@ -77,12 +77,12 @@ function bandQuery(carried: Carried, band: Band, active: boolean): string {
   })}`;
 }
 
-const heading = "mb-3 text-[11px] uppercase tracking-[0.18em] text-[var(--text-primary)]";
+const heading = "mb-3 text-sm uppercase tracking-[0.18em] text-[var(--text-primary)]";
 
 /** The pill used for price bands and non-colour option values. */
 const chipClass = (active: boolean) =>
   cn(
-    "inline-flex items-center border px-3.5 py-2 text-xs transition-colors",
+    "inline-flex items-center border px-3.5 py-2 text-sm transition-colors",
     active
       ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--surface-raised)]"
       : "border-[var(--border-subtle)] bg-[var(--surface-raised)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]",
@@ -92,7 +92,7 @@ const chipClass = (active: boolean) =>
 function Switch({ href, label, on }: { href: string; label: string; on: boolean }) {
   return (
     <Link href={href} role="switch" aria-checked={on} className="flex items-center justify-between">
-      <span className="text-[13px] text-[var(--text-secondary)]">{label}</span>
+      <span className="text-sm text-[var(--text-secondary)]">{label}</span>
       <span
         aria-hidden
         className={cn(
@@ -132,7 +132,7 @@ export function FilterRail({
                     href={toggleQuery(carried, "category", category.slug)}
                     aria-pressed={active}
                     className={cn(
-                      "flex w-full items-center gap-3 py-2 text-[13.5px] transition-colors",
+                      "flex w-full items-center gap-3 py-2 text-sm transition-colors",
                       active
                         ? "font-medium text-[var(--text-primary)]"
                         : "font-light text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
@@ -159,7 +159,7 @@ export function FilterRail({
                       ) : null}
                     </span>
                     <span className="flex-1 text-left">{category.name}</span>
-                    <span className="text-xs tabular-nums text-ink-400">
+                    <span className="text-sm tabular-nums text-ink-400">
                       {category.productCount}
                     </span>
                   </Link>
@@ -193,9 +193,9 @@ export function FilterRail({
             inputMode="numeric"
             defaultValue={selected.min}
             placeholder="Min"
-            className="lx-field min-w-0 flex-1 px-3 py-2.5 text-[13px]"
+            className="lx-field min-w-0 flex-1 px-3 py-2.5 text-sm"
           />
-          <span aria-hidden className="text-[13px] text-ink-400">
+          <span aria-hidden className="text-sm text-ink-400">
             &mdash;
           </span>
           <label htmlFor="max" className="sr-only">
@@ -209,13 +209,13 @@ export function FilterRail({
             inputMode="numeric"
             defaultValue={selected.max}
             placeholder="Max"
-            className="lx-field min-w-0 flex-1 px-3 py-2.5 text-[13px]"
+            className="lx-field min-w-0 flex-1 px-3 py-2.5 text-sm"
           />
           {/* The artboard filters as you type; without JS the range still needs
               something to press, so it keeps a compact submit. */}
           <button
             type="submit"
-            className="shrink-0 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-2.5 py-2.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)]"
+            className="shrink-0 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-2.5 py-2.5 text-sm text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)]"
           >
             Go
           </button>
@@ -321,7 +321,7 @@ export function FilterRail({
 
       <Link
         href="/shop"
-        className="self-start text-xs tracking-[0.06em] text-[var(--accent-hover)] underline underline-offset-4"
+        className="self-start text-sm tracking-[0.06em] text-[var(--accent-hover)] underline underline-offset-4"
       >
         Clear all filters
       </Link>
@@ -384,14 +384,14 @@ export function ActiveFilters({
 
   return (
     <div className="flex flex-wrap items-center gap-2.5">
-      <span className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
+      <span className="text-sm uppercase tracking-[0.14em] text-[var(--text-muted)]">
         Filtering by
       </span>
       {chips.map((chip) => (
         <Link
           key={chip.label}
           href={chip.href}
-          className="inline-flex items-center gap-2 bg-[var(--text-primary)] px-3.5 py-1.5 text-xs text-[var(--surface-raised)] transition-opacity hover:opacity-80"
+          className="inline-flex items-center gap-2 bg-[var(--text-primary)] px-3.5 py-1.5 text-sm text-[var(--surface-raised)] transition-opacity hover:opacity-80"
         >
           {chip.label}
           <X className="h-3 w-3" strokeWidth={2.2} aria-hidden />
@@ -400,7 +400,7 @@ export function ActiveFilters({
       ))}
       <Link
         href="/shop"
-        className="px-1 text-xs text-[var(--accent-hover)] underline underline-offset-4"
+        className="px-1 text-sm text-[var(--accent-hover)] underline underline-offset-4"
       >
         Clear all
       </Link>

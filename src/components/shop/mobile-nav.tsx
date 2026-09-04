@@ -47,7 +47,7 @@ export function MobileNav({
                 <Link
                   href="/shop"
                   onClick={() => setOpen(false)}
-                  className="block py-2 font-display text-xl"
+                  className="block py-2 text-xl"
                 >
                   All pieces
                 </Link>
@@ -57,7 +57,7 @@ export function MobileNav({
                   <Link
                     href={`/shop?category=${category.slug}`}
                     onClick={() => setOpen(false)}
-                    className="block py-2 font-display text-xl"
+                    className="block py-2 text-xl"
                   >
                     {category.name}
                   </Link>

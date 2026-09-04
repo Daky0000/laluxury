@@ -160,7 +160,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
                     : undefined
                 }
               >
-                <dt className="text-[10.5px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                <dt className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   {item.label}
                 </dt>
                 <dd className="mt-1 text-[15px] font-medium">{item.value}</dd>
@@ -190,12 +190,12 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
                   </span>
                   <span className="flex-1">
                     <span className="block text-[14.5px]">{item.productTitle}</span>
-                    <span className="mt-0.5 block text-[11.5px] uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                    <span className="mt-0.5 block text-sm uppercase tracking-[0.08em] text-[var(--text-muted)]">
                       {item.variantTitle !== "Default" ? `${item.variantTitle} · ` : ""}
                       Qty {item.quantity}
                     </span>
                   </span>
-                  <span className="font-display text-[17px] tabular-nums">
+                  <span className="text-[17px] tabular-nums">
                     {formatPrice(item.total)}
                   </span>
                 </li>
@@ -203,25 +203,25 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
             </ul>
 
             <dl className="px-7 pb-6 pt-4">
-              <div className="flex justify-between py-1.5 text-[13.5px] text-[var(--text-secondary)]">
+              <div className="flex justify-between py-1.5 text-sm text-[var(--text-secondary)]">
                 <dt>Subtotal</dt>
                 <dd className="tabular-nums">{formatPrice(fresh.subtotal)}</dd>
               </div>
               {fresh.discountTotal > 0 ? (
-                <div className="flex justify-between py-1.5 text-[13.5px] text-sage-600">
+                <div className="flex justify-between py-1.5 text-sm text-sage-600">
                   <dt>Discount</dt>
                   <dd className="tabular-nums">-{formatPrice(fresh.discountTotal)}</dd>
                 </div>
               ) : null}
-              <div className="flex justify-between py-1.5 text-[13.5px] text-[var(--text-secondary)]">
+              <div className="flex justify-between py-1.5 text-sm text-[var(--text-secondary)]">
                 <dt>Delivery</dt>
                 <dd className="tabular-nums">
                   {fresh.shippingTotal === 0 ? "Free" : formatPrice(fresh.shippingTotal)}
                 </dd>
               </div>
               <div className="mt-2.5 flex items-baseline justify-between border-t border-[var(--border-strong)] pt-3.5">
-                <dt className="text-[13px] uppercase tracking-[0.06em]">Total</dt>
-                <dd className="font-display text-[26px] tabular-nums">{formatPrice(fresh.total)}</dd>
+                <dt className="text-sm uppercase tracking-[0.06em]">Total</dt>
+                <dd className="text-[26px] tabular-nums">{formatPrice(fresh.total)}</dd>
               </div>
             </dl>
           </div>
@@ -229,7 +229,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {fresh.shippingAddress ? (
               <div className="border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-6 py-5">
-                <h3 className="text-[10.5px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                <h3 className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   Delivering to
                 </h3>
                 <address className="mt-2 text-sm not-italic leading-relaxed">
@@ -245,13 +245,13 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
             ) : null}
 
             <div className="border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-6 py-5">
-              <h3 className="text-[10.5px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              <h3 className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">
                 Need to change something?
               </h3>
               <p className="mt-2 text-sm font-light leading-relaxed text-[var(--text-secondary)]">
                 Message us with your order number and we will sort it before dispatch.
               </p>
-              <Link href="/contact" className="mt-2.5 inline-block text-[13px] text-[var(--accent)]">
+              <Link href="/contact" className="mt-2.5 inline-block text-sm text-[var(--accent)]">
                 Contact us →
               </Link>
             </div>
@@ -265,7 +265,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
           </Link>
           <Link
             href={`/orders/track?order=${fresh.orderNumber}`}
-            className="inline-flex items-center justify-center border border-[var(--border-strong)] px-8 py-4 text-xs font-medium uppercase tracking-[0.12em] transition-colors hover:bg-[var(--surface-sunken)]"
+            className="inline-flex items-center justify-center border border-[var(--border-strong)] px-8 py-4 text-sm font-medium uppercase tracking-[0.12em] transition-colors hover:bg-[var(--surface-sunken)]"
           >
             Track this order
           </Link>

@@ -30,7 +30,7 @@ export function AddToBag({ variantId, href, label = "Add to bag", soldOut = fals
   const [error, setError] = useState<string | null>(null);
 
   const barClass =
-    "absolute inset-x-3.5 bottom-3.5 flex items-center justify-center gap-2 px-3 py-3 text-[11px] font-medium uppercase tracking-[0.14em] transition-all duration-200 " +
+    "absolute inset-x-3.5 bottom-3.5 flex items-center justify-center gap-2 px-3 py-3 text-sm font-medium uppercase tracking-[0.14em] transition-all duration-200 " +
     "translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-visible:translate-y-0 focus-visible:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100";
 
   if (soldOut) {
@@ -114,7 +114,7 @@ export function AddToBag({ variantId, href, label = "Add to bag", soldOut = fals
       {error ? (
         <span
           role="alert"
-          className="absolute inset-x-3.5 bottom-16 bg-danger px-2 py-1 text-center text-[11px] text-white"
+          className="absolute inset-x-3.5 bottom-16 bg-danger px-2 py-1 text-center text-sm text-white"
         >
           {error}
         </span>
@@ -137,7 +137,7 @@ export function AddToBagIcon({ variantId, href, soldOut = false }: Props) {
 
   if (soldOut) {
     return (
-      <span className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
+      <span className="text-sm uppercase tracking-[0.14em] text-[var(--text-muted)]">
         Sold out
       </span>
     );

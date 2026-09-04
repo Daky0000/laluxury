@@ -85,7 +85,7 @@ export default async function ShopNotFound() {
                 />
               </span>
               {category.description ? (
-                <span className="text-[13px] font-light leading-relaxed text-[var(--text-muted)]">
+                <span className="text-sm font-light leading-relaxed text-[var(--text-muted)]">
                   {category.description}
                 </span>
               ) : null}
@@ -95,7 +95,7 @@ export default async function ShopNotFound() {
       ) : null}
 
       {number ? (
-        <p className="mt-10 text-center text-[13.5px] text-[var(--text-muted)]">
+        <p className="mt-10 text-center text-sm text-[var(--text-muted)]">
           Looking for something specific?{" "}
           <a
             href={`https://wa.me/${number.replace(/\D/g, "")}`}

@@ -247,7 +247,7 @@ export function VariantPicker({
     <div>
       {/* Price */}
       <div className="mt-5 flex flex-wrap items-baseline gap-3.5">
-        <span className="font-display text-[38px] leading-none tabular-nums">
+        <span className="text-[38px] leading-none tabular-nums">
           {activeVariant
             ? formatPrice(activeVariant.price)
             : priceRange
@@ -261,7 +261,7 @@ export function VariantPicker({
             <span className="text-[17px] text-ink-400 line-through tabular-nums">
               {formatPrice(compareAt)}
             </span>
-            <span className="bg-[var(--accent)] px-2.5 py-1 text-[10.5px] uppercase tracking-[0.08em] text-[var(--accent-contrast)]">
+            <span className="bg-[var(--accent)] px-2.5 py-1 text-sm uppercase tracking-[0.08em] text-[var(--accent-contrast)]">
               Save {formatPrice(saving)}
             </span>
           </>
@@ -269,7 +269,7 @@ export function VariantPicker({
       </div>
 
       {/* Stock line */}
-      <p className="mt-2 text-[12.5px] font-medium">
+      <p className="mt-2 text-sm font-medium">
         {!activeVariant && awaiting.length > 0 ? (
           <span className="text-[var(--text-secondary)]">
             Choose {listNames(awaiting.map((option) => option.name))} to see the price and stock.
@@ -300,7 +300,7 @@ export function VariantPicker({
 
         return (
           <fieldset key={option.id} className="mt-7">
-            <legend className="mb-3 text-[11.5px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+            <legend className="mb-3 text-sm uppercase tracking-[0.16em] text-[var(--text-secondary)]">
               {option.name}
               {chosenValue ? (
                 <span className="font-medium normal-case tracking-normal text-[var(--text-primary)]">
@@ -373,13 +373,13 @@ export function VariantPicker({
                             className="h-[72px] w-full bg-[var(--surface-media)] object-cover"
                           />
                         ) : null}
-                        <span className={cn("text-[13.5px] font-medium", thumbnail && "mt-2")}>
+                        <span className={cn("text-sm font-medium", thumbnail && "mt-2")}>
                           {value.value}
                         </span>
                         {valuePrice !== null ? (
                           <span
                             className={cn(
-                              "mt-0.5 text-[11.5px] text-[var(--text-muted)] tabular-nums",
+                              "mt-0.5 text-sm text-[var(--text-muted)] tabular-nums",
                               thumbnail && "mb-2.5",
                             )}
                           >
@@ -427,7 +427,7 @@ export function VariantPicker({
 
       {/* How many of the variant on screen right now */}
       <div className="mt-7">
-        <p className="mb-2.5 text-[11.5px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+        <p className="mb-2.5 text-sm uppercase tracking-[0.16em] text-[var(--text-secondary)]">
           Quantity
           {activeVariant ? (
             <span className="normal-case tracking-normal text-[var(--text-primary)]">
@@ -482,7 +482,7 @@ export function VariantPicker({
             type="button"
             onClick={add}
             disabled={pending || lines.length === 0}
-            className="flex flex-1 items-center justify-center gap-2 bg-[var(--accent)] px-6 py-4 text-xs font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
+            className="flex flex-1 items-center justify-center gap-2 bg-[var(--accent)] px-6 py-4 text-sm font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
             {added ? <Check className="h-4 w-4" aria-hidden /> : null}
@@ -538,7 +538,7 @@ export function VariantPicker({
                 return (
                 <li
                   key={line.variant.id}
-                  className="flex items-center gap-3 px-3.5 py-2.5 text-[13.5px]"
+                  className="flex items-center gap-3 px-3.5 py-2.5 text-sm"
                 >
                   {swatch ? (
                     <span
@@ -551,7 +551,7 @@ export function VariantPicker({
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{line.variant.title}</span>
                     {details.length > 0 ? (
-                      <span className="block truncate text-[11.5px] text-[var(--text-muted)]">
+                      <span className="block truncate text-sm text-[var(--text-muted)]">
                         {details
                           .map((detail) => `${detail.optionName}: ${detail.value}`)
                           .join(" · ")}
@@ -583,7 +583,7 @@ export function VariantPicker({
               })}
             </ul>
 
-            <div className="flex items-center justify-between border-t border-[var(--border-strong)] px-3.5 py-2.5 text-[13.5px]">
+            <div className="flex items-center justify-between border-t border-[var(--border-strong)] px-3.5 py-2.5 text-sm">
               <span className="text-[var(--text-secondary)]">
                 {totalItems} {totalItems === 1 ? "item" : "items"} ready
               </span>
@@ -598,14 +598,14 @@ export function VariantPicker({
         type="button"
         onClick={buyNow}
         disabled={buying || pending || soldOut || !activeVariant}
-        className="mt-3 flex w-full items-center justify-center gap-2 border border-[var(--text-primary)] px-6 py-4 text-xs font-medium uppercase tracking-[0.14em] transition-colors hover:bg-[var(--text-primary)] hover:text-[var(--surface-raised)] disabled:opacity-40"
+        className="mt-3 flex w-full items-center justify-center gap-2 border border-[var(--text-primary)] px-6 py-4 text-sm font-medium uppercase tracking-[0.14em] transition-colors hover:bg-[var(--text-primary)] hover:text-[var(--surface-raised)] disabled:opacity-40"
       >
         {buying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
         Buy it now
       </button>
 
       {activeVariant ? (
-        <p className="mt-3 text-xs text-[var(--text-muted)]">SKU {activeVariant.sku}</p>
+        <p className="mt-3 text-sm text-[var(--text-muted)]">SKU {activeVariant.sku}</p>
       ) : null}
 
       {error ? (
@@ -615,7 +615,7 @@ export function VariantPicker({
       ) : null}
 
       {saveNote ? (
-        <p role="status" className="mt-2 text-xs text-[var(--text-secondary)]">
+        <p role="status" className="mt-2 text-sm text-[var(--text-secondary)]">
           {saveNote}
         </p>
       ) : null}

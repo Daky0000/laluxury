@@ -129,7 +129,7 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
                       aria-hidden
                     />
                     <p
-                      className={`mt-2 text-xs ${
+                      className={`mt-2 text-sm ${
                         reached ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"
                       }`}
                     >
@@ -164,11 +164,11 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
                 <span className="min-w-0 flex-1 text-sm">
                   <span className="block">{item.productTitle}</span>
                   {item.variantTitle !== "Default" ? (
-                    <span className="block text-xs text-[var(--text-secondary)]">
+                    <span className="block text-sm text-[var(--text-secondary)]">
                       {item.variantTitle}
                     </span>
                   ) : null}
-                  <span className="block text-xs text-[var(--text-muted)]">
+                  <span className="block text-sm text-[var(--text-muted)]">
                     Qty {item.quantity}
                   </span>
                 </span>
@@ -179,7 +179,7 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
 
           <div className="mt-4 flex items-baseline justify-between border-t border-[var(--border-subtle)] pt-4">
             <span className="text-sm">Total</span>
-            <span className="font-display text-xl tabular-nums">{formatMoney(order.total)}</span>
+            <span className="text-xl tabular-nums">{formatMoney(order.total)}</span>
           </div>
         </Card>
       ) : null}

@@ -32,6 +32,25 @@ export default async function AdminSettingsPage() {
         description="Store details, policies, and the keys that switch each integration on."
       />
 
+      {/* Home page layout */}
+      <Card className="px-6 py-5.5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">Home page sections</h2>
+          <Link
+            href="/admin/settings/home"
+            className="inline-flex items-center gap-1.5 text-sm text-[var(--accent)]"
+          >
+            Build the home page <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        </div>
+        <p className="text-sm text-[var(--text-muted)]">
+          {settings.homeSections.filter((section) => section.visible).length} of{" "}
+          {settings.homeSections.length} sections showing —{" "}
+          {settings.homeSections.map((section) => section.title).join(", ")}. Add or remove
+          sections, reorder them, and choose the rooms and products each one shows.
+        </p>
+      </Card>
+
       <SettingsForm settings={settings} />
 
       {/* Integrations */}

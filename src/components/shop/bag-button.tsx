@@ -9,7 +9,7 @@ export function BagButton({ count }: { count: number }) {
     <button
       type="button"
       onClick={openBag}
-      className="flex items-center gap-2 text-[12.5px] tracking-[0.06em] text-[var(--text-primary)] transition-colors hover:text-[var(--accent)]"
+      className="flex items-center gap-2 text-sm tracking-[0.06em] text-[var(--text-primary)] transition-colors hover:text-[var(--accent)]"
     >
       <ShoppingBag className="h-[19px] w-[19px]" strokeWidth={1.5} aria-hidden />
       <span className="min-w-2 tabular-nums">{count}</span>

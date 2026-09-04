@@ -66,7 +66,7 @@ function CartLine({ line }: { line: CartLineView }) {
               {line.productTitle}
             </Link>
             {line.variantTitle !== "Default" ? (
-              <p className="mt-1 text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">
+              <p className="mt-1 text-sm uppercase tracking-[0.1em] text-[var(--text-muted)]">
                 {line.variantTitle}
               </p>
             ) : null}
@@ -84,12 +84,12 @@ function CartLine({ line }: { line: CartLineView }) {
         </div>
 
         {line.stockProblem ? (
-          <p role="alert" className="mt-2 text-xs text-danger">
+          <p role="alert" className="mt-2 text-sm text-danger">
             {line.stockProblem}
           </p>
         ) : null}
         {error ? (
-          <p role="alert" className="mt-2 text-xs text-danger">
+          <p role="alert" className="mt-2 text-sm text-danger">
             {error}
           </p>
         ) : null}
@@ -105,7 +105,7 @@ function CartLine({ line }: { line: CartLineView }) {
             >
               &minus;
             </button>
-            <span className="min-w-3.5 text-center text-[13.5px] tabular-nums">
+            <span className="min-w-3.5 text-center text-sm tabular-nums">
               {pending ? <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin" /> : line.quantity}
             </span>
             <button
@@ -119,7 +119,7 @@ function CartLine({ line }: { line: CartLineView }) {
             </button>
           </div>
 
-          <span className="font-display text-[19px] tabular-nums">
+          <span className="text-[19px] tabular-nums">
             {formatPrice(line.lineTotal)}
           </span>
         </div>
@@ -162,7 +162,7 @@ export function DiscountForm({ appliedCode }: { appliedCode: string | null }) {
           type="button"
           onClick={clear}
           disabled={pending}
-          className="text-xs text-[var(--text-secondary)] underline-offset-2 hover:underline"
+          className="text-sm text-[var(--text-secondary)] underline-offset-2 hover:underline"
         >
           Remove
         </button>
@@ -181,12 +181,12 @@ export function DiscountForm({ appliedCode }: { appliedCode: string | null }) {
           name="code"
           placeholder="Discount code"
           autoComplete="off"
-          className="min-w-0 flex-1 border border-[var(--border-strong)] bg-white px-3.5 py-3 text-[13px] uppercase outline-none placeholder:normal-case placeholder:text-ink-400 focus:border-[var(--accent)]"
+          className="min-w-0 flex-1 border border-[var(--border-strong)] bg-white px-3.5 py-3 text-sm uppercase outline-none placeholder:normal-case placeholder:text-ink-400 focus:border-[var(--accent)]"
         />
         <button
           type="submit"
           disabled={pending}
-          className="shrink-0 bg-[var(--text-primary)] px-4.5 text-[11.5px] uppercase tracking-[0.1em] text-[var(--surface)] disabled:opacity-50"
+          className="shrink-0 bg-[var(--text-primary)] px-4.5 text-sm uppercase tracking-[0.1em] text-[var(--surface)] disabled:opacity-50"
         >
           {pending ? "…" : "Apply"}
         </button>
@@ -194,7 +194,7 @@ export function DiscountForm({ appliedCode }: { appliedCode: string | null }) {
       {message ? (
         <p
           role={message.ok ? "status" : "alert"}
-          className={`mt-2 text-xs ${message.ok ? "text-sage-600" : "text-danger"}`}
+          className={`mt-2 text-sm ${message.ok ? "text-sage-600" : "text-danger"}`}
         >
           {message.text}
         </p>

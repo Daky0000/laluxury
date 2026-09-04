@@ -82,7 +82,7 @@ export function CartDrawer() {
 
       <div className="absolute right-0 top-0 flex h-full w-[420px] max-w-[92vw] flex-col border-l border-[var(--border-subtle)] bg-[var(--surface-raised)]">
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-6">
-          <span className="font-display text-2xl">Your bag</span>
+          <h2 className="text-2xl">Your bag</h2>
           <button
             type="button"
             onClick={() => setOpen(false)}
@@ -115,7 +115,7 @@ export function CartDrawer() {
                     <Link href={`/product/${line.slug}`} onClick={() => setOpen(false)}>
                       <p className="text-[0.9rem]">{line.productTitle}</p>
                     </Link>
-                    <p className="mt-0.5 text-xs font-light text-[var(--text-muted)]">
+                    <p className="mt-0.5 text-sm font-light text-[var(--text-muted)]">
                       {formatPrice(line.unitPrice)} each
                       {line.variantTitle && line.variantTitle !== "Default"
                         ? ` · ${line.variantTitle}`
@@ -131,7 +131,7 @@ export function CartDrawer() {
                       >
                         −<span className="sr-only">Remove one {line.productTitle}</span>
                       </button>
-                      <span className="min-w-3.5 text-center text-[13px] tabular-nums">
+                      <span className="min-w-3.5 text-center text-sm tabular-nums">
                         {line.quantity}
                       </span>
                       <button
@@ -145,11 +145,11 @@ export function CartDrawer() {
                     </div>
 
                     {line.stockProblem ? (
-                      <p className="mt-2 text-xs text-danger">{line.stockProblem}</p>
+                      <p className="mt-2 text-sm text-danger">{line.stockProblem}</p>
                     ) : null}
                   </div>
 
-                  <p className="font-display text-[17px] tabular-nums">
+                  <p className="text-[17px] tabular-nums">
                     {formatPrice(line.lineTotal)}
                   </p>
                 </li>
@@ -163,7 +163,7 @@ export function CartDrawer() {
             <span>Subtotal</span>
             <span className="tabular-nums">{formatPrice(summary.subtotal)}</span>
           </div>
-          <div className="mb-4 flex justify-between text-[12.5px] font-light text-[var(--text-muted)]">
+          <div className="mb-4 flex justify-between text-sm font-light text-[var(--text-muted)]">
             <span>Delivery</span>
             <span>{summary.deliveryLabel}</span>
           </div>
@@ -172,7 +172,7 @@ export function CartDrawer() {
             <Link
               href="/checkout"
               onClick={() => setOpen(false)}
-              className="lx-cta w-full py-4 text-[0.75rem]"
+              className="lx-cta w-full py-4 text-sm"
             >
               Checkout · {formatPrice(summary.subtotal)}
             </Link>
@@ -180,7 +180,7 @@ export function CartDrawer() {
             <Link
               href="/shop"
               onClick={() => setOpen(false)}
-              className="lx-cta w-full py-4 text-[0.75rem]"
+              className="lx-cta w-full py-4 text-sm"
             >
               Start shopping
             </Link>
@@ -189,7 +189,7 @@ export function CartDrawer() {
           <Link
             href="/cart"
             onClick={() => setOpen(false)}
-            className="mt-3 block text-center text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+            className="mt-3 block text-center text-sm text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
           >
             View full bag
           </Link>

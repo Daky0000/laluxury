@@ -144,13 +144,13 @@ export function ProductView({
           )}
 
           {badge ? (
-            <span className="pointer-events-none absolute left-4 top-4 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.92)] px-3 py-1.5 text-[9.5px] font-medium uppercase tracking-[0.16em] backdrop-blur">
+            <span className="pointer-events-none absolute left-4 top-4 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.92)] px-3 py-1.5 text-sm font-medium uppercase tracking-[0.16em] backdrop-blur">
               {badge}
             </span>
           ) : null}
 
           {visible.length > 1 ? (
-            <span className="pointer-events-none absolute bottom-4 right-4 bg-[rgba(43,39,36,0.72)] px-2.5 py-1 text-[11px] tracking-[0.06em] text-[var(--surface)]">
+            <span className="pointer-events-none absolute bottom-4 right-4 bg-[rgba(43,39,36,0.72)] px-2.5 py-1 text-sm tracking-[0.06em] text-[var(--surface)]">
               {safeIndex + 1} / {visible.length}
             </span>
           ) : null}

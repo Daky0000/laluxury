@@ -75,32 +75,32 @@ export default async function CartPage() {
           </dl>
 
           {freeGap > 0 ? (
-            <p className="pb-2 text-xs text-sage-600">
+            <p className="pb-2 text-sm text-sage-600">
               Add {formatPrice(freeGap)} more for free delivery
             </p>
           ) : null}
 
           <div className="mt-2.5 flex items-baseline justify-between border-t border-[var(--border-strong)] pt-4">
             <span className="text-sm uppercase tracking-[0.06em]">Total</span>
-            <span className="font-display text-3xl tabular-nums">{formatPrice(totals.total)}</span>
+            <span className="text-3xl tabular-nums">{formatPrice(totals.total)}</span>
           </div>
 
           <Link
             href="/checkout"
             aria-disabled={totals.problems.length > 0}
-            className="mt-5 flex w-full items-center justify-center bg-[var(--accent)] px-6 py-4 text-xs font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)]"
+            className="mt-5 flex w-full items-center justify-center bg-[var(--accent)] px-6 py-4 text-sm font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)]"
           >
             Checkout
           </Link>
 
-          <p className="mt-4 flex items-center justify-center gap-2 text-[11.5px] text-[var(--text-muted)]">
+          <p className="mt-4 flex items-center justify-center gap-2 text-sm text-[var(--text-muted)]">
             <Lock className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden />
             Encrypted &amp; secure
           </p>
 
           <Link
             href="/shop"
-            className="mt-3 block text-center text-xs text-[var(--text-secondary)] underline-offset-4 hover:underline"
+            className="mt-3 block text-center text-sm text-[var(--text-secondary)] underline-offset-4 hover:underline"
           >
             Continue shopping
           </Link>

@@ -197,7 +197,7 @@ export function CheckoutForm({
               />
             </div>
             {errors.firstName || errors.lastName ? (
-              <p className="mt-1.5 text-xs text-danger">{errors.firstName ?? errors.lastName}</p>
+              <p className="mt-1.5 text-sm text-danger">{errors.firstName ?? errors.lastName}</p>
             ) : null}
           </div>
 
@@ -214,7 +214,7 @@ export function CheckoutForm({
               placeholder="Phone number"
               className={field}
             />
-            {errors.phone ? <p className="mt-1.5 text-xs text-danger">{errors.phone}</p> : null}
+            {errors.phone ? <p className="mt-1.5 text-sm text-danger">{errors.phone}</p> : null}
           </div>
 
           <div>
@@ -231,7 +231,7 @@ export function CheckoutForm({
               placeholder="Email address"
               className={field}
             />
-            {errors.email ? <p className="mt-1.5 text-xs text-danger">{errors.email}</p> : null}
+            {errors.email ? <p className="mt-1.5 text-sm text-danger">{errors.email}</p> : null}
           </div>
 
           <div className="sm:col-span-2">
@@ -246,7 +246,7 @@ export function CheckoutForm({
               placeholder="Delivery address"
               className={field}
             />
-            {errors.line1 ? <p className="mt-1.5 text-xs text-danger">{errors.line1}</p> : null}
+            {errors.line1 ? <p className="mt-1.5 text-sm text-danger">{errors.line1}</p> : null}
           </div>
 
           <div className="sm:col-span-2">
@@ -281,7 +281,7 @@ export function CheckoutForm({
                 </option>
               ))}
             </select>
-            {errors.region ? <p className="mt-1.5 text-xs text-danger">{errors.region}</p> : null}
+            {errors.region ? <p className="mt-1.5 text-sm text-danger">{errors.region}</p> : null}
           </div>
 
           <div>
@@ -296,7 +296,7 @@ export function CheckoutForm({
               placeholder="City / town"
               className={field}
             />
-            {errors.city ? <p className="mt-1.5 text-xs text-danger">{errors.city}</p> : null}
+            {errors.city ? <p className="mt-1.5 text-sm text-danger">{errors.city}</p> : null}
           </div>
 
           <div className="sm:col-span-2">
@@ -346,7 +346,7 @@ export function CheckoutForm({
                   <span className="flex-1 text-left">
                     <span className="block text-sm">{rate.name}</span>
                     {rate.estimatedDaysMin !== null ? (
-                      <span className="mt-0.5 block text-xs text-[var(--text-muted)]">
+                      <span className="mt-0.5 block text-sm text-[var(--text-muted)]">
                         {rate.estimatedDaysMin === 0
                           ? "Today or tomorrow"
                           : `${rate.estimatedDaysMin}–${rate.estimatedDaysMax} days`}{" "}
@@ -380,7 +380,7 @@ export function CheckoutForm({
                 />
                 {radioDot(active)}
                 <span className="flex-1 text-left text-sm">{option.label}</span>
-                <span className="text-xs text-[var(--text-muted)]">{option.note}</span>
+                <span className="text-sm text-[var(--text-muted)]">{option.note}</span>
               </label>
             );
           })}
@@ -394,7 +394,7 @@ export function CheckoutForm({
           <div>
             <label
               htmlFor="customerNote"
-              className="mb-2 block text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)]"
+              className="mb-2 block text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]"
             >
               Order note
             </label>
@@ -469,20 +469,20 @@ export function CheckoutForm({
         </dl>
 
         {freeGap > 0 ? (
-          <p className="pb-2 text-xs text-sage-600">
+          <p className="pb-2 text-sm text-sage-600">
             Add {formatPrice(freeGap)} more for free delivery
           </p>
         ) : null}
 
         <div className="mt-2.5 flex items-baseline justify-between border-t border-[var(--border-strong)] pt-4">
           <span className="text-sm uppercase tracking-[0.06em]">Total</span>
-          <span className="font-display text-3xl tabular-nums">{formatPrice(total)}</span>
+          <span className="text-3xl tabular-nums">{formatPrice(total)}</span>
         </div>
 
         <button
           type="submit"
           disabled={pending || !selectedRate}
-          className="mt-5 flex w-full items-center justify-center gap-2 bg-[var(--accent)] px-6 py-4 text-xs font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
+          className="mt-5 flex w-full items-center justify-center gap-2 bg-[var(--accent)] px-6 py-4 text-sm font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
         >
           {pending ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -492,7 +492,7 @@ export function CheckoutForm({
           {pending ? "Redirecting…" : `Place order · ${formatPrice(total)}`}
         </button>
 
-        <p className="mt-4 flex items-center justify-center gap-2 text-[11.5px] text-[var(--text-muted)]">
+        <p className="mt-4 flex items-center justify-center gap-2 text-sm text-[var(--text-muted)]">
           <Lock className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden />
           Encrypted &amp; secure
         </p>

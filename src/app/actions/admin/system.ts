@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { updateSettings, type StoreSettings } from "@/lib/settings";
+import { normaliseSections } from "@/lib/home-sections";
 import { runAgentTurn } from "@/lib/agent/runtime";
 import { pingAgent } from "@/lib/agent/provider";
 import { toMinorUnits } from "@/lib/money";
@@ -57,8 +58,6 @@ export async function updateSettingsAction(
     bundleCompareAtPrice: price("bundleCompareAtPrice"),
     bundleImageUrl: text("bundleImageUrl"),
     bundleHref: text("bundleHref") || "/shop",
-    studentEyebrow: text("studentEyebrow"),
-    studentTitle: text("studentTitle"),
     newsletterTitle: text("newsletterTitle"),
     newsletterBody: text("newsletterBody"),
   };
@@ -75,6 +74,47 @@ export async function updateSettingsAction(
   revalidatePath("/admin/settings");
   revalidatePath("/", "layout");
   return { ok: true, message: "Settings saved." };
+}
+
+/**
+ * Save the home page's section list.
+ *
+ * The editor sends the whole list as JSON in one field — sections nest lists of
+ * their own, which form fields cannot carry — and it is re-checked here by the
+ * same normaliser the storefront reads through, so a hand-edited payload cannot
+ * put an unknown section type on the page.
+ */
+export async function updateHomeSectionsAction(
+  _prev: AdminState | null,
+  formData: FormData,
+): Promise<AdminState> {
+  const actor = await requirePermission("settings:manage");
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(formData.get("sections") || "[]"));
+  } catch {
+    return { ok: false, message: "The section list could not be read. Reload and try again." };
+  }
+
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    return { ok: false, message: "Keep at least one section on the page." };
+  }
+
+  const homeSections = normaliseSections(parsed);
+
+  await updateSettings({ homeSections });
+  await recordAudit({
+    actorId: actor.id,
+    action: "settings.home_sections",
+    entity: "Setting",
+    entityId: "store",
+    after: { homeSections } as never,
+  });
+
+  revalidatePath("/admin/settings/home");
+  revalidatePath("/");
+  return { ok: true, message: "Home page saved." };
 }
 
 // ---------------------------------------------------------------------------

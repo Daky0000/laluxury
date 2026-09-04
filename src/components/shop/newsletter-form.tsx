@@ -35,14 +35,14 @@ export function NewsletterForm({ variant = "compact" }: { variant?: "compact" | 
           <button
             type="submit"
             disabled={pending}
-            className="bg-[var(--accent)] px-7 text-[11.5px] font-medium uppercase tracking-[0.12em] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-60"
+            className="bg-[var(--accent)] px-7 text-sm font-medium uppercase tracking-[0.12em] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-60"
           >
             {pending ? "…" : "Subscribe"}
           </button>
         </div>
 
         {state?.message && !state.ok ? (
-          <p role="alert" className="mt-2 text-xs text-danger">
+          <p role="alert" className="mt-2 text-sm text-danger">
             {state.message}
           </p>
         ) : null}

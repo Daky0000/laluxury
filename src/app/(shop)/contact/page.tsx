@@ -90,7 +90,7 @@ export default async function ContactPage() {
                 <>
                   <Icon className="h-6 w-6 text-[var(--accent)]" strokeWidth={1.5} aria-hidden />
                   <span>
-                    <span className="block text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                    <span className="block text-sm uppercase tracking-[0.14em] text-[var(--text-muted)]">
                       {channel.label}
                     </span>
                     <span className="mt-1.5 block text-[15.5px] text-[var(--text-primary)]">
@@ -137,7 +137,7 @@ export default async function ContactPage() {
           <dl className="border-t border-[var(--border-subtle)]">
             {info.map((row) => (
               <div key={row.label} className="border-b border-[var(--border-subtle)] py-4.5">
-                <dt className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                <dt className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   {row.label}
                 </dt>
                 <dd className="mt-1.5 text-[14.5px] font-light leading-relaxed">{row.value}</dd>

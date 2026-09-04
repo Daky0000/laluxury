@@ -19,7 +19,7 @@ export default async function CheckoutLayout({ children }: LayoutProps<"/">) {
         <div className="lx-container relative flex items-center justify-center py-5">
           <Link
             href="/shop"
-            className="absolute left-5 flex items-center gap-1.5 text-[12.5px] tracking-[0.06em] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] md:left-10"
+            className="absolute left-5 flex items-center gap-1.5 text-sm tracking-[0.06em] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] md:left-10"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={1.5} aria-hidden />
             <span className="hidden sm:inline">Continue shopping</span>
@@ -29,12 +29,12 @@ export default async function CheckoutLayout({ children }: LayoutProps<"/">) {
             <span className="font-display text-2xl font-medium uppercase tracking-[0.18em] md:text-3xl">
               {settings.storeName}
             </span>
-            <span className="mt-1 text-[8.5px] uppercase tracking-[0.44em] text-[var(--accent)]">
+            <span className="mt-1 text-sm uppercase tracking-[0.44em] text-[var(--accent)]">
               Home · Living
             </span>
           </Link>
 
-          <span className="absolute right-5 flex items-center gap-2 text-xs tracking-[0.06em] text-sage-600 md:right-10">
+          <span className="absolute right-5 flex items-center gap-2 text-sm tracking-[0.06em] text-sage-600 md:right-10">
             <ShieldCheck className="h-[15px] w-[15px]" strokeWidth={1.5} aria-hidden />
             <span className="hidden sm:inline">Secure checkout</span>
           </span>

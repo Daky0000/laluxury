@@ -96,7 +96,7 @@ export function ContactForm() {
         </button>
 
         {state?.ok ? (
-          <p role="status" className="text-[13px] text-sage-600">
+          <p role="status" className="text-sm text-sage-600">
             {state.message}
           </p>
         ) : null}
