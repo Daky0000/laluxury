@@ -8,6 +8,7 @@ import { toggleWishlistAction } from "@/app/actions/misc";
 import { openBag } from "./bag-events";
 import { formatPrice } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import { Photo } from "./photo";
 
 /**
  * Option-driven variant selection, laid out as the product artboard has it:
@@ -383,7 +384,7 @@ export function VariantPicker({
                     className={cn(
                       "relative border transition-all",
                       isColour
-                        ? "h-11 w-11 overflow-hidden rounded-full bg-cover bg-center"
+                        ? "h-11 w-11 overflow-hidden rounded-full"
                         : thumbnail
                           ? "flex w-[104px] flex-col items-center justify-start overflow-hidden p-0"
                           : "flex min-w-[104px] flex-col items-center justify-center px-4 py-3",
@@ -396,26 +397,20 @@ export function VariantPicker({
                       !reachable && "opacity-35",
                     )}
                     style={
-                      isColour
-                        ? {
-                            backgroundColor: value.hexColor ?? undefined,
-                            backgroundImage: thumbnail ? `url(${thumbnail})` : undefined,
-                          }
-                        : undefined
+                      isColour ? { backgroundColor: value.hexColor ?? undefined } : undefined
                     }
                   >
                     {isColour ? (
-                      <span className="sr-only">{value.value}</span>
+                      <>
+                        {thumbnail ? <Photo src={thumbnail} sizes="44px" /> : null}
+                        <span className="sr-only">{value.value}</span>
+                      </>
                     ) : (
                       <>
                         {thumbnail ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            src={thumbnail}
-                            alt=""
-                            loading="lazy"
-                            className="h-[72px] w-full bg-[var(--surface-media)] object-cover"
-                          />
+                          <span className="relative block h-[72px] w-full bg-[var(--surface-media)]">
+                            <Photo src={thumbnail} sizes="104px" />
+                          </span>
                         ) : null}
                         <span className={cn("text-sm font-medium", thumbnail && "mt-2")}>
                           {value.value}

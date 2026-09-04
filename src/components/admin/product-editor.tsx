@@ -34,6 +34,7 @@ import { MediaPicker } from "@/components/admin/media-picker";
 import { Card, Field, Alert, Badge } from "@/components/ui";
 import { toMajorUnits } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import { Photo } from "@/components/shop/photo";
 
 export type EditorProduct = {
   id: string;
@@ -1128,12 +1129,11 @@ function OptionImageAssigner({
                       mine ? "border-[var(--accent)]" : "border-transparent hover:border-[var(--border-strong)]",
                     )}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <Photo
                       src={image.url}
                       alt={image.alt ?? ""}
-                      loading="lazy"
-                      className={cn("h-full w-full object-cover", !mine && other && "opacity-45")}
+                      sizes="200px"
+                      className={cn(!mine && other && "opacity-45")}
                     />
 
                     {pendingId === image.id ? (
@@ -1250,8 +1250,11 @@ function ImagesTab({ product }: { product: EditorProduct }) {
             return (
               <Card key={image.id} className="overflow-hidden">
                 <div className="lx-media">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={image.url} alt={image.alt ?? ""} />
+                  <Photo
+                    src={image.url}
+                    alt={image.alt ?? ""}
+                    sizes="(min-width: 768px) 24vw, 48vw"
+                  />
                   {index === 0 ? (
                     <span className="absolute left-2 top-2">
                       <Badge tone="accent">Primary</Badge>

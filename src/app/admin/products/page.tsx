@@ -10,6 +10,7 @@ import { buildQuery } from "@/lib/utils";
 import { Card, Badge, LinkButton, EmptyState, SectionHeading } from "@/components/ui";
 import { ProductBulkBar } from "@/components/admin/product-bulk-bar";
 import type { Prisma, ProductStatus } from "@/generated/prisma";
+import { Thumb } from "@/components/shop/photo";
 
 export const metadata: Metadata = { title: "Products" };
 
@@ -192,12 +193,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
                           <Link href={`/admin/products/${product.id}`} className="flex items-center gap-3">
                             <span className="h-11 w-9 shrink-0 overflow-hidden rounded-sm bg-[var(--surface-sunken)]">
                               {product.images[0] ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={product.images[0].url}
-                                  alt=""
-                                  className="h-full w-full object-cover"
-                                />
+                                <Thumb src={product.images[0].url} width={36} height={44} />
                               ) : null}
                             </span>
                             <span className="min-w-0">

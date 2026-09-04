@@ -3,6 +3,7 @@ import { formatPrice } from "@/lib/money";
 import type { ProductTileData } from "@/lib/product-view";
 import type { HomeSection } from "@/lib/home-sections";
 import { AddToBagIcon } from "@/components/shop/add-to-bag";
+import { Photo } from "@/components/shop/photo";
 
 /**
  * A product section rendered as one plain row, with a heading and an optional
@@ -61,12 +62,11 @@ export function ProductRow({
                 }`}
               >
                 {product.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <Photo
                     src={product.imageUrl}
                     alt={product.imageAlt}
-                    loading="lazy"
-                    className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                    sizes="(min-width: 1024px) 25vw, 50vw"
+                    className="transition-transform duration-700 group-hover:scale-[1.03]"
                   />
                 ) : null}
               </Link>

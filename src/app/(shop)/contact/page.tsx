@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { MessageCircle, Mail, Phone, MapPin } from "lucide-react";
 import { getSettings } from "@/lib/settings";
 import { ContactForm } from "@/components/shop/contact-form";
+import { Photo } from "@/components/shop/photo";
 
 export const metadata: Metadata = {
   title: "Contact",
@@ -130,8 +131,11 @@ export default async function ContactPage() {
         <div>
           <div className="lx-media mb-6 aspect-[4/3]">
             {/* The showroom shot; swap the file to change it. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/catalog/room-living.webp" alt="Inside the LaLuxury showroom" loading="lazy" />
+            <Photo
+              src="/catalog/room-living.webp"
+              alt="Inside the LaLuxury showroom"
+              sizes="(min-width: 1024px) 45vw, 100vw"
+            />
           </div>
 
           <dl className="border-t border-[var(--border-subtle)]">

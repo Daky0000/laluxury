@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Search, X, Loader2 } from "lucide-react";
 import { formatMoney } from "@/lib/money";
+import { Thumb } from "./photo";
 
 type Hit = {
   id: string;
@@ -137,12 +138,7 @@ export function SearchDialog({ children }: { children: ReactNode }) {
                     >
                       <span className="h-12 w-10 shrink-0 overflow-hidden bg-[var(--surface-sunken)]">
                         {hit.images[0] ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={hit.images[0].url}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
+                          <Thumb src={hit.images[0].url} width={40} height={48} />
                         ) : null}
                       </span>
                       <span className="flex-1 text-sm">{hit.title}</span>

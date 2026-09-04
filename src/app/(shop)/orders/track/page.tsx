@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
 import { Card, Badge, Alert, EmptyState } from "@/components/ui";
+import { Thumb } from "@/components/shop/photo";
 
 export const metadata: Metadata = {
   title: "Track an order",
@@ -156,10 +157,7 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
             {order.items.map((item) => (
               <li key={item.id} className="flex items-center gap-3 py-3">
                 <span className="h-14 w-12 shrink-0 overflow-hidden rounded-sm bg-[var(--surface-sunken)]">
-                  {item.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
-                  ) : null}
+                  {item.imageUrl ? <Thumb src={item.imageUrl} width={48} height={56} /> : null}
                 </span>
                 <span className="min-w-0 flex-1 text-sm">
                   <span className="block">{item.productTitle}</span>

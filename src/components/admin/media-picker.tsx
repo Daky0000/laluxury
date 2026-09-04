@@ -9,6 +9,7 @@ import type { MediaListItem } from "@/lib/media";
 import { MediaUploader } from "@/components/admin/media-library";
 import { Alert } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { Photo } from "@/components/shop/photo";
 
 /**
  * Puts a picture that is already in the library onto a product.
@@ -206,12 +207,10 @@ export function MediaPicker({
                               : "border-transparent hover:border-[var(--border-strong)]",
                           )}
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
+                          <Photo
                             src={asset.url}
                             alt={asset.alt ?? asset.filename}
-                            loading="lazy"
-                            className="h-full w-full object-cover"
+                            sizes="160px"
                           />
 
                           {picked ? (

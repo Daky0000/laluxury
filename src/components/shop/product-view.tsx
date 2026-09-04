@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { VariantPicker, type PickerOption, type PickerVariant } from "./variant-picker";
+import { Photo } from "./photo";
 
 export type GalleryImage = {
   id: string;
@@ -102,8 +103,7 @@ export function ProductView({
                     : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]",
                 )}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image.url} alt="" className="h-full w-full object-cover" />
+                <Photo src={image.url} sizes="96px" />
                 <span className="sr-only">View image {index + 1}</span>
               </button>
             ))}
@@ -112,12 +112,11 @@ export function ProductView({
 
         <div className="relative aspect-[4/5] flex-1 overflow-hidden bg-[var(--surface-media)]">
           {hero ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Photo
               src={hero.url}
               alt={hero.alt ?? title}
-              className="h-full w-full object-cover"
-              fetchPriority="high"
+              priority
+              sizes="(min-width: 1024px) 55vw, 100vw"
             />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">

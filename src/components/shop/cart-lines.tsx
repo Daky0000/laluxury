@@ -11,6 +11,7 @@ import {
   updateCartLineAction,
 } from "@/app/actions/cart";
 import type { CartLineView } from "@/lib/cart";
+import { Thumb } from "./photo";
 
 /**
  * The bag rows from the cart & checkout artboard: a tall thumbnail, the piece
@@ -53,10 +54,7 @@ function CartLine({ line }: { line: CartLineView }) {
         href={`/product/${line.slug}`}
         className="h-28 w-24 shrink-0 overflow-hidden bg-[var(--surface-media)]"
       >
-        {line.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={line.imageUrl} alt="" className="h-full w-full object-cover" />
-        ) : null}
+        {line.imageUrl ? <Thumb src={line.imageUrl} width={96} height={112} /> : null}
       </Link>
 
       <div className="flex flex-1 flex-col">

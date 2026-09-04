@@ -27,6 +27,7 @@ import type { MediaListItem } from "@/lib/media";
 import type { AdminState } from "@/app/actions/admin/products";
 import { Alert, Badge, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { Photo } from "@/components/shop/photo";
 
 /**
  * The library, as the console sees it: a drop zone at the top and everything
@@ -306,8 +307,11 @@ function MediaCard({ asset }: { asset: MediaListItem }) {
   return (
     <Card className="flex flex-col overflow-hidden">
       <div className="lx-media bg-[var(--surface-sunken)]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={asset.url} alt={asset.alt ?? ""} loading="lazy" />
+        <Photo
+          src={asset.url}
+          alt={asset.alt ?? ""}
+          sizes="(min-width: 1024px) 22vw, (min-width: 640px) 33vw, 50vw"
+        />
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-3">

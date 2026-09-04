@@ -10,6 +10,7 @@ import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
 import { Card, Badge, EmptyState, LinkButton } from "@/components/ui";
+import { Thumb } from "@/components/shop/photo";
 
 export const metadata: Metadata = { title: "Your account" };
 export const dynamic = "force-dynamic";
@@ -118,12 +119,7 @@ export default async function AccountPage() {
                         <li key={item.id} className="flex items-center gap-2">
                           <span className="h-12 w-10 shrink-0 overflow-hidden rounded-sm bg-[var(--surface-sunken)]">
                             {item.imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={item.imageUrl}
-                                alt=""
-                                className="h-full w-full object-cover"
-                              />
+                              <Thumb src={item.imageUrl} width={40} height={48} />
                             ) : null}
                           </span>
                           <span className="text-sm">
@@ -165,12 +161,7 @@ export default async function AccountPage() {
                     >
                       <span className="h-12 w-10 shrink-0 overflow-hidden rounded-sm bg-[var(--surface-sunken)]">
                         {item.product.images[0] ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={item.product.images[0].url}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
+                          <Thumb src={item.product.images[0].url} width={40} height={48} />
                         ) : null}
                       </span>
                       <span className="min-w-0 flex-1">

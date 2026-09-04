@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { StoreSettings } from "@/lib/settings";
 import { formatPrice } from "@/lib/money";
+import { Photo } from "@/components/shop/photo";
 
 /**
  * The wide offer banner. Its copy, image and prices are store settings, so the
@@ -18,13 +19,7 @@ export function BundleBanner({ settings }: { settings: StoreSettings }) {
   return (
     <section className="relative mt-16 min-h-[600px] overflow-hidden">
       {settings.bundleImageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={settings.bundleImageUrl}
-          alt=""
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
+        <Photo src={settings.bundleImageUrl} sizes="100vw" />
       ) : (
         <div className="absolute inset-0 bg-[var(--surface-media)]" />
       )}

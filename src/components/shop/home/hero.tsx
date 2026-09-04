@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { StoreSettings } from "@/lib/settings";
+import { Photo } from "@/components/shop/photo";
 
 /**
  * The opening image and headline. Its copy, image and both buttons are store
@@ -10,12 +11,7 @@ export function Hero({ settings }: { settings: StoreSettings }) {
   return (
     <section className="relative h-[88vh] min-h-[560px] overflow-hidden md:min-h-[640px]">
       {settings.heroImageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={settings.heroImageUrl}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-        />
+        <Photo src={settings.heroImageUrl} priority sizes="100vw" />
       ) : (
         <div className="absolute inset-0 bg-[var(--surface-media)]" />
       )}

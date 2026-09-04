@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { RoomCard } from "@/lib/home";
 import type { HomeSection } from "@/lib/home-sections";
+import { Photo } from "@/components/shop/photo";
 
 /**
  * A row of picture cards, one per room, each opening the shop already filtered.
@@ -37,12 +38,10 @@ export function RoomCards({
           <Link key={room.slug} href={`/shop?category=${room.slug}`} className="group block">
             <div className="relative aspect-[3/4] overflow-hidden bg-[var(--surface-media)]">
               {room.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Photo
                   src={room.imageUrl}
-                  alt=""
-                  loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                  sizes="(min-width: 768px) 25vw, 50vw"
+                  className="transition-transform duration-700 group-hover:scale-[1.04]"
                 />
               ) : (
                 <span className="flex h-full items-center justify-center text-4xl text-[var(--text-muted)]">

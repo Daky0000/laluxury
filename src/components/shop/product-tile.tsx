@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatPrice } from "@/lib/money";
 import type { ProductTileData } from "@/lib/product-view";
 import { AddToBag } from "./add-to-bag";
+import { Photo } from "./photo";
 
 /**
  * The product tile from the storefront artboards: square image, merchandising
@@ -12,6 +13,9 @@ import { AddToBag } from "./add-to-bag";
  * product presents itself identically wherever it turns up. It holds no server
  * imports, so client grids (the home tabs) can render it too.
  */
+/** Four across on a desktop grid, two on a phone — never a full-width file. */
+const TILE_SIZES = "(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw";
+
 export function ProductTile({
   product,
   aspect = "square",
@@ -33,12 +37,12 @@ export function ProductTile({
       >
         <Link href={`/product/${product.slug}`} className="block h-full w-full">
           {product.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Photo
               src={product.imageUrl}
               alt={product.imageAlt}
-              loading={priority ? "eager" : "lazy"}
-              className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+              priority={priority}
+              sizes={TILE_SIZES}
+              className="transition-transform duration-700 group-hover:scale-[1.03]"
             />
           ) : (
             <span className="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
@@ -47,13 +51,10 @@ export function ProductTile({
           )}
 
           {product.hoverImageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Photo
               src={product.hoverImageUrl}
-              alt=""
-              aria-hidden
-              loading="lazy"
-              className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+              sizes={TILE_SIZES}
+              className="opacity-0 transition-opacity duration-500 group-hover:opacity-100"
             />
           ) : null}
         </Link>
