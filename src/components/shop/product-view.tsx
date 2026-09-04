@@ -16,13 +16,15 @@ export type GalleryImage = {
  * tall hero shot, and everything you can act on stacked in the right column.
  *
  * Gallery and picker are one component because they share selection state —
- * choosing a colour swaps the gallery to that colour's photography. The static
- * copy around the picker arrives as slots from the server page, so the
- * description, perks and accordions are not shipped as client JavaScript.
+ * choosing a colour moves the hero shot to that colour's first photograph. The
+ * rail itself always lists every photograph the product has, so a shopper can
+ * still browse the other colours without changing their choice. The static copy
+ * around the picker arrives as slots from the server page, so the description,
+ * perks and accordions are not shipped as client JavaScript.
  *
- * The gallery follows the option values picked, not the resolved variant: on a
+ * The hero follows the option values picked, not the resolved variant: on a
  * product with a colour and a size, picking the colour alone is already enough
- * to know which photographs to show.
+ * to know which photograph to lead with.
  */
 export function ProductView({
   images,
@@ -50,33 +52,10 @@ export function ProductView({
   /** Perks and the detail accordions. */
   footer: ReactNode;
 }) {
-  const [selectedValueIds, setSelectedValueIds] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  /**
-   * Which photographs belong on screen.
-   *
-   * Nothing chosen shows the whole gallery, primary first. Once a value is
-   * chosen the gallery is that value's shots followed by the ones tied to no
-   * value in particular — and never another colour's, which was the bug that
-   * had one variant showing every picture and the next showing two.
-   */
-  const visible = useMemo(() => {
-    if (selectedValueIds.length === 0) return images;
-
-    const matching = images.filter(
-      (img) => img.optionValueId && selectedValueIds.includes(img.optionValueId),
-    );
-    const generic = images.filter((img) => !img.optionValueId);
-
-    if (matching.length > 0) return [...matching, ...generic];
-    // Nothing was assigned to this value: the general shots are the honest
-    // answer, and the full gallery only if there are none of those either.
-    return generic.length > 0 ? generic : images;
-  }, [images, selectedValueIds]);
-
-  const safeIndex = Math.min(activeIndex, Math.max(0, visible.length - 1));
-  const hero = visible[safeIndex];
+  const safeIndex = Math.min(activeIndex, Math.max(0, images.length - 1));
+  const hero = images[safeIndex];
 
   /** The picture each option value is shown by, for the picker's swatches. */
   const valueImages = useMemo(() => {
@@ -92,21 +71,24 @@ export function ProductView({
   }, [images]);
 
   function selectValues(valueIds: string[]) {
-    setSelectedValueIds(valueIds);
-    // Back to the first picture of whatever is now on show.
-    setActiveIndex(0);
+    // Lead with the chosen value's first photograph. If nothing was assigned to
+    // it, the shot on screen is as good an answer as any, so leave it alone.
+    const match = images.findIndex(
+      (img) => img.optionValueId && valueIds.includes(img.optionValueId),
+    );
+    if (match >= 0) setActiveIndex(match);
   }
 
   return (
     <div className="grid items-start gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-14">
       <div className="flex flex-col-reverse gap-4 sm:flex-row lg:sticky lg:top-28">
-        {visible.length > 1 ? (
+        {images.length > 1 ? (
           <div
             role="tablist"
             aria-label="Product images"
             className="flex gap-3 overflow-x-auto sm:max-h-[600px] sm:w-[92px] sm:shrink-0 sm:flex-col sm:overflow-y-auto sm:pr-1.5"
           >
-            {visible.map((image, index) => (
+            {images.map((image, index) => (
               <button
                 key={image.id}
                 type="button"
@@ -149,9 +131,9 @@ export function ProductView({
             </span>
           ) : null}
 
-          {visible.length > 1 ? (
+          {images.length > 1 ? (
             <span className="pointer-events-none absolute bottom-4 right-4 bg-[rgba(43,39,36,0.72)] px-2.5 py-1 text-sm tracking-[0.06em] text-[var(--surface)]">
-              {safeIndex + 1} / {visible.length}
+              {safeIndex + 1} / {images.length}
             </span>
           ) : null}
         </div>
