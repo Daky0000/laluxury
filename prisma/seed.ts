@@ -97,7 +97,15 @@ const RETIRED_CATEGORY_SLUGS = [
 /** Edits that only ever held stand-ins. */
 const RETIRED_COLLECTION_SLUGS = ["bed-set", "student-essentials"];
 
-const LEGACY_ANNOUNCEMENT = "Free delivery in Accra on orders over GH₵500";
+/** What the bar says now: free to the station over GHS 10,000, and no COD. */
+const ANNOUNCEMENT =
+  "Free delivery to your station over ₵10,000 · Nationwide delivery · New arrivals in stock";
+
+/** Bars this file has written before, and may therefore correct. */
+const LEGACY_ANNOUNCEMENTS = [
+  "Free delivery in Accra on orders over GH₵500",
+  "Complimentary delivery over ₵300 · Cash on delivery nationwide · New arrivals in stock",
+];
 
 /** The bundle banner sold a four-piece bed set built entirely from stand-ins. */
 const LEGACY_BUNDLE_TITLE = "The Complete Bed Set";
@@ -180,18 +188,31 @@ async function main() {
     update: {},
   });
 
-  await db.discount.upsert({
-    where: { code: "FREESHIP" },
-    create: {
-      code: "FREESHIP",
-      description: "Free delivery over GHS 300",
-      type: "FREE_SHIPPING",
-      value: 0,
-      minSubtotal: cedis(300),
-      isActive: true,
-    },
-    update: {},
-  });
+  // The threshold moved from GHS 300 to GHS 10,000. The code is only corrected
+  // where it still carries the old figure, so an owner who has since retuned it
+  // keeps their own.
+  const freeShip = await db.discount.findUnique({ where: { code: "FREESHIP" } });
+
+  if (!freeShip) {
+    await db.discount.create({
+      data: {
+        code: "FREESHIP",
+        description: "Free delivery to your station over GHS 10,000",
+        type: "FREE_SHIPPING",
+        value: 0,
+        minSubtotal: cedis(10000),
+        isActive: true,
+      },
+    });
+  } else if (freeShip.minSubtotal === cedis(300)) {
+    await db.discount.update({
+      where: { code: "FREESHIP" },
+      data: {
+        description: "Free delivery to your station over GHS 10,000",
+        minSubtotal: cedis(10000),
+      },
+    });
+  }
   console.log("  discounts: 2");
 
   // --- Customer tags -------------------------------------------------------
@@ -212,9 +233,8 @@ async function main() {
     storeName: "LaLuxury",
     tagline: "Considered textiles and furnishings for Ghanaian homes.",
     supportEmail: ownerEmail,
-    announcementBar:
-      "Complimentary delivery over ₵300 · Cash on delivery nationwide · New arrivals in stock",
-    freeShippingThreshold: cedis(300),
+    announcementBar: ANNOUNCEMENT,
+    freeShippingThreshold: cedis(10000),
     agentRequiresApproval: true,
   };
 
@@ -228,9 +248,21 @@ async function main() {
     const value = (storeRow.value ?? {}) as Record<string, unknown>;
     const patch: Record<string, unknown> = {};
 
-    if (value.announcementBar === LEGACY_ANNOUNCEMENT) {
-      patch.announcementBar = storeDefaults.announcementBar;
-      patch.freeShippingThreshold = cedis(300);
+    // The store never took cash on delivery, and the free-delivery threshold is
+    // now GHS 10,000 rather than 300 — so both of the earlier bars are wrong
+    // rather than merely dated. Either is replaced; wording the owner wrote
+    // themselves is left alone.
+    if (LEGACY_ANNOUNCEMENTS.includes(String(value.announcementBar))) {
+      patch.announcementBar = ANNOUNCEMENT;
+    }
+
+    // The threshold moves whether or not the bar did, but only off a figure
+    // this file put there.
+    if (
+      value.freeShippingThreshold === cedis(300) ||
+      value.freeShippingThreshold === cedis(500)
+    ) {
+      patch.freeShippingThreshold = cedis(10000);
     }
 
     // The bundle banner offered a duvet, a bedsheet, two pillows and a topper
@@ -388,14 +420,19 @@ async function seedCatalog() {
       })),
     );
 
-  /** Blinds are quoted per foot, so the ladder is derived rather than typed. */
-  const BLIND_RATE_PER_FOOT = 60;
-
-  const BLIND_SIZES = [3, 4, 5, 6, 7].map((feet) => ({
-    value: `${feet}ft`,
-    suffix: `${feet}F`,
-    price: feet * BLIND_RATE_PER_FOOT,
-  }));
+  /**
+   * Blinds are priced per drop rather than by a rate per foot: the short drops
+   * carry more of the fixed cost of the roller and the bracket, so the ladder
+   * flattens as it climbs. It is written out because no multiplication
+   * reproduces it.
+   */
+  const BLIND_SIZES = [
+    { feet: 3, price: 100 },
+    { feet: 4, price: 120 },
+    { feet: 5, price: 160 },
+    { feet: 6, price: 180 },
+    { feet: 7, price: 200 },
+  ].map(({ feet, price }) => ({ value: `${feet}ft`, suffix: `${feet}F`, price }));
 
   const BLIND_COLOURS = [
     { value: "Sea Blue", suffix: "SB", hex: "#2E5F7A" },
@@ -457,13 +494,15 @@ async function seedCatalog() {
       options: [
         {
           name: "Size",
-          values: [{ value: "Single" }, { value: "Double" }, { value: "King" }],
+          values: [{ value: "Double" }, { value: "King" }, { value: "Superking" }],
         },
       ],
+      // Single is no longer sold. Dropping it from here retires that variant
+      // rather than deleting it, so the orders that bought one still read.
       variants: [
-        { suffix: "SGL", options: { Size: "Single" }, price: 80, stock: 40 },
-        { suffix: "DBL", options: { Size: "Double" }, price: 110, stock: 32 },
-        { suffix: "KNG", options: { Size: "King" }, price: 150, stock: 21 },
+        { suffix: "DBL", options: { Size: "Double" }, price: 80, stock: 32 },
+        { suffix: "KNG", options: { Size: "King" }, price: 90, stock: 21 },
+        { suffix: "SPK", options: { Size: "Superking" }, price: 180, stock: 16 },
       ],
     },
 
@@ -605,7 +644,7 @@ async function seedCatalog() {
       slug: "curtain-blinds",
       short: "Zebra blinds, cut 3ft to 7ft.",
       description:
-        "Day-and-night zebra blinds: alternating sheer and solid bands that line up to close the window or offset to filter it, on a smooth roller with the bracket set in the box. Priced by the foot — pick the drop and the colour and we cut before delivery.",
+        "Day-and-night zebra blinds: alternating sheer and solid bands that line up to close the window or offset to filter it, on a smooth roller with the bracket set in the box. Priced by the drop — pick the height and the colour and we cut before delivery.",
       images: [
         { url: photo("curtain-blinds-1"), alt: "Zebra blind in black and white, half open" },
       ],
@@ -915,6 +954,10 @@ async function seedCatalog() {
   const nationalZone =
     national ?? (await db.shippingZone.create({ data: { name: "Rest of Ghana", regions: [] } }));
 
+  // Delivery is free on an order over this, and only to the station — the
+  // same figure the storefront advertises, so the two can never disagree.
+  const FREE_DELIVERY_ABOVE = cedis(10000);
+
   const rateSeed = [
     {
       zoneId: accraZone.id,
@@ -922,7 +965,7 @@ async function seedCatalog() {
       price: cedis(45),
       estimatedDaysMin: 0,
       estimatedDaysMax: 1,
-      freeAboveSubtotal: cedis(300),
+      freeAboveSubtotal: FREE_DELIVERY_ABOVE,
       position: 0,
     },
     {
@@ -931,7 +974,7 @@ async function seedCatalog() {
       price: cedis(25),
       estimatedDaysMin: 1,
       estimatedDaysMax: 2,
-      freeAboveSubtotal: cedis(300),
+      freeAboveSubtotal: FREE_DELIVERY_ABOVE,
       position: 1,
     },
     {
@@ -940,7 +983,7 @@ async function seedCatalog() {
       price: cedis(70),
       estimatedDaysMin: 3,
       estimatedDaysMax: 5,
-      freeAboveSubtotal: cedis(800),
+      freeAboveSubtotal: FREE_DELIVERY_ABOVE,
       position: 0,
     },
   ];
