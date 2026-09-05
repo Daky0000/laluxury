@@ -118,7 +118,7 @@ export function FilterRail({
   const topLevel = facets.categories.filter((c) => c.parentId === null);
 
   return (
-    <aside aria-label="Filters" className="flex flex-col gap-7 lg:sticky lg:top-28 lg:self-start">
+    <aside aria-label="Filters" className="flex flex-col gap-7">
       {/* Category */}
       {topLevel.length > 0 ? (
         <section>

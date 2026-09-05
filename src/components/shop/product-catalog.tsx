@@ -5,6 +5,7 @@ import { toTile } from "@/lib/product-view";
 import { ProductTile } from "@/components/shop/product-tile";
 import { SortSelect } from "@/components/shop/sort-select";
 import { FilterRail, ActiveFilters, OPTION_PREFIX } from "@/components/shop/filter-rail";
+import { FilterDrawer } from "@/components/shop/filter-drawer";
 import { buildQuery } from "@/lib/utils";
 
 /** The awaited `searchParams` of whichever page is showing the catalog. */
@@ -98,6 +99,17 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
   const heading = q ? `Results for “${q}”` : collectionSlug ? "The collection" : "All products";
   const remaining = results.total - results.items.length;
 
+  // Shown on the phone's filter button, so a filtered grid never looks
+  // unfiltered while the rail is folded away behind it.
+  const activeFilterCount =
+    categorySlugs.length +
+    tags.length +
+    Object.values(options).reduce((total, values) => total + values.length, 0) +
+    (params.min ? 1 : 0) +
+    (params.max ? 1 : 0) +
+    (inStockOnly ? 1 : 0) +
+    (onSaleOnly ? 1 : 0);
+
   return (
     <>
       {/* Page head */}
@@ -172,19 +184,21 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
 
       {/* Body */}
       <section className="lx-container grid items-start gap-x-13 gap-y-10 pb-16 pt-7 lg:grid-cols-[238px_1fr]">
-        <FilterRail
-          facets={facets}
-          selected={{
-            categorySlugs,
-            tags,
-            options,
-            inStockOnly,
-            onSaleOnly,
-            min: toSingle(params.min),
-            max: toSingle(params.max),
-          }}
-          carried={carried}
-        />
+        <FilterDrawer activeCount={activeFilterCount}>
+          <FilterRail
+            facets={facets}
+            selected={{
+              categorySlugs,
+              tags,
+              options,
+              inStockOnly,
+              onSaleOnly,
+              min: toSingle(params.min),
+              max: toSingle(params.max),
+            }}
+            carried={carried}
+          />
+        </FilterDrawer>
 
         <div>
           {results.items.length === 0 ? (
