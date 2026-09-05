@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
-import { updateSettings, type StoreSettings } from "@/lib/settings";
+import { DEFAULT_SETTINGS, updateSettings, type StoreSettings } from "@/lib/settings";
+import { isLandingPage } from "@/lib/landing";
 import { normaliseSections } from "@/lib/home-sections";
 import { runAgentTurn } from "@/lib/agent/runtime";
 import { pingAgent } from "@/lib/agent/provider";
@@ -30,7 +31,12 @@ export async function updateSettingsAction(
     return raw ? toMinorUnits(Number(raw)) : null;
   };
 
+  const landingPage = formData.get("landingPage");
+
   const patch: Partial<StoreSettings> = {
+    // An unknown value would leave the front door blank, so it falls back to
+    // the shipped default.
+    landingPage: isLandingPage(landingPage) ? landingPage : DEFAULT_SETTINGS.landingPage,
     storeName: String(formData.get("storeName") || "").trim() || "LaLuxury",
     tagline: String(formData.get("tagline") || "").trim(),
     supportEmail: String(formData.get("supportEmail") || "").trim(),

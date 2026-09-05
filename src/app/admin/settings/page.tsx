@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
+import { LANDING_PAGES } from "@/lib/landing";
 import { integrationsView } from "@/lib/integrations";
 import { env } from "@/lib/env";
 import { formatMoney } from "@/lib/money";
@@ -49,6 +50,12 @@ export default async function AdminSettingsPage() {
           {settings.homeSections.map((section) => section.title).join(", ")}. Add or remove
           sections, reorder them, and choose the rooms and products each one shows.
         </p>
+        {settings.landingPage !== "home" ? (
+          <p className="mt-2 text-sm text-[var(--text-muted)]">
+            The front page is set to {LANDING_PAGES[settings.landingPage].label.toLowerCase()}, so
+            these sections are not what visitors land on. Change that under Front page below.
+          </p>
+        ) : null}
       </Card>
 
       <SettingsForm settings={settings} />

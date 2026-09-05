@@ -4,6 +4,7 @@ import {
   normaliseSections,
   type HomeSection,
 } from "./home-sections";
+import { isLandingPage, type LandingPage } from "./landing";
 
 /**
  * Store settings live in a key/value table so the owner can change copy,
@@ -11,6 +12,8 @@ import {
  */
 
 export type StoreSettings = {
+  /** Which storefront page visitors land on at `/`. */
+  landingPage: LandingPage;
   storeName: string;
   tagline: string;
   supportEmail: string;
@@ -53,6 +56,10 @@ export type StoreSettings = {
 };
 
 export const DEFAULT_SETTINGS: StoreSettings = {
+  // The shop opens on the catalog: the owner would rather visitors see every
+  // piece straight away than the built home page. Switch it back under
+  // /admin/settings → Front page.
+  landingPage: "shop",
   storeName: "LaLuxury",
   tagline: "Considered pieces for the modern Ghanaian home",
   supportEmail: "hello@laluxury.com",
@@ -105,6 +112,11 @@ export async function getSettings(): Promise<StoreSettings> {
     // The section list is the one setting written as free-form JSON, so it is
     // checked on the way out rather than trusted.
     homeSections: normaliseSections(stored.homeSections),
+    // A landing page that no longer exists falls back to the built home page
+    // rather than leaving the front door blank.
+    landingPage: isLandingPage(stored.landingPage)
+      ? stored.landingPage
+      : DEFAULT_SETTINGS.landingPage,
   };
 }
 

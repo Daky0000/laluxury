@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { updateSettingsAction } from "@/app/actions/admin/system";
 import type { AdminState } from "@/app/actions/admin/products";
 import type { StoreSettings } from "@/lib/settings";
+import { LANDING_PAGES, type LandingPage } from "@/lib/landing";
 import { Card, Field, Alert } from "@/components/ui";
 import { toMajorUnits } from "@/lib/money";
 
@@ -13,12 +14,43 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
     updateSettingsAction,
     null,
   );
+  // Tracked so the note under the picker describes the page being chosen
+  // rather than the one that is live.
+  const [landingPage, setLandingPage] = useState<LandingPage>(settings.landingPage);
 
   return (
     <form action={action} className="flex flex-col gap-6">
       {state?.message ? (
         <Alert tone={state.ok ? "success" : "danger"}>{state.message}</Alert>
       ) : null}
+
+      <Card className="flex flex-col gap-4 p-5">
+        <h2 className="lx-eyebrow">Front page</h2>
+
+        <Field
+          label="Page visitors land on"
+          htmlFor="landingPage"
+          hint="What the wordmark and laluxury.com itself open. Both pages keep their own address whichever you pick, so /shop still works."
+        >
+          <select
+            id="landingPage"
+            name="landingPage"
+            value={landingPage}
+            onChange={(event) => setLandingPage(event.target.value as LandingPage)}
+            className="lx-field"
+          >
+            {Object.entries(LANDING_PAGES).map(([value, page]) => (
+              <option key={value} value={value}>
+                {page.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <p className="-mt-1 text-sm text-[var(--text-secondary)]">
+          {LANDING_PAGES[landingPage].hint}
+        </p>
+      </Card>
 
       <Card className="flex flex-col gap-4 p-5">
         <h2 className="lx-eyebrow">Store</h2>
