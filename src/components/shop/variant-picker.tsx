@@ -292,7 +292,7 @@ export function VariantPicker({
     <div>
       {/* Price */}
       <div className="mt-5 flex flex-wrap items-baseline gap-3.5">
-        <span className="text-[38px] leading-none tabular-nums">
+        <span className="text-[38px] font-semibold leading-none tabular-nums">
           {activeVariant
             ? formatPrice(activeVariant.price)
             : priceRange

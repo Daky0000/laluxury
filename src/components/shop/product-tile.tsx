@@ -68,7 +68,7 @@ export function ProductTile({
         ) : null}
 
         {product.badge ? (
-          <span className="pointer-events-none absolute left-3.5 top-3.5 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.9)] px-2.5 py-1 text-sm font-medium uppercase tracking-[0.14em] text-[var(--text-primary)] backdrop-blur">
+          <span className="lx-badge pointer-events-none absolute left-3 top-3 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.9)] px-2 py-[3px] text-[var(--text-primary)] backdrop-blur">
             {product.badge}
           </span>
         ) : null}
@@ -86,9 +86,7 @@ export function ProductTile({
             </Link>
           </h3>
           {product.category ? (
-            <p className="mt-1 text-sm uppercase tracking-[0.14em] text-[var(--text-muted)]">
-              {product.category}
-            </p>
+            <p className="lx-badge mt-1 font-normal text-[var(--text-muted)]">{product.category}</p>
           ) : null}
 
           {product.swatches.length > 0 ? (
@@ -111,7 +109,7 @@ export function ProductTile({
           {product.hasRange ? (
             <span className="text-sm text-[var(--text-muted)]">from </span>
           ) : null}
-          <span className="text-[17px] tabular-nums">{formatPrice(product.price)}</span>
+          <span className="text-[17px] font-semibold tabular-nums">{formatPrice(product.price)}</span>
           {onSale ? (
             <span className="mt-0.5 block text-sm text-[var(--text-muted)] line-through">
               {formatPrice(product.compareAtPrice!)}

@@ -149,7 +149,7 @@ export function CartDrawer() {
                     ) : null}
                   </div>
 
-                  <p className="text-[17px] tabular-nums">
+                  <p className="text-[17px] font-semibold tabular-nums">
                     {formatPrice(line.lineTotal)}
                   </p>
                 </li>
@@ -161,7 +161,7 @@ export function CartDrawer() {
         <div className="border-t border-[var(--border-subtle)] px-6 py-5">
           <div className="mb-1.5 flex justify-between text-sm text-[var(--text-secondary)]">
             <span>Subtotal</span>
-            <span className="tabular-nums">{formatPrice(summary.subtotal)}</span>
+            <span className="font-semibold tabular-nums">{formatPrice(summary.subtotal)}</span>
           </div>
           <div className="mb-4 flex justify-between text-sm font-light text-[var(--text-muted)]">
             <span>Delivery</span>

@@ -169,6 +169,19 @@
     font-weight: 400;
   }
 
+  /* Merchandising labels — "Bestseller", "New" — and the room name under a
+     product title. These are decoration rather than reading matter: they sit
+     over a photograph in a couple of words, so they are the one place the 16px
+     floor is stepped under deliberately, and they keep their weight and
+     tracking to stay legible at the smaller size. */
+  .lx-badge {
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
   /* Wide-tracked uppercase used on buttons and meta rows. */
   .lx-caps {
     font-size: 1rem;

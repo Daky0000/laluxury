@@ -117,7 +117,7 @@ function CartLine({ line }: { line: CartLineView }) {
             </button>
           </div>
 
-          <span className="text-[19px] tabular-nums">
+          <span className="text-[19px] font-semibold tabular-nums">
             {formatPrice(line.lineTotal)}
           </span>
         </div>

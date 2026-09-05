@@ -195,7 +195,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
                       Qty {item.quantity}
                     </span>
                   </span>
-                  <span className="text-[17px] tabular-nums">
+                  <span className="text-[17px] font-semibold tabular-nums">
                     {formatPrice(item.total)}
                   </span>
                 </li>
@@ -221,7 +221,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
               </div>
               <div className="mt-2.5 flex items-baseline justify-between border-t border-[var(--border-strong)] pt-3.5">
                 <dt className="text-sm uppercase tracking-[0.06em]">Total</dt>
-                <dd className="text-[26px] tabular-nums">{formatPrice(fresh.total)}</dd>
+                <dd className="text-[26px] font-semibold tabular-nums">{formatPrice(fresh.total)}</dd>
               </div>
             </dl>
           </div>

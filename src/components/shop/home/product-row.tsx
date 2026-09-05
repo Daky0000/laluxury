@@ -76,7 +76,7 @@ export function ProductRow({
                   {product.title}
                 </Link>
                 <div className="flex items-center gap-3">
-                  <span className="text-base tabular-nums">{formatPrice(product.price)}</span>
+                  <span className="text-base font-semibold tabular-nums">{formatPrice(product.price)}</span>
                   <AddToBagIcon
                     variantId={product.inStock ? product.variantId : null}
                     href={`/product/${product.slug}`}

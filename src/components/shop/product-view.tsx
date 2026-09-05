@@ -130,7 +130,7 @@ export function ProductView({
           )}
 
           {badge ? (
-            <span className="pointer-events-none absolute left-4 top-4 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.92)] px-3 py-1.5 text-sm font-medium uppercase tracking-[0.16em] backdrop-blur">
+            <span className="lx-badge pointer-events-none absolute left-4 top-4 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.92)] px-2.5 py-1 backdrop-blur">
               {badge}
             </span>
           ) : null}
