@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CreditCard, MessageCircle, Sparkles, Truck } from "lucide-react";
+import { MessageCircle, ShieldCheck, Sparkles, Truck } from "lucide-react";
 import type { StoreSettings } from "@/lib/settings";
 import { formatPrice } from "@/lib/money";
 
@@ -16,13 +16,13 @@ export function Perks({ settings }: { settings: StoreSettings }) {
     {
       icon: Truck,
       title: "Nationwide delivery",
-      sub: freeOver ? `Complimentary over ${formatPrice(freeOver)}` : "Accra and nationwide",
+      sub: freeOver ? `Free to your station over ${formatPrice(freeOver)}` : "Accra and nationwide",
       href: "/shop",
     },
     {
-      icon: CreditCard,
-      title: "Cash on delivery",
-      sub: "Pay when it arrives",
+      icon: ShieldCheck,
+      title: "Secure payment",
+      sub: "Mobile Money, card or transfer",
       href: "/contact",
     },
     {

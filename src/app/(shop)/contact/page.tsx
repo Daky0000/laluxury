@@ -59,8 +59,8 @@ export default async function ContactPage() {
   const faqs = [
     { q: "How long does delivery take?", a: settings.shippingPolicy },
     {
-      q: "Do you offer cash on delivery?",
-      a: "Yes — cash on delivery is available everywhere we deliver. You can also pay by Mobile Money (MTN / Telecel) or card at checkout.",
+      q: "How can I pay?",
+      a: "Mobile Money (MTN / Telecel), card, or bank transfer and USSD — all at checkout. We do not take cash on delivery: an order is paid for before it leaves us.",
     },
     { q: "What is your returns policy?", a: settings.returnsPolicy },
     {

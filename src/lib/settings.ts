@@ -67,12 +67,14 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   whatsappNumber: "",
   addressLine: "Accra, Ghana",
   instagramUrl: "",
-  freeShippingThreshold: 50000,
+  freeShippingThreshold: 1000000,
   lowStockThreshold: 5,
   announcementBar:
-    "Complimentary delivery over \u20B5300 \u00B7 Cash on delivery nationwide \u00B7 New arrivals in stock",
-  returnsPolicy: "Unused items may be returned within 14 days of delivery.",
-  shippingPolicy: "Accra deliveries arrive in 1-2 business days, nationwide in 3-5.",
+    "Free delivery to your station over \u20B510,000 \u00B7 Nationwide delivery \u00B7 New arrivals in stock",
+  returnsPolicy:
+    "All sales are final: we do not accept returns and we do not give refunds. Check the piece over at delivery, and tell the rider there and then if anything arrived damaged.",
+  shippingPolicy:
+    "Accra deliveries arrive in 1-2 business days, nationwide in 3-5. Outside Accra we send to your nearest station.",
 
   heroEyebrow: "The 2026 Collection",
   heroTitle: "Quiet luxury for",

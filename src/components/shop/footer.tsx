@@ -65,7 +65,7 @@ export async function Footer() {
             {settings.storeName}
           </p>
           <p className="mt-4 max-w-[280px] text-sm font-light leading-[1.7] text-[var(--text-secondary)]">
-            {intro} Order online or by WhatsApp — cash on delivery welcome.
+            {intro} Order online or by WhatsApp — pay by Mobile Money, card or bank transfer.
           </p>
         </div>
 

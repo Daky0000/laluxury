@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Star, Truck, Wallet, RotateCcw, MessageCircle } from "lucide-react";
+import { Star, Truck, Wallet, ShieldCheck, MessageCircle } from "lucide-react";
 import { db } from "@/lib/db";
 import { getProductBySlug, ratingFor, relatedProducts } from "@/lib/catalog";
 import { toTile } from "@/lib/product-view";
@@ -96,10 +96,13 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
 
   const perks = [
     settings.freeShippingThreshold
-      ? { icon: Truck, label: `Free delivery over ${formatPrice(settings.freeShippingThreshold)}` }
+      ? {
+          icon: Truck,
+          label: `Free to your station over ${formatPrice(settings.freeShippingThreshold)}`,
+        }
       : { icon: Truck, label: "Nationwide delivery" },
-    { icon: Wallet, label: "Cash on delivery" },
-    { icon: RotateCcw, label: "Easy returns" },
+    { icon: Wallet, label: "Momo, card or transfer" },
+    { icon: ShieldCheck, label: "All sales final" },
     settings.whatsappNumber ? { icon: MessageCircle, label: "Order on WhatsApp" } : null,
   ].filter((perk) => perk !== null);
 

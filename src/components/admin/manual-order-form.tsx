@@ -267,8 +267,8 @@ function ManualOrderForm({
           <span>
             Already paid
             <span className="mt-0.5 block text-xs text-[var(--text-muted)]">
-              Ticking this marks the order paid and takes the stock immediately. Leave it clear for
-              cash on delivery and mark it paid when the money arrives.
+              Ticking this marks the order paid and takes the stock immediately. Leave it clear
+              until the money arrives, then mark it paid.
             </span>
           </span>
         </label>

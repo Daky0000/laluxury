@@ -58,7 +58,7 @@ export default async function CartPage() {
               <dt>
                 Subtotal ({totals.itemCount} {totals.itemCount === 1 ? "item" : "items"})
               </dt>
-              <dd className="tabular-nums">{formatPrice(totals.subtotal)}</dd>
+              <dd className="font-medium tabular-nums">{formatPrice(totals.subtotal)}</dd>
             </div>
 
             {totals.discountTotal > 0 ? (
@@ -76,13 +76,13 @@ export default async function CartPage() {
 
           {freeGap > 0 ? (
             <p className="pb-2 text-sm text-sage-600">
-              Add {formatPrice(freeGap)} more for free delivery
+              Add {formatPrice(freeGap)} more for free delivery to your station
             </p>
           ) : null}
 
           <div className="mt-2.5 flex items-baseline justify-between border-t border-[var(--border-strong)] pt-4">
             <span className="text-sm uppercase tracking-[0.06em]">Total</span>
-            <span className="text-3xl tabular-nums">{formatPrice(totals.total)}</span>
+            <span className="text-3xl font-semibold tabular-nums">{formatPrice(totals.total)}</span>
           </div>
 
           <Link
