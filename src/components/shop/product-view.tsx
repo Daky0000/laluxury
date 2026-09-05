@@ -97,7 +97,10 @@ export function ProductView({
                 aria-selected={index === safeIndex}
                 onClick={() => setActiveIndex(index)}
                 className={cn(
-                  "aspect-[4/5] w-16 shrink-0 overflow-hidden border bg-[var(--surface-media)] transition-colors sm:w-full",
+                  // `relative` is load-bearing: Photo fills its container by
+                  // absolute positioning, so without it a thumbnail escapes its
+                  // button and sizes itself to the sticky column instead.
+                  "relative aspect-[4/5] w-16 shrink-0 overflow-hidden border bg-[var(--surface-media)] transition-colors sm:w-full",
                   index === safeIndex
                     ? "border-[var(--accent)] outline outline-1 -outline-offset-1 outline-[var(--accent)]"
                     : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]",
@@ -110,7 +113,9 @@ export function ProductView({
           </div>
         ) : null}
 
-        <div className="relative aspect-[4/5] flex-1 overflow-hidden bg-[var(--surface-media)]">
+        {/* Sized by its own 4:5 crop, not stretched to the rail: otherwise the
+            hero changes shape with the number of photographs beside it. */}
+        <div className="relative aspect-[4/5] flex-1 self-start overflow-hidden bg-[var(--surface-media)]">
           {hero ? (
             <Photo
               src={hero.url}
