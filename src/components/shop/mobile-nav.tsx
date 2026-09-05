@@ -26,13 +26,14 @@ export function MobileNav({
 
       {open ? (
         <div
-          className="fixed inset-0 z-50 bg-ink-950/40 md:hidden"
+          className="fixed inset-0 z-50 flex justify-end bg-ink-950/40 md:hidden"
           onClick={() => setOpen(false)}
           role="presentation"
         >
+          {/* Anchored right, under the button that opened it. */}
           <nav
             aria-label="Main"
-            className="h-full w-72 bg-[var(--surface-raised)] p-6"
+            className="h-full w-72 overflow-y-auto bg-[var(--surface-raised)] p-6"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-8 flex items-center justify-between">
