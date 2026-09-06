@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getSession } from "./session";
 import { can, isStaff, type Permission } from "./rbac";
+import { formatPhone } from "@/lib/phone";
 import type { Role, User } from "@/generated/prisma";
 
 export * from "./rbac";
@@ -62,13 +63,26 @@ export async function requirePermission(permission: Permission): Promise<User> {
   return user;
 }
 
+/**
+ * What to call someone in the console and on their own account page.
+ *
+ * The fallback chain follows how the account was made: customers register with
+ * a name and a phone number and may have no email at all, while staff accounts
+ * are still keyed on one. Every branch here can be null, so the last resort is
+ * a word rather than an empty string — a blank row in a customer list is a
+ * mystery, "Customer" is at least a fact.
+ */
 export function displayName(user: {
   firstName: string | null;
   lastName: string | null;
-  email: string;
+  email?: string | null;
+  phone?: string | null;
 }): string {
   const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
-  return name || user.email;
+  if (name) return name;
+  if (user.email) return user.email;
+  if (user.phone) return formatPhone(user.phone);
+  return "Customer";
 }
 
 export type { Role, Permission };

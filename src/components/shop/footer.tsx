@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
+import { CookieSettingsLink } from "./cookie-consent";
+
+const LEGAL_LINKS = [
+  { label: "Privacy notice", href: "/privacy" },
+  { label: "Cookie policy", href: "/cookies" },
+  { label: "Terms of sale", href: "/terms" },
+] as const;
 
 export async function Footer() {
   // The rooms come from the database rather than a list here, so retiring one
@@ -68,7 +75,8 @@ export async function Footer() {
             {settings.storeName}
           </p>
           <p className="mt-4 max-w-[320px] text-sm font-light leading-[1.7] text-[var(--text-secondary)]">
-            {intro} Order online or by WhatsApp — pay by Mobile Money, card or bank transfer.
+            {intro} Order online or by WhatsApp — pay by Mobile Money (MTN, Telecel,
+            AirtelTigo), card or bank transfer.
           </p>
         </div>
 
@@ -92,6 +100,24 @@ export async function Footer() {
               </ul>
             </nav>
           ))}
+        </div>
+      </div>
+
+      {/* The legal rail. Kept out of the three link columns above so it reads
+          as what it is — the policies, and the way back into the cookie
+          choice — rather than as another place to shop. */}
+      <div className="border-t border-[var(--border-subtle)]">
+        <div className="lx-container flex flex-wrap gap-x-6 gap-y-1 py-3 text-sm text-[var(--text-secondary)]">
+          {LEGAL_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="flex min-h-11 items-center transition-colors hover:text-[var(--accent)]"
+            >
+              {link.label}
+            </Link>
+          ))}
+          <CookieSettingsLink className="flex min-h-11 items-center underline-offset-4 transition-colors hover:text-[var(--accent)] hover:underline" />
         </div>
       </div>
 

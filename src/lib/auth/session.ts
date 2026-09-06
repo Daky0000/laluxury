@@ -7,9 +7,16 @@ const COOKIE_NAME = "lx_session";
 const CART_COOKIE = "lx_cart";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
+/**
+ * The session carries an id and a role, and nothing else.
+ *
+ * It used to carry the email too, which stopped being an identity the moment
+ * customers began registering with a phone number — and a copy of a mutable
+ * field inside a 30-day token is a copy that goes stale. Every caller that
+ * wants more loads the user.
+ */
 export type SessionPayload = {
   userId: string;
-  email: string;
   role: Role;
 };
 
@@ -28,10 +35,11 @@ export async function signSession(payload: SessionPayload): Promise<string> {
 export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
-    if (typeof payload.userId !== "string" || typeof payload.email !== "string") return null;
+    if (typeof payload.userId !== "string") return null;
+    // Tokens issued before the email came out of the payload still verify;
+    // the extra claim is simply ignored, so nobody is signed out by the change.
     return {
       userId: payload.userId,
-      email: payload.email,
       role: payload.role as Role,
     };
   } catch {

@@ -68,6 +68,12 @@ export const env = {
     isConfigured: () => Boolean(process.env.SMTP_HOST && process.env.SMTP_USER),
   },
 
+  vynfy: {
+    apiKey: () => optional("VYNFY_API_KEY"),
+    senderId: () => optional("VYNFY_SENDER_ID", "LaLuxury"),
+    isConfigured: () => Boolean(process.env.VYNFY_API_KEY),
+  },
+
   cloudinary: {
     cloudName: () => optional("CLOUDINARY_CLOUD_NAME"),
     apiKey: () => optional("CLOUDINARY_API_KEY"),
@@ -87,6 +93,7 @@ export function integrationStatus() {
     { key: "slack", label: "Slack channel", ready: env.slack.isConfigured() },
     { key: "whatsapp", label: "WhatsApp channel", ready: env.whatsapp.isConfigured() },
     { key: "smtp", label: "Transactional email", ready: env.smtp.isConfigured() },
+    { key: "sms", label: "SMS & OTP (Vynfy)", ready: env.vynfy.isConfigured() },
     { key: "cloudinary", label: "Cloudinary image CDN", ready: env.cloudinary.isConfigured() },
   ];
 }

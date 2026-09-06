@@ -60,7 +60,7 @@ export default async function ContactPage() {
     { q: "How long does delivery take?", a: settings.shippingPolicy },
     {
       q: "How can I pay?",
-      a: "Mobile Money (MTN / Telecel), card, or bank transfer and USSD — all at checkout. We do not take cash on delivery: an order is paid for before it leaves us.",
+      a: "Mobile Money on MTN, Telecel or AirtelTigo, card, or bank transfer and USSD — all at checkout. We do not take cash on delivery: an order is paid for before it leaves us.",
     },
     { q: "What is your returns policy?", a: settings.returnsPolicy },
     {

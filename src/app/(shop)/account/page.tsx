@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Package, Heart, MapPin, LogOut } from "lucide-react";
+import { Package, Heart, MapPin, LogOut, ShieldCheck } from "lucide-react";
 import { db } from "@/lib/db";
 import { currentUser, displayName } from "@/lib/auth";
 import { isStaff } from "@/lib/auth/rbac";
@@ -9,8 +9,11 @@ import { logoutAction } from "@/app/actions/auth";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
+import { formatPhone } from "@/lib/phone";
+import { getSettings } from "@/lib/settings";
 import { Card, Badge, EmptyState, LinkButton } from "@/components/ui";
 import { Thumb } from "@/components/shop/photo";
+import { MarketingToggle } from "@/components/shop/marketing-toggle";
 
 export const metadata: Metadata = { title: "Your account" };
 export const dynamic = "force-dynamic";
@@ -43,6 +46,7 @@ export default async function AccountPage() {
     db.address.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 4 }),
   ]);
 
+  const { supportEmail } = await getSettings();
   const paid = orders.filter((o) => o.paymentStatus === "SUCCESS");
   const lifetime = paid.reduce((sum, o) => sum + o.total, 0);
 
@@ -203,10 +207,48 @@ export default async function AccountPage() {
 
           <Card className="p-5 text-sm">
             <h2 className="lx-eyebrow mb-2">Details</h2>
-            <p className="text-[var(--text-secondary)]">{user.email}</p>
-            {user.phone ? <p className="text-[var(--text-secondary)]">{user.phone}</p> : null}
+            {user.phone ? (
+              <p className="flex flex-wrap items-center gap-x-2 text-[var(--text-secondary)]">
+                {formatPhone(user.phone)}
+                {user.phoneVerified ? (
+                  <span className="inline-flex items-center gap-1 text-sm text-sage-600">
+                    <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+                    Verified
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
+            {user.email ? <p className="text-[var(--text-secondary)]">{user.email}</p> : null}
             <p className="mt-2 text-sm text-[var(--text-muted)]">
               Member since {formatDate(user.createdAt)}
+            </p>
+          </Card>
+
+          {/* The GDPR rights, where someone would actually look for them: on
+              their own account, not buried three clicks into a policy page. */}
+          <Card className="p-5 text-sm">
+            <h2 className="lx-eyebrow mb-2">Your data</h2>
+
+            <MarketingToggle initial={user.acceptsMarketing} />
+
+            <p className="mt-4 border-t border-[var(--border-subtle)] pt-4 font-light leading-relaxed text-[var(--text-secondary)]">
+              You can ask for a copy of everything we hold about you, have it corrected, or have
+              your account deleted. We answer within a month and it costs nothing.
+            </p>
+            <a
+              href={`mailto:${supportEmail}?subject=${encodeURIComponent("Data request")}&body=${encodeURIComponent(
+                `Hello,\n\nI would like to (delete this line as needed): request a copy of my data / correct my details / delete my account.\n\nAccount: ${displayName(user)}\n`,
+              )}`}
+              className="mt-3 inline-flex min-h-11 items-center text-[var(--text-primary)] underline underline-offset-4 hover:text-[var(--accent)]"
+            >
+              Make a data request
+            </a>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              More in the{" "}
+              <Link href="/privacy" className="underline underline-offset-4">
+                privacy notice
+              </Link>
+              .
             </p>
           </Card>
         </aside>

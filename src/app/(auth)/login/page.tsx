@@ -15,7 +15,8 @@ export default async function LoginPage() {
     <div className="w-full max-w-sm">
       <h1 className="text-3xl">Sign in</h1>
       <p className="mt-1.5 text-sm text-[var(--text-secondary)]">
-        Welcome back. Staff accounts land in the back office.
+        Welcome back. Use the phone number you signed up with. Staff accounts land in the back
+        office.
       </p>
 
       <div className="mt-8">

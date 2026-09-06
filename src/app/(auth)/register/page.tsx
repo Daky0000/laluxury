@@ -14,7 +14,8 @@ export default async function RegisterPage() {
     <div className="w-full max-w-md">
       <h1 className="text-3xl">Create an account</h1>
       <p className="mt-1.5 text-sm text-[var(--text-secondary)]">
-        Save your details, track orders and keep a wishlist.
+        Track orders, save your delivery details and keep a wishlist. We confirm your number by
+        text — it takes a moment.
       </p>
 
       <div className="mt-8">

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/auth";
+import { displayName, requirePermission } from "@/lib/auth";
 import { DEFAULT_SETTINGS, updateSettings, type StoreSettings } from "@/lib/settings";
 import { isLandingPage } from "@/lib/landing";
 import { normaliseSections } from "@/lib/home-sections";
@@ -147,7 +147,7 @@ export async function askAgentAction(
       channel: "WEB",
       externalId,
       userId: actor.id,
-      label: actor.email,
+      label: displayName(actor),
     },
     update: { userId: actor.id, isActive: true },
   });
@@ -226,10 +226,10 @@ export async function linkAgentIdentityAction(
       channel,
       externalId: normalised,
       userId,
-      label: target.email,
+      label: displayName(target),
       isActive: true,
     },
-    update: { userId, label: target.email, isActive: true },
+    update: { userId, label: displayName(target), isActive: true },
   });
 
   await recordAudit({
@@ -240,7 +240,7 @@ export async function linkAgentIdentityAction(
   });
 
   revalidatePath("/admin/agent");
-  return { ok: true, message: `${normalised} now acts as ${target.email}.` };
+  return { ok: true, message: `${normalised} now acts as ${displayName(target)}.` };
 }
 
 export async function removeAgentIdentityAction(id: string): Promise<AdminState> {

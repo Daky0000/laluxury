@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Mail, Phone } from "lucide-react";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/auth";
+import { displayName, requirePermission } from "@/lib/auth";
+import { formatPhone } from "@/lib/phone";
 import { can } from "@/lib/auth/rbac";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
@@ -78,7 +79,7 @@ export default async function AdminCustomerPage({ params }: PageProps<"/admin/cu
 
   const purchased = [...bought.values()].sort((a, b) => b.units - a.units);
   const lifetimeValue = paidOrders.reduce((sum, o) => sum + o.total, 0);
-  const name = [customer.firstName, customer.lastName].filter(Boolean).join(" ") || customer.email;
+  const name = displayName(customer);
   const canWrite = can(staff.role, "customers:write");
 
   return (
@@ -107,14 +108,24 @@ export default async function AdminCustomerPage({ params }: PageProps<"/admin/cu
         </div>
 
         <div className="mt-2 flex flex-wrap gap-4 text-sm text-[var(--text-secondary)]">
-          <a href={`mailto:${customer.email}`} className="flex items-center gap-1.5 hover:underline">
-            <Mail className="h-3.5 w-3.5" aria-hidden />
-            {customer.email}
-          </a>
+          {/* A customer who registered by phone has no email, and a mailto
+              link built from a missing one opens an empty draft to "null". */}
+          {customer.email ? (
+            <a href={`mailto:${customer.email}`} className="flex items-center gap-1.5 hover:underline">
+              <Mail className="h-3.5 w-3.5" aria-hidden />
+              {customer.email}
+            </a>
+          ) : null}
           {customer.phone ? (
-            <a href={`tel:${customer.phone}`} className="flex items-center gap-1.5 hover:underline">
+            <a
+              href={`tel:+${customer.phone}`}
+              className="flex items-center gap-1.5 hover:underline"
+            >
               <Phone className="h-3.5 w-3.5" aria-hidden />
-              {customer.phone}
+              {formatPhone(customer.phone)}
+              {customer.phoneVerified ? null : (
+                <span className="text-[var(--text-muted)]">(unverified)</span>
+              )}
             </a>
           ) : null}
           <span>Joined {formatDate(customer.createdAt)}</span>

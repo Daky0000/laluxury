@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/auth";
+import { displayName, requirePermission } from "@/lib/auth";
 import { permissionsFor, ROLE_LABELS } from "@/lib/auth/rbac";
 import { formatDate } from "@/lib/utils";
 import { Card, SectionHeading } from "@/components/ui";
@@ -39,7 +39,7 @@ export default async function AdminUsersPage() {
         staff={staff.map((s) => ({
           id: s.id,
           email: s.email,
-          name: [s.firstName, s.lastName].filter(Boolean).join(" ") || s.email,
+          name: displayName(s),
           role: s.role,
           isActive: s.isActive,
           lastLoginAt: s.lastLoginAt?.toISOString() ?? null,

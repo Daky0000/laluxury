@@ -77,7 +77,7 @@ export function ProductTile({
         ) : null}
 
         {product.badge ? (
-          <span className="lx-badge pointer-events-none absolute left-3 top-3 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.9)] px-2 py-[3px] text-[var(--text-primary)] backdrop-blur">
+          <span className="lx-badge pointer-events-none absolute left-2 top-2 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.9)] px-1.5 py-[2px] text-[var(--text-primary)] backdrop-blur sm:left-3 sm:top-3 sm:px-2 sm:py-[3px]">
             {product.badge}
           </span>
         ) : null}

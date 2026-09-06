@@ -10,24 +10,44 @@ import {
   passwordProblems,
   verifyPassword,
 } from "@/lib/auth";
+import {
+  clearPendingSignup,
+  cooldownRemaining,
+  getPendingSignup,
+  setPendingSignup,
+} from "@/lib/auth/signup";
 import { isStaff } from "@/lib/auth/rbac";
 import { getOrCreateCart } from "@/lib/cart";
+import { normalisePhone } from "@/lib/phone";
+import { sendOtp, verifyOtp } from "@/lib/sms";
+import { getSettings } from "@/lib/settings";
 
 export type AuthState = { ok: boolean; message?: string; fieldErrors?: Record<string, string> };
 
+/**
+ * Sign-in takes a phone number or an email in one field.
+ *
+ * Customers register by phone; staff accounts predate that and are still keyed
+ * on email. Asking which kind of account someone has before they can sign in is
+ * a question only we care about, so the field takes either and works it out.
+ */
 const loginSchema = z.object({
-  email: z.string().email("Enter a valid email address."),
+  identifier: z.string().min(1, "Enter your phone number or email."),
   password: z.string().min(1, "Enter your password."),
 });
 
-const registerSchema = z.object({
-  firstName: z.string().min(1, "Enter your first name."),
-  lastName: z.string().min(1, "Enter your last name."),
-  email: z.string().email("Enter a valid email address."),
-  phone: z.string().optional(),
-  password: z.string().min(8, "Use at least 8 characters."),
-  acceptsMarketing: z.boolean().optional(),
-});
+const registerSchema = z
+  .object({
+    name: z.string().trim().min(2, "Enter your name."),
+    phone: z.string().min(1, "Enter your phone number."),
+    password: z.string().min(8, "Use at least 8 characters."),
+    confirmPassword: z.string().min(1, "Type your password again."),
+    acceptsMarketing: z.boolean().optional(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Those two passwords do not match.",
+  });
 
 function fieldErrors(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
@@ -38,29 +58,57 @@ function fieldErrors(error: z.ZodError): Record<string, string> {
   return out;
 }
 
+/** "Ama Serwaa Mensah" → first "Ama", last "Serwaa Mensah". One field, two columns. */
+function splitName(name: string): { firstName: string; lastName: string | null } {
+  const parts = name.trim().split(/\s+/);
+  const firstName = parts.shift() ?? name.trim();
+  return { firstName, lastName: parts.length ? parts.join(" ") : null };
+}
+
 export async function loginAction(
   _prev: AuthState | null,
   formData: FormData,
 ): Promise<AuthState> {
   const parsed = loginSchema.safeParse({
-    email: formData.get("email"),
+    identifier: formData.get("identifier"),
     password: formData.get("password"),
   });
   if (!parsed.success) return { ok: false, fieldErrors: fieldErrors(parsed.error) };
 
-  const email = parsed.data.email.toLowerCase().trim();
-  const user = await db.user.findUnique({ where: { email } });
+  const identifier = parsed.data.identifier.trim();
+  const phone = normalisePhone(identifier);
+
+  const user = phone
+    ? await db.user.findUnique({ where: { phone } })
+    : await db.user.findUnique({ where: { email: identifier.toLowerCase() } });
 
   // One message for both cases, so this cannot be used to enumerate accounts.
   const valid = await verifyPassword(parsed.data.password, user?.passwordHash ?? null);
   if (!user || !valid) {
-    return { ok: false, message: "That email and password do not match." };
+    return { ok: false, message: "That phone number and password do not match." };
   }
   if (!user.isActive) {
     return { ok: false, message: "That account has been disabled." };
   }
 
-  await createSessionCookie({ userId: user.id, email: user.email, role: user.role });
+  // An account that was registered by phone and never verified has no other way
+  // in, so rather than refusing it, send a fresh code and finish what was
+  // started. The session is still withheld until the code is typed.
+  if (user.phone && !user.phoneVerified && !user.email) {
+    const settings = await getSettings();
+    const sent = await sendOtp(user.phone, settings.storeName);
+    await setPendingSignup({
+      userId: user.id,
+      phone: user.phone,
+      sentAt: Math.floor(Date.now() / 1000),
+    });
+    if (!sent.ok && sent.code !== "OTP_PENDING") {
+      return { ok: false, message: sent.message };
+    }
+    redirect("/register/verify");
+  }
+
+  await createSessionCookie({ userId: user.id, role: user.role });
   await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
   // Fold anything added while signed out into the account cart. This runs here
@@ -70,43 +118,145 @@ export async function loginAction(
   redirect(isStaff(user.role) ? "/admin" : "/account");
 }
 
+/**
+ * Step one of registration: name, number, password.
+ *
+ * The account is written now but left unverified, and no session is issued. The
+ * code Vynfy texts is what turns it into an account you can sign in to, so an
+ * abandoned sign-up is an inert row rather than a live account on somebody
+ * else's phone number.
+ */
 export async function registerAction(
   _prev: AuthState | null,
   formData: FormData,
 ): Promise<AuthState> {
   const parsed = registerSchema.safeParse({
-    firstName: formData.get("firstName"),
-    lastName: formData.get("lastName"),
-    email: formData.get("email"),
-    phone: formData.get("phone") || undefined,
+    name: formData.get("name"),
+    phone: formData.get("phone"),
     password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword"),
     acceptsMarketing: formData.get("acceptsMarketing") === "on",
   });
   if (!parsed.success) return { ok: false, fieldErrors: fieldErrors(parsed.error) };
 
+  const phone = normalisePhone(parsed.data.phone);
+  if (!phone) {
+    return {
+      ok: false,
+      fieldErrors: { phone: "Enter a Ghanaian mobile number, e.g. 024 000 0000." },
+    };
+  }
+
   const problems = passwordProblems(parsed.data.password);
   if (problems.length) return { ok: false, fieldErrors: { password: problems[0] } };
 
-  const email = parsed.data.email.toLowerCase().trim();
-  const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
-  if (existing) {
-    return { ok: false, fieldErrors: { email: "There is already an account with that email." } };
+  const { firstName, lastName } = splitName(parsed.data.name);
+  const acceptsMarketing = Boolean(parsed.data.acceptsMarketing);
+  const existing = await db.user.findUnique({ where: { phone } });
+
+  if (existing?.phoneVerified) {
+    return {
+      ok: false,
+      fieldErrors: { phone: "There is already an account on that number. Sign in instead." },
+    };
   }
 
-  const user = await db.user.create({
-    data: {
-      email,
-      firstName: parsed.data.firstName.trim(),
-      lastName: parsed.data.lastName.trim(),
-      phone: parsed.data.phone?.trim() || null,
-      passwordHash: await hashPassword(parsed.data.password),
-      acceptsMarketing: Boolean(parsed.data.acceptsMarketing),
-      role: "CUSTOMER",
-    },
+  const settings = await getSettings();
+  const data = {
+    firstName,
+    lastName,
+    phone,
+    passwordHash: await hashPassword(parsed.data.password),
+    acceptsMarketing,
+    // Consent has to be evidenced, not assumed — and withdrawing it clears the
+    // date as well as the flag.
+    marketingConsentAt: acceptsMarketing ? new Date() : null,
+  };
+
+  // An unverified row on this number is somebody's abandoned attempt, or this
+  // same person coming back. Either way it is theirs only once they hold the
+  // phone, so it is safe to take it over rather than block the number forever.
+  const user = existing
+    ? await db.user.update({ where: { id: existing.id }, data })
+    : await db.user.create({ data: { ...data, role: "CUSTOMER" } });
+
+  const sent = await sendOtp(phone, settings.storeName);
+  if (!sent.ok && sent.code !== "OTP_PENDING") {
+    return { ok: false, message: sent.message };
+  }
+
+  await setPendingSignup({
+    userId: user.id,
+    phone,
+    sentAt: Math.floor(Date.now() / 1000),
   });
 
-  await createSessionCookie({ userId: user.id, email: user.email, role: user.role });
+  redirect("/register/verify");
+}
+
+/** Step two: the code. This is what creates the session. */
+export async function verifySignupAction(
+  _prev: AuthState | null,
+  formData: FormData,
+): Promise<AuthState> {
+  const pending = await getPendingSignup();
+  if (!pending) {
+    return {
+      ok: false,
+      message: "That sign-up has expired. Start again and we will text you a new code.",
+    };
+  }
+
+  const code = String(formData.get("code") ?? "").replace(/\s/g, "");
+  if (!/^[0-9]{4,8}$/.test(code)) {
+    return { ok: false, fieldErrors: { code: "Enter the code we texted you." } };
+  }
+
+  const result = await verifyOtp(pending.phone, code);
+  if (!result.ok) return { ok: false, fieldErrors: { code: result.message } };
+
+  const user = await db.user.findUnique({ where: { id: pending.userId } });
+  if (!user || !user.isActive) {
+    await clearPendingSignup();
+    return { ok: false, message: "We could not find that account. Please start again." };
+  }
+
+  await db.user.update({
+    where: { id: user.id },
+    data: { phoneVerified: new Date(), lastLoginAt: new Date() },
+  });
+
+  await clearPendingSignup();
+  await createSessionCookie({ userId: user.id, role: user.role });
+  await getOrCreateCart().catch(() => {});
+
   redirect("/account");
+}
+
+/** Another code, once the cooldown has passed. */
+export async function resendSignupOtpAction(): Promise<AuthState> {
+  const pending = await getPendingSignup();
+  if (!pending) {
+    return { ok: false, message: "That sign-up has expired. Please start again." };
+  }
+
+  const wait = cooldownRemaining(pending.sentAt);
+  if (wait > 0) {
+    return { ok: false, message: `Wait ${wait} more second${wait === 1 ? "" : "s"} before asking for another code.` };
+  }
+
+  const settings = await getSettings();
+  const sent = await sendOtp(pending.phone, settings.storeName);
+  if (!sent.ok) return { ok: false, message: sent.message };
+
+  await setPendingSignup({ ...pending, sentAt: Math.floor(Date.now() / 1000) });
+  return { ok: true, message: "A new code is on its way." };
+}
+
+/** Abandons a half-finished sign-up, so the form starts clean. */
+export async function cancelSignupAction(): Promise<void> {
+  await clearPendingSignup();
+  redirect("/register");
 }
 
 export async function logoutAction(): Promise<void> {

@@ -77,6 +77,7 @@ readiness on the admin dashboard, so the store boots and runs with just a databa
 | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET` | — | Agent in Slack |
 | `WHATSAPP_*` | — | Agent on WhatsApp |
 | `SMTP_*` | — | Transactional email |
+| `VYNFY_API_KEY`, `VYNFY_SENDER_ID` | — | SMS one-time codes; without it nobody can register |
 | `CLOUDINARY_*` | — | Optional image CDN; without it uploads are stored in Postgres |
 
 See `.env.example` for the full list with setup notes.

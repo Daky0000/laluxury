@@ -21,8 +21,8 @@ type Rate = {
 const PAYMENT_METHODS = [
   {
     id: "momo",
-    label: "Mobile Money (MTN / Telecel)",
-    note: "Momo prompt",
+    label: "Mobile Money",
+    note: "MTN · Telecel · AirtelTigo",
     channels: ["mobile_money"],
   },
   { id: "card", label: "Card", note: "Visa · Mastercard", channels: ["card"] },
@@ -379,9 +379,9 @@ export function CheckoutForm({
                   className="sr-only"
                 />
                 {radioDot(active)}
-                {/* "Mobile Money (MTN / Telecel)" and "Momo prompt" side by
-                    side needs about 380px. Under `sm` the note drops beneath
-                    the label rather than squeezing both into two words each. */}
+                {/* "Mobile Money" and the three networks side by side needs
+                    about 380px. Under `sm` the note drops beneath the label
+                    rather than squeezing both into two words each. */}
                 <span className="min-w-0 flex-1 text-left text-sm">
                   {option.label}
                   <span className="mt-0.5 block text-sm text-[var(--text-muted)] sm:hidden">

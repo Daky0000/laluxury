@@ -45,6 +45,8 @@ export type Integrations = {
     appSecret: string;
   };
   smtp: { host: string; port: number; user: string; password: string; from: string };
+  /** Vynfy — the SMS gateway that carries sign-up codes and order notices. */
+  sms: { apiKey: string; senderId: string };
   cloudinary: { cloudName: string; apiKey: string; apiSecret: string };
 };
 
@@ -60,6 +62,7 @@ export const SECRET_FIELDS = new Set([
   "whatsapp.appSecret",
   "whatsapp.verifyToken",
   "smtp.password",
+  "sms.apiKey",
   "cloudinary.apiSecret",
 ]);
 
@@ -100,6 +103,10 @@ function fromEnv(): Integrations {
       user: env.smtp.user(),
       password: env.smtp.password(),
       from: env.smtp.from(),
+    },
+    sms: {
+      apiKey: env.vynfy.apiKey(),
+      senderId: env.vynfy.senderId(),
     },
     cloudinary: {
       cloudName: env.cloudinary.cloudName(),
@@ -236,6 +243,8 @@ export function isReady(config: Integrations, group: keyof Integrations): boolea
       return Boolean(config.whatsapp.accessToken && config.whatsapp.phoneNumberId);
     case "smtp":
       return Boolean(config.smtp.host && config.smtp.user);
+    case "sms":
+      return Boolean(config.sms.apiKey && config.sms.senderId);
     case "cloudinary":
       return Boolean(config.cloudinary.cloudName && config.cloudinary.apiSecret);
   }
@@ -265,7 +274,7 @@ export async function integrationsView(): Promise<IntegrationGroup[]> {
       description:
         config.paystack.mode === "test"
           ? "In test mode — checkout uses the test keys and takes no real money."
-          : "Takes card, Mobile Money and bank payments at checkout.",
+          : "Takes card, Mobile Money (MTN, Telecel, AirtelTigo) and bank payments at checkout.",
       ready: isReady(config, "paystack"),
       fields: [
         field("paystack", "mode", "Mode", "live or test"),
@@ -326,6 +335,22 @@ export async function integrationsView(): Promise<IntegrationGroup[]> {
       ],
     },
     {
+      key: "sms",
+      label: "SMS & one-time codes",
+      description:
+        "Vynfy texts the code that verifies a new account, and sends order notices.",
+      ready: isReady(config, "sms"),
+      fields: [
+        field("sms", "apiKey", "Vynfy API key", "From your Vynfy dashboard"),
+        field(
+          "sms",
+          "senderId",
+          "Sender ID",
+          "The name on the handset. Max 11 characters, and registered with Vynfy first",
+        ),
+      ],
+    },
+    {
       key: "cloudinary",
       label: "Image CDN",
       description: "Stores product photos uploaded from the console.",
@@ -348,6 +373,7 @@ export async function integrationStatus() {
     { key: "slack", label: "Slack channel", ready: isReady(config, "slack") },
     { key: "whatsapp", label: "WhatsApp channel", ready: isReady(config, "whatsapp") },
     { key: "smtp", label: "Transactional email", ready: isReady(config, "smtp") },
+    { key: "sms", label: "SMS & one-time codes", ready: isReady(config, "sms") },
     { key: "cloudinary", label: "Image CDN", ready: isReady(config, "cloudinary") },
   ];
 }

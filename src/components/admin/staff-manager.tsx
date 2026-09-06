@@ -33,7 +33,8 @@ const RANK: Record<Role, number> = {
 
 type StaffMember = {
   id: string;
-  email: string;
+  /** Null for an account created by phone rather than by invitation. */
+  email: string | null;
   name: string;
   role: Role;
   isActive: boolean;
@@ -182,7 +183,7 @@ export function StaffManager({
                           <span className="ml-2 text-xs text-[var(--text-muted)]">you</span>
                         ) : null}
                       </span>
-                      <span className="block text-xs text-[var(--text-muted)]">{member.email}</span>
+                      <span className="block text-xs text-[var(--text-muted)]">{member.email ?? "—"}</span>
                     </td>
 
                     <td className="px-4 py-3">

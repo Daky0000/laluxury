@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Search, Mail } from "lucide-react";
+import { Search, Mail, Phone } from "lucide-react";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/auth";
+import { displayName, requirePermission } from "@/lib/auth";
+import { formatPhone } from "@/lib/phone";
 import { customerSummaries } from "@/lib/analytics";
 import { formatMoney } from "@/lib/money";
 import { formatDate, buildQuery } from "@/lib/utils";
@@ -120,13 +121,22 @@ export default async function AdminCustomersPage({ searchParams }: PageProps<"/a
                         href={`/admin/customers/${customer.id}`}
                         className="font-medium hover:underline"
                       >
-                        {[customer.firstName, customer.lastName].filter(Boolean).join(" ") ||
-                          customer.email}
+                        {displayName(customer)}
                       </Link>
-                      <span className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-                        <Mail className="h-3 w-3" aria-hidden />
-                        {customer.email}
-                      </span>
+                      {/* Whichever of the two the account is actually reachable
+                          on. Phone-registered customers have no email, and an
+                          envelope beside a blank is worse than no line at all. */}
+                      {customer.email ? (
+                        <span className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                          <Mail className="h-3 w-3" aria-hidden />
+                          {customer.email}
+                        </span>
+                      ) : customer.phone ? (
+                        <span className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                          <Phone className="h-3 w-3" aria-hidden />
+                          {formatPhone(customer.phone)}
+                        </span>
+                      ) : null}
                     </td>
 
                     <td className="px-4 py-3">
@@ -158,10 +168,7 @@ export default async function AdminCustomersPage({ searchParams }: PageProps<"/a
                     <td className="px-4 py-3">
                       <RemoveCustomerButton
                         userId={customer.id}
-                        name={
-                          [customer.firstName, customer.lastName].filter(Boolean).join(" ") ||
-                          customer.email
-                        }
+                        name={displayName(customer)}
                       />
                     </td>
                   </tr>

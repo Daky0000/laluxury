@@ -20,7 +20,7 @@ type Identity = {
   isActive: boolean;
 };
 
-type Staff = { id: string; email: string; name: string; role: string };
+type Staff = { id: string; email: string | null; name: string; role: string };
 
 /**
  * Changes the agent parked for approval, with the exact call it wants to make

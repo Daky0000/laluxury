@@ -24,18 +24,27 @@ enum Role {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
+  id String @id @default(cuid())
+
+  // Customers register with a phone number and verify it by SMS, so email is
+  // optional: it is how staff sign in and how receipts are addressed, not how
+  // an account is identified. Postgres allows many NULLs under a unique index,
+  // so both columns can be unique and optional at once.
+  email         String?   @unique
   emailVerified DateTime?
+  // Stored canonically as 233XXXXXXXXX — see lib/phone.ts.
+  phone         String?   @unique
+  phoneVerified DateTime?
   passwordHash  String?
   firstName     String?
   lastName      String?
-  phone         String?
   role          Role      @default(CUSTOMER)
   isActive      Boolean   @default(true)
 
   // Marketing / CRM
   acceptsMarketing Boolean   @default(false)
+  /** When marketing consent was given. The GDPR wants consent evidenced, not assumed. */
+  marketingConsentAt DateTime?
   lastLoginAt      DateTime?
   notes            String?
 

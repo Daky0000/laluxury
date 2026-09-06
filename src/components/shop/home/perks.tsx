@@ -23,7 +23,7 @@ export function Perks({ settings }: { settings: StoreSettings }) {
     {
       icon: ShieldCheck,
       title: "Secure payment",
-      sub: "Mobile Money, card or transfer",
+      sub: "MTN, Telecel, AirtelTigo, card",
       href: "/contact",
     },
     {

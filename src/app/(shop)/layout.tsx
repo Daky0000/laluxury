@@ -1,14 +1,5 @@
-import { Header } from "@/components/shop/header";
-import { Footer } from "@/components/shop/footer";
-import { CartDrawer } from "@/components/shop/cart-drawer";
+import { SiteShell } from "@/components/shop/site-shell";
 
 export default function ShopLayout({ children }: LayoutProps<"/">) {
-  return (
-    <>
-      <Header />
-      <main className="flex-1">{children}</main>
-      <Footer />
-      <CartDrawer />
-    </>
-  );
+  return <SiteShell>{children}</SiteShell>;
 }

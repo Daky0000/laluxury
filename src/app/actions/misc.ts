@@ -30,6 +30,45 @@ export async function subscribeAction(
 }
 
 /**
+ * Turning marketing on and off from your own account.
+ *
+ * Withdrawing consent has to be as easy as giving it, so it is one control on
+ * the account page rather than a request to support. The date is set alongside
+ * the flag and cleared when it is withdrawn, so what we hold is evidence of the
+ * consent that is actually current — not a flag with no history behind it.
+ */
+export async function setMarketingPreferenceAction(accept: boolean): Promise<SimpleState> {
+  const user = await currentUser();
+  if (!user) return { ok: false, message: "Sign in first." };
+
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      acceptsMarketing: accept,
+      marketingConsentAt: accept ? new Date() : null,
+    },
+  });
+
+  // The newsletter list is a separate table, so an account holder switching off
+  // here has to come off that too, or they keep getting the emails they just
+  // said no to.
+  if (user.email) {
+    await db.newsletterSubscriber.updateMany({
+      where: { email: user.email },
+      data: accept
+        ? { isSubscribed: true, unsubscribedAt: null }
+        : { isSubscribed: false, unsubscribedAt: new Date() },
+    });
+  }
+
+  revalidatePath("/account");
+  return {
+    ok: true,
+    message: accept ? "You are on the list." : "You will not hear from us again.",
+  };
+}
+
+/**
  * The heart on a product page. Saving needs an account, so a signed-out
  * shopper is told to sign in rather than silently losing the tap.
  */

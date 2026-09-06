@@ -39,6 +39,7 @@ const SHAPE: Record<string, string[]> = {
   slack: ["botToken", "signingSecret", "alertChannel"],
   whatsapp: ["accessToken", "phoneNumberId", "verifyToken", "appSecret"],
   smtp: ["host", "port", "user", "password", "from"],
+  sms: ["apiKey", "senderId"],
   cloudinary: ["cloudName", "apiKey", "apiSecret"],
 };
 
@@ -185,10 +186,38 @@ export async function testIntegrationAction(
 
       case "smtp": {
         if (!(await isEmailConfigured())) return { ok: false, message: "No SMTP host saved yet." };
+        // The test goes to whoever pressed the button, so an account with no
+        // email on it has nowhere to send to.
+        if (!user.email) {
+          return { ok: false, message: "Add an email address to your own account first." };
+        }
         const result = await sendTestEmail(user.email);
         return result.ok
           ? { ok: true, message: `Test email sent to ${user.email}.` }
           : { ok: false, message: result.error ?? "The mail server refused it." };
+      }
+
+      case "sms": {
+        if (!config.sms.apiKey) return { ok: false, message: "No Vynfy API key saved yet." };
+        // Reading the OTP balance proves the key without spending a message.
+        const response = await fetch("https://sms.vynfy.com/otp/balance", {
+          headers: { "X-API-Key": config.sms.apiKey },
+          cache: "no-store",
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          success?: boolean;
+          balance?: number;
+        };
+        if (!response.ok || !payload.success) {
+          return { ok: false, message: `Vynfy rejected the key (${response.status}).` };
+        }
+        return {
+          ok: true,
+          message:
+            typeof payload.balance === "number"
+              ? `Vynfy accepted the key. OTP balance: GHS ${payload.balance.toFixed(2)}.`
+              : "Vynfy accepted the key.",
+        };
       }
 
       case "cloudinary": {

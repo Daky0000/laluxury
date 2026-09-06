@@ -36,8 +36,15 @@ export function AddToBag({ variantId, href, label = "Add to bag", soldOut = fals
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * The bar is sized off the tile, not the viewport. In a two-across grid on a
+   * phone the tile is about 170px, and a 44px bar in tracked-out 16px uppercase
+   * covered a quarter of the photograph — so at that width it drops to a 32px
+   * strip in 11px type, and grows back to the full control once the tile is
+   * wide enough (`@[13rem]`, i.e. a tablet grid or a desktop row) to carry it.
+   */
   const barClass =
-    "absolute inset-x-2 bottom-2 flex min-h-11 items-center justify-center gap-2 px-2 py-3 text-sm font-medium uppercase tracking-[0.06em] transition-all duration-200 @[13rem]/tile:inset-x-3.5 @[13rem]/tile:bottom-3.5 @[13rem]/tile:px-3 @[13rem]/tile:tracking-[0.14em] " +
+    "absolute inset-x-1.5 bottom-1.5 flex min-h-8 items-center justify-center gap-1.5 px-1.5 py-1 text-[11px] font-medium uppercase leading-none tracking-[0.04em] transition-all duration-200 @[13rem]/tile:inset-x-3.5 @[13rem]/tile:bottom-3.5 @[13rem]/tile:min-h-11 @[13rem]/tile:gap-2 @[13rem]/tile:px-3 @[13rem]/tile:py-3 @[13rem]/tile:text-sm @[13rem]/tile:tracking-[0.14em] " +
     "translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-visible:translate-y-0 focus-visible:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 " +
     "pointer-coarse:translate-y-0 pointer-coarse:opacity-100";
 
@@ -109,12 +116,12 @@ export function AddToBag({ variantId, href, label = "Add to bag", soldOut = fals
           type="button"
           onClick={add}
           disabled={pending || buying}
-          className="flex min-w-0 flex-1 items-center justify-center gap-2 self-stretch bg-[var(--accent)] px-2 py-3 text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-80 @[13rem]/tile:px-3"
+          className="flex min-w-0 flex-1 items-center justify-center gap-1.5 self-stretch bg-[var(--accent)] px-1.5 py-1 text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-80 @[13rem]/tile:gap-2 @[13rem]/tile:px-3 @[13rem]/tile:py-3"
         >
           {pending ? (
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin @[13rem]/tile:h-3.5 @[13rem]/tile:w-3.5" aria-hidden />
           ) : added ? (
-            <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <Check className="h-3 w-3 shrink-0 @[13rem]/tile:h-3.5 @[13rem]/tile:w-3.5" aria-hidden />
           ) : null}
           <span className="truncate">
             {added ? (
@@ -153,7 +160,7 @@ export function AddToBag({ variantId, href, label = "Add to bag", soldOut = fals
       {error ? (
         <span
           role="alert"
-          className="absolute inset-x-2 bottom-14 bg-danger px-2 py-1 text-center text-sm text-white @[13rem]/tile:inset-x-3.5 @[13rem]/tile:bottom-16"
+          className="absolute inset-x-1.5 bottom-11 bg-danger px-2 py-1 text-center text-[11px] leading-snug text-white @[13rem]/tile:inset-x-3.5 @[13rem]/tile:bottom-16 @[13rem]/tile:text-sm"
         >
           {error}
         </span>

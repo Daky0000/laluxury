@@ -101,7 +101,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
           label: `Free to your station over ${formatPrice(settings.freeShippingThreshold)}`,
         }
       : { icon: Truck, label: "Nationwide delivery" },
-    { icon: Wallet, label: "Momo, card or transfer" },
+    { icon: Wallet, label: "MTN, Telecel, AirtelTigo, card" },
     { icon: ShieldCheck, label: "All sales final" },
     settings.whatsappNumber ? { icon: MessageCircle, label: "Order on WhatsApp" } : null,
   ].filter((perk) => perk !== null);

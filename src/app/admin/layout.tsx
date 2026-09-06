@@ -57,7 +57,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
 
         <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--border-subtle)] px-5 py-3 text-xs text-[var(--text-muted)] lg:px-8">
           <span>
-            Signed in as {user.email} · {permissions.length} permissions
+            Signed in as {name} · {permissions.length} permissions
           </span>
           <form action={logoutAction} className="ml-auto">
             <button type="submit" className="underline-offset-4 hover:underline">

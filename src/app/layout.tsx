@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     template: "%s · LaLuxury",
   },
   description:
-    "Bedding, carpets, curtains and furnishings for Ghanaian homes. Delivered nationwide, paid by Mobile Money, card or bank transfer.",
+    "Bedding, carpets, curtains and furnishings for Ghanaian homes. Delivered nationwide, paid by Mobile Money (MTN, Telecel, AirtelTigo), card or bank transfer.",
   openGraph: {
     type: "website",
     siteName: "LaLuxury",

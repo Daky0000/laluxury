@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Mail, Phone, MapPin } from "lucide-react";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/auth";
+import { displayName, requirePermission } from "@/lib/auth";
 import { can } from "@/lib/auth/rbac";
 import { orderInclude } from "@/lib/orders";
 import { describeChannel } from "@/lib/paystack";
@@ -170,8 +170,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                   href={`/admin/customers/${order.user.id}`}
                   className="font-medium hover:underline"
                 >
-                  {[order.user.firstName, order.user.lastName].filter(Boolean).join(" ") ||
-                    order.user.email}
+                  {displayName(order.user)}
                 </Link>
               ) : (
                 <span className="text-[var(--text-secondary)]">Guest checkout</span>

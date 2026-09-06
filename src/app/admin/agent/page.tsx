@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Bot, Hash, MessageCircle, Globe } from "lucide-react";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/auth";
+import { displayName, requirePermission } from "@/lib/auth";
 import { can } from "@/lib/auth/rbac";
 import { env } from "@/lib/env";
 import { getIntegrations, isReady } from "@/lib/integrations";
@@ -222,7 +222,7 @@ export default async function AdminAgentPage() {
           staff={staff.map((s) => ({
             id: s.id,
             email: s.email,
-            name: [s.firstName, s.lastName].filter(Boolean).join(" ") || s.email,
+            name: displayName(s),
             role: s.role,
           }))}
           slackReady={isReady(integrations, "slack")}
