@@ -63,27 +63,60 @@ type VynfyResponse = {
   attempts_remaining?: number;
 };
 
+/**
+ * `sms.vynfy.com` sits behind Cloudflare, which is why the reply is read as
+ * text and only then parsed.
+ *
+ * When Cloudflare decides to challenge a caller — far likelier from a host's
+ * datacentre address than from an office connection — what comes back is an
+ * HTML interstitial, not the documented JSON envelope. Calling `response.json()`
+ * on that throws, and the previous version of this swallowed the throw and
+ * returned an empty object, so every such failure reached the customer as
+ * "we could not reach the SMS network" with nothing written down anywhere.
+ *
+ * Now the body is kept and logged whatever it turns out to be. The API key is
+ * never logged.
+ */
 async function call(
   path: string,
   apiKey: string,
   body: Record<string, unknown>,
 ): Promise<{ status: number; data: VynfyResponse }> {
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
+  let response: Response;
+  let text: string;
 
-  let data: VynfyResponse = {};
   try {
-    data = (await response.json()) as VynfyResponse;
-  } catch {
-    // A gateway that returns HTML on an error is still an error; the status
-    // carries enough to say something useful.
+    response = await fetch(`${BASE_URL}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        // An empty User-Agent is one of the cheapest things for an edge to
+        // block, and a named one is something Vynfy can allowlist on request.
+        "User-Agent": "LaLuxury-Shop/1.0 (+https://laluxurys.com)",
+        "X-API-Key": apiKey,
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+    text = await response.text();
+  } catch (error) {
+    // DNS, TLS or a dropped connection — never a reply we can read.
+    console.error(`[sms] ${path} did not complete:`, error);
+    return { status: 0, data: {} };
   }
 
-  return { status: response.status, data };
+  try {
+    return { status: response.status, data: JSON.parse(text) as VynfyResponse };
+  } catch {
+    // Not JSON. Almost always an edge challenge or an error page; the first few
+    // hundred characters are enough to tell which.
+    console.error(
+      `[sms] ${path} returned ${response.status} ${response.headers.get("content-type") ?? "?"}, ` +
+        `not JSON: ${text.slice(0, 300).replace(/\s+/g, " ")}`,
+    );
+    return { status: response.status, data: {} };
+  }
 }
 
 /**
@@ -92,6 +125,19 @@ async function call(
  */
 function readableError(status: number, data: VynfyResponse): { code: string; message: string } {
   const code = data.error_code ?? data.error ?? `HTTP_${status}`;
+
+  // Vynfy answers an unusable key with a 401 and "Invalid API key". That is a
+  // setup fault rather than something the customer can do anything about, so it
+  // is named plainly here and loudly in the log.
+  if (status === 401) {
+    console.error(`[sms] rejected the API key: ${data.message ?? data.error ?? "401"}`);
+    return {
+      code: "UNAUTHORISED",
+      message:
+        "Our SMS account needs attention, so we could not do that just now. " +
+        "Please contact us and we will set your account up.",
+    };
+  }
 
   const messages: Record<string, string> = {
     INVALID_PHONE:
@@ -110,12 +156,15 @@ function readableError(status: number, data: VynfyResponse): { code: string; mes
     EMPTY_CODE: "Enter the code we sent you.",
   };
 
+  // The reference on the end is the point of this branch: a shopper reporting
+  // "it said SMS-403" tells the owner in four characters what a screenshot of
+  // the old wording never did.
   return {
     code,
     message:
       messages[code] ??
       data.message ??
-      "We could not reach the SMS network. Please try again in a moment.",
+      `We could not reach the SMS network. Please try again in a moment, and tell us if it keeps happening (SMS-${status || "NET"}).`,
   };
 }
 

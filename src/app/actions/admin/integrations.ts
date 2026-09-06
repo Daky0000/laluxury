@@ -199,18 +199,39 @@ export async function testIntegrationAction(
 
       case "sms": {
         if (!config.sms.apiKey) return { ok: false, message: "No Vynfy API key saved yet." };
+
         // Reading the OTP balance proves the key without spending a message.
+        // The body is read as text first: Vynfy is behind Cloudflare, and a
+        // challenge from a datacentre address comes back as an HTML page rather
+        // than the documented JSON — which is exactly the case this button
+        // exists to make visible.
         const response = await fetch("https://sms.vynfy.com/otp/balance", {
-          headers: { "X-API-Key": config.sms.apiKey },
+          headers: {
+            "X-API-Key": config.sms.apiKey,
+            Accept: "application/json",
+            "User-Agent": "LaLuxury-Shop/1.0 (+https://laluxurys.com)",
+          },
           cache: "no-store",
         });
-        const payload = (await response.json().catch(() => ({}))) as {
-          success?: boolean;
-          balance?: number;
-        };
-        if (!response.ok || !payload.success) {
-          return { ok: false, message: `Vynfy rejected the key (${response.status}).` };
+        const body = await response.text();
+
+        let payload: { success?: boolean; balance?: number; message?: string } | null = null;
+        try {
+          payload = JSON.parse(body);
+        } catch {
+          const kind = /cloudflare|cf-ray|challenge|Just a moment/i.test(body)
+            ? "Cloudflare blocked the request from this server rather than Vynfy refusing it. Ask Vynfy to allowlist the shop's outbound address."
+            : "The reply was not JSON.";
+          return { ok: false, message: `Vynfy answered ${response.status}. ${kind}` };
         }
+
+        if (!response.ok || !payload?.success) {
+          return {
+            ok: false,
+            message: `Vynfy refused it (${response.status}): ${payload?.message ?? "no reason given"}.`,
+          };
+        }
+
         return {
           ok: true,
           message:
