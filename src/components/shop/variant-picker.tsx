@@ -490,12 +490,13 @@ export function VariantPicker({
         {/*
           Three controls on one line needs about 420px: the stepper is a fixed
           140, the heart another 54, and "Add to bag" is uppercase and tracked
-          out at the type floor. On a phone that overflowed, so under `sm` the
-          stepper and the heart share the first row and the bag button takes the
-          full width of the second — where it is also easiest to reach.
+          out at the type floor. A phone has 350. So under `sm` the stepper and
+          the heart share the first row — the stepper spreading to fill it, so
+          it reads as a row rather than as something left over — and the bag
+          button takes the whole of the second, where it is easiest to reach.
         */}
         <div className="flex flex-wrap items-stretch gap-3 sm:flex-nowrap sm:gap-3.5">
-          <div className="flex min-h-12 items-center border border-[var(--border-strong)]">
+          <div className="flex min-h-12 flex-1 items-center justify-between border border-[var(--border-strong)] px-1 sm:flex-none sm:justify-start sm:px-0">
             <button
               type="button"
               onClick={() => setQuantity(quantity - 1)}
@@ -521,7 +522,7 @@ export function VariantPicker({
               aria-label={
                 activeVariant ? `Quantity of ${activeVariant.title}` : "Quantity"
               }
-              className="w-10 shrink-0 border-0 bg-transparent p-0 text-center text-base tabular-nums outline-none [appearance:textfield] focus:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="w-full min-w-10 border-0 bg-transparent p-0 text-center text-base tabular-nums outline-none [appearance:textfield] focus:ring-0 sm:w-10 sm:shrink-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
 
             <button
@@ -673,7 +674,7 @@ export function VariantPicker({
       </div>
 
       {/* Quick order — skips the bag for a shopper who has already decided. */}
-      <div className="group relative mt-3 flex">
+      <div className="group relative mt-3 flex w-full">
         <button
           type="button"
           onClick={buyNow}

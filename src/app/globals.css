@@ -359,6 +359,12 @@
      scrolls sideways instead, with the scrollbar itself out of the way and the
      gutter edges bled so the row reads as continuing past the screen. */
   .lx-scroll-x {
+    /* `min-width: 0` is what makes this scroll at all. A scroll container inside
+       a flex or grid item still contributes its full content width to that
+       item's automatic minimum size, so without this the row does not scroll —
+       it grows, and takes the whole column with it. That is how a product with
+       31 photographs pushed the buy buttons off the side of the screen. */
+    min-width: 0;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
@@ -373,6 +379,28 @@
 
   .lx-scroll-x > * {
     scroll-snap-align: start;
+  }
+
+  /* A vertical scroller that keeps its bar — the product thumbnail rail, where
+     the bar is the only sign there are more photographs below. Drawn from the
+     palette rather than left to the platform, which on Windows is a grey slab
+     wider than the rail it sits in. */
+  .lx-scroll-y {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  .lx-scroll-y::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .lx-scroll-y::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .lx-scroll-y::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 2px;
   }
 
   /* Bleeds a scroller to the screen edges inside a gutter-padded container, so
