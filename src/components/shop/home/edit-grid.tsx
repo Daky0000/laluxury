@@ -32,21 +32,33 @@ export function EditGrid({
 
   return (
     <>
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-6 border-b border-[var(--border-subtle)] pb-6">
-        <div>
-          {eyebrow ? <p className="lx-eyebrow">{eyebrow}</p> : null}
-          {title ? <h2 className="mt-2.5 text-4xl md:text-[2.875rem]">{title}</h2> : null}
+      <div className="mb-6 border-b border-[var(--border-subtle)] pb-5 sm:mb-8 sm:pb-6 md:flex md:flex-wrap md:items-end md:justify-between md:gap-6">
+        <div className="min-w-0">
+          {eyebrow ? (
+            <p className="lx-eyebrow tracking-[0.2em] sm:tracking-[0.32em]">{eyebrow}</p>
+          ) : null}
+          {title ? (
+            <h2 className="mt-2.5 text-[clamp(1.875rem,6vw,2.875rem)] leading-tight">{title}</h2>
+          ) : null}
         </div>
 
+        {/* Below `md` the rooms scroll sideways rather than wrapping. Eight
+            rooms at the type floor wrap into four lines of tabs, which pushes
+            the products they are meant to filter clean off the screen. */}
         {tabs.length > 0 ? (
-          <div className="flex flex-wrap gap-6">
+          <div
+            role="tablist"
+            aria-label="Rooms"
+            className="lx-scroll-x lx-bleed -mb-1 mt-5 flex gap-5 md:mt-0 md:flex-wrap md:gap-6 md:overflow-visible"
+          >
             {[{ label: "All", slug: "all" }, ...tabs].map((tab) => (
               <button
                 key={tab.slug}
                 type="button"
+                role="tab"
                 onClick={() => setActive(tab.slug)}
-                aria-pressed={active === tab.slug}
-                className={`border-b pb-1 text-sm uppercase tracking-[0.1em] transition-colors ${
+                aria-selected={active === tab.slug}
+                className={`shrink-0 border-b pb-1 text-sm uppercase tracking-[0.1em] transition-colors ${
                   active === tab.slug
                     ? "border-[var(--accent)] text-[var(--text-primary)]"
                     : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]"
@@ -59,7 +71,7 @@ export function EditGrid({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-x-5 gap-y-8 md:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-5 md:grid-cols-3 lg:grid-cols-4">
         {shown.map((product) => (
           <ProductTile key={product.id} product={product} />
         ))}

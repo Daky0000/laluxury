@@ -20,6 +20,10 @@ export function NewsletterForm({ variant = "compact" }: { variant?: "compact" | 
   if (variant === "inline") {
     return (
       <form action={action} className="mx-auto max-w-[460px]">
+        {/* `min-w-0` on the input is load-bearing: a text input carries an
+            intrinsic minimum width of about twenty characters, and without this
+            a flex row refuses to shrink it, so on a narrow phone the button was
+            pushed past the edge of the screen. */}
         <div className="flex border border-[var(--border-strong)] bg-[var(--surface-raised)]">
           <label htmlFor="newsletter-email" className="sr-only">
             Email address
@@ -30,12 +34,12 @@ export function NewsletterForm({ variant = "compact" }: { variant?: "compact" | 
             type="email"
             required
             placeholder="Your email address"
-            className="flex-1 bg-transparent px-5 py-4 text-sm outline-none placeholder:text-[var(--text-muted)]"
+            className="min-w-0 flex-1 bg-transparent px-4 py-4 text-sm outline-none placeholder:text-[var(--text-muted)] sm:px-5"
           />
           <button
             type="submit"
             disabled={pending}
-            className="bg-[var(--accent)] px-7 text-sm font-medium uppercase tracking-[0.12em] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-60"
+            className="shrink-0 bg-[var(--accent)] px-4 text-sm font-medium uppercase tracking-[0.08em] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-60 sm:px-7 sm:tracking-[0.12em]"
           >
             {pending ? "…" : "Subscribe"}
           </button>
@@ -61,12 +65,12 @@ export function NewsletterForm({ variant = "compact" }: { variant?: "compact" | 
         type="email"
         required
         placeholder="you@example.com"
-        className="lx-field flex-1"
+        className="lx-field min-w-0 flex-1"
       />
       <button
         type="submit"
         disabled={pending}
-        className="bg-[var(--accent)] px-4 text-sm text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
+        className="shrink-0 bg-[var(--accent)] px-4 text-sm text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
       >
         {pending ? "..." : "Join"}
       </button>

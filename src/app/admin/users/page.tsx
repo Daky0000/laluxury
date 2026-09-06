@@ -53,8 +53,8 @@ export default async function AdminUsersPage() {
           <h2 className="lx-eyebrow">What each role can do</h2>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto overscroll-x-contain" tabIndex={0} role="region" aria-label="Scrollable table">
+          <table className="w-full min-w-[720px] text-sm">
             <thead className="bg-[var(--surface-sunken)] text-left">
               <tr>
                 <th className="px-4 py-2.5 font-medium">Role</th>

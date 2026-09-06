@@ -156,8 +156,8 @@ export function StaffManager({
       ) : null}
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto overscroll-x-contain" tabIndex={0} role="region" aria-label="Scrollable table">
+          <table className="w-full min-w-[720px] text-sm">
             <thead className="border-b border-[var(--border-subtle)] bg-[var(--surface-sunken)] text-left">
               <tr>
                 <th className="px-4 py-2.5 font-medium">Person</th>

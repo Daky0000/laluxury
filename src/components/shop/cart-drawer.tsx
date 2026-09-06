@@ -10,6 +10,7 @@ import {
   type CartSummary,
 } from "@/app/actions/cart";
 import { formatPrice } from "@/lib/money";
+import { useOverlay } from "@/lib/use-overlay";
 import { BAG_OPEN_EVENT } from "./bag-events";
 
 const EMPTY: CartSummary = { lines: [], itemCount: 0, subtotal: 0, deliveryLabel: "—" };
@@ -46,18 +47,7 @@ export function CartDrawer() {
     return () => window.removeEventListener(BAG_OPEN_EVENT, onOpen);
   }, [load]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [open]);
+  useOverlay(open, () => setOpen(false));
 
   function changeQuantity(itemId: string, quantity: number) {
     startTransition(async () => {
@@ -80,20 +70,22 @@ export function CartDrawer() {
         className="absolute inset-0 cursor-default bg-[rgba(43,39,36,0.4)]"
       />
 
-      <div className="absolute right-0 top-0 flex h-full w-[420px] max-w-[92vw] flex-col border-l border-[var(--border-subtle)] bg-[var(--surface-raised)]">
-        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-6">
+      {/* `h-dvh` follows the visual viewport as a phone's toolbar slides away,
+          so the checkout button at the foot is never left under it. */}
+      <div className="absolute right-0 top-0 flex h-dvh w-[420px] max-w-[92vw] flex-col overscroll-contain border-l border-[var(--border-subtle)] bg-[var(--surface-raised)]">
+        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4 sm:px-6 sm:py-6">
           <h2 className="text-2xl">Your bag</h2>
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="grid h-8 w-8 place-items-center text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            className="lx-tap-tight -mr-2.5 text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
           >
             <X className="h-5 w-5" aria-hidden />
             <span className="sr-only">Close</span>
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto px-6 py-1.5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-1.5 sm:px-6">
           {busy && summary.lines.length === 0 ? (
             <div className="flex justify-center py-20 text-[var(--text-muted)]">
               <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
@@ -111,7 +103,7 @@ export function CartDrawer() {
                   key={line.id}
                   className="flex gap-3.5 border-b border-[var(--border-subtle)] py-[18px]"
                 >
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1">
                     <Link href={`/product/${line.slug}`} onClick={() => setOpen(false)}>
                       <p className="text-base">{line.productTitle}</p>
                     </Link>
@@ -122,23 +114,23 @@ export function CartDrawer() {
                         : ""}
                     </p>
 
-                    <div className="mt-2.5 inline-flex items-center gap-4 border border-[var(--border-subtle)] px-3 py-1">
+                    <div className="mt-2.5 inline-flex items-center border border-[var(--border-subtle)]">
                       <button
                         type="button"
                         onClick={() => changeQuantity(line.id, line.quantity - 1)}
                         disabled={pending}
-                        className="text-base leading-none text-[var(--accent)] disabled:opacity-40"
+                        className="lx-tap-tight text-lg leading-none text-[var(--accent)] disabled:opacity-40"
                       >
                         −<span className="sr-only">Remove one {line.productTitle}</span>
                       </button>
-                      <span className="min-w-3.5 text-center text-sm tabular-nums">
+                      <span className="min-w-6 text-center text-sm tabular-nums">
                         {line.quantity}
                       </span>
                       <button
                         type="button"
                         onClick={() => changeQuantity(line.id, line.quantity + 1)}
                         disabled={pending}
-                        className="text-base leading-none text-[var(--accent)] disabled:opacity-40"
+                        className="lx-tap-tight text-lg leading-none text-[var(--accent)] disabled:opacity-40"
                       >
                         +<span className="sr-only">Add one {line.productTitle}</span>
                       </button>
@@ -149,7 +141,7 @@ export function CartDrawer() {
                     ) : null}
                   </div>
 
-                  <p className="text-[17px] font-semibold tabular-nums">
+                  <p className="shrink-0 text-[17px] font-semibold tabular-nums">
                     {formatPrice(line.lineTotal)}
                   </p>
                 </li>
@@ -158,14 +150,14 @@ export function CartDrawer() {
           )}
         </div>
 
-        <div className="border-t border-[var(--border-subtle)] px-6 py-5">
-          <div className="mb-1.5 flex justify-between text-sm text-[var(--text-secondary)]">
+        <div className="lx-safe-b shrink-0 border-t border-[var(--border-subtle)] px-5 pt-5 sm:px-6">
+          <div className="mb-1.5 flex justify-between gap-4 text-sm text-[var(--text-secondary)]">
             <span>Subtotal</span>
             <span className="font-semibold tabular-nums">{formatPrice(summary.subtotal)}</span>
           </div>
-          <div className="mb-4 flex justify-between text-sm font-light text-[var(--text-muted)]">
+          <div className="mb-4 flex justify-between gap-4 text-sm font-light text-[var(--text-muted)]">
             <span>Delivery</span>
-            <span>{summary.deliveryLabel}</span>
+            <span className="text-right">{summary.deliveryLabel}</span>
           </div>
 
           {summary.lines.length > 0 ? (
@@ -189,7 +181,7 @@ export function CartDrawer() {
           <Link
             href="/cart"
             onClick={() => setOpen(false)}
-            className="mt-3 block text-center text-sm text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+            className="mt-3 block py-2 text-center text-sm text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
           >
             View full bag
           </Link>

@@ -68,7 +68,11 @@ export async function CuratedHome({ settings }: { settings: StoreSettings }) {
 
           case "products":
             return section.layout === "tabs" ? (
-              <section key={section.id} id={section.id} className="lx-container scroll-mt-24 py-20">
+              <section
+                key={section.id}
+                id={section.id}
+                className="lx-container scroll-mt-24 py-12 sm:py-16 md:py-20"
+              >
                 <EditGrid
                   eyebrow={section.eyebrow}
                   title={section.title}

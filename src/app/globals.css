@@ -113,12 +113,52 @@
 }
 
 @layer base {
+  /* A phone in landscape, a zoomed-in desktop and a 320px Android all end up
+     narrower than some fixed width somewhere. Rather than let one stray element
+     hand the whole document a horizontal scrollbar — which on a phone reads as
+     the page being broken — the document itself refuses to scroll sideways.
+     `overflow-x: clip` rather than `hidden`, because `hidden` on the root
+     silently kills `position: sticky` for the header and the filter rail. */
+  html {
+    overflow-x: clip;
+  }
+
   body {
     background-color: var(--surface);
     color: var(--text-primary);
     font-family: var(--font-sans);
     font-weight: 300;
     -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
+  }
+
+  /* Long product names, order references and pasted URLs have no spaces to
+     break at, so on a narrow column they push their container wider than the
+     screen. Let them break rather than the layout. */
+  h1,
+  h2,
+  h3,
+  h4,
+  p,
+  li,
+  dd,
+  dt,
+  summary,
+  td,
+  th,
+  label {
+    overflow-wrap: break-word;
+  }
+
+  /* iOS zooms the page in when a focused field is under 16px. Every field in
+     the app is at the 16px floor already, but `select` and `textarea` inherit
+     from the UA rather than from `body`, so they are said explicitly. */
+  input,
+  select,
+  textarea,
+  button {
+    font-family: inherit;
+    font-size: inherit;
   }
 
   h1,
@@ -147,16 +187,21 @@
 }
 
 @layer components {
+  /* The page gutter. `max()` against the safe-area insets keeps the content
+     clear of the rounded corners and the camera housing when a phone is held
+     in landscape, where the inset is horizontal rather than vertical. */
   .lx-container {
     width: 100%;
     max-width: 81.25rem; /* 1300px, matching the artboard */
     margin-inline: auto;
-    padding-inline: 1.25rem;
+    padding-inline: max(1.25rem, env(safe-area-inset-left))
+      max(1.25rem, env(safe-area-inset-right));
   }
 
   @media (min-width: 768px) {
     .lx-container {
-      padding-inline: 2.5rem;
+      padding-inline: max(2.5rem, env(safe-area-inset-left))
+        max(2.5rem, env(safe-area-inset-right));
     }
   }
 
@@ -189,19 +234,30 @@
     text-transform: uppercase;
   }
 
-  /* The solid wine call to action from the artboard. */
-  .lx-cta {
+  /* The solid wine call to action from the artboard.
+     Its side padding is fluid: 2.125rem is right on a desktop and is most of a
+     narrow phone's screen once the label is uppercase and tracked out, so the
+     button gives the padding back rather than pushing the label off the edge.
+     The 3rem floor on the height is the touch target, kept whatever the copy. */
+  .lx-cta,
+  .lx-cta-ghost {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background-color: var(--accent);
-    color: var(--accent-contrast);
-    padding: 1rem 2.125rem;
+    min-height: 3rem;
+    padding: 1rem clamp(1.25rem, 5vw, 2.125rem);
     font-size: 1rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     font-weight: 500;
+    text-align: center;
+    text-wrap: balance;
     transition: background-color 0.2s ease;
+  }
+
+  .lx-cta {
+    background-color: var(--accent);
+    color: var(--accent-contrast);
   }
 
   .lx-cta:hover {
@@ -209,18 +265,9 @@
   }
 
   .lx-cta-ghost {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
     border: 1px solid rgba(253, 250, 244, 0.55);
     color: #fbfaf6;
-    padding: 1rem 2.125rem;
-    font-size: 1rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    font-weight: 500;
     backdrop-filter: blur(4px);
-    transition: background-color 0.2s ease;
   }
 
   .lx-cta-ghost:hover {
@@ -229,6 +276,7 @@
 
   .lx-field {
     width: 100%;
+    min-width: 0;
     border: 1px solid var(--border-subtle);
     background-color: var(--surface-raised);
     border-radius: var(--radius-card);
@@ -263,6 +311,79 @@
 }
 
 @layer utilities {
+  /* --- Touch ---------------------------------------------------------------
+
+     A 19px icon is a 19px target, and a thumb is nearer 44px across. These grow
+     the hit area without moving anything: the padding is cancelled by an equal
+     negative margin, so the control still sits exactly where the layout put it.
+     `lx-tap` is for icon buttons that stand alone; `lx-tap-tight` is for the
+     ones inside a bordered group — a stepper, a chip row — where the pressable
+     area should fill its cell rather than spill past the border. */
+  .lx-tap {
+    position: relative;
+  }
+
+  .lx-tap::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+
+  .lx-tap-tight {
+    min-width: 2.5rem;
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* --- Safe areas ----------------------------------------------------------
+
+     Anything pinned to the bottom of the viewport — a drawer's footer, a sheet's
+     confirm button — otherwise sits under the iPhone home indicator. */
+  .lx-safe-b {
+    padding-bottom: max(var(--lx-safe-pad, 1.25rem), env(safe-area-inset-bottom));
+  }
+
+  .lx-safe-t {
+    padding-top: max(var(--lx-safe-pad, 1.25rem), env(safe-area-inset-top));
+  }
+
+  /* --- Overflow ------------------------------------------------------------
+
+     A row of tabs, swatches or chips that would wrap into a wall on a phone
+     scrolls sideways instead, with the scrollbar itself out of the way and the
+     gutter edges bled so the row reads as continuing past the screen. */
+  .lx-scroll-x {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+  }
+
+  .lx-scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+
+  .lx-scroll-x > * {
+    scroll-snap-align: start;
+  }
+
+  /* Bleeds a scroller to the screen edges inside a gutter-padded container, so
+     the last chip is not stranded against the gutter with nothing after it. */
+  @media (max-width: 767px) {
+    .lx-bleed {
+      margin-inline: -1.25rem;
+      padding-inline: 1.25rem;
+    }
+  }
+
   /* Announcement marquee. Two identical runs sit side by side and the track
      is shifted by exactly half its width, so the loop has no seam. */
   .lx-marquee {

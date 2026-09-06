@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Search, X, Loader2 } from "lucide-react";
 import { formatMoney } from "@/lib/money";
+import { useOverlay } from "@/lib/use-overlay";
 import { Thumb } from "./photo";
 
 type Hit = {
@@ -28,17 +29,20 @@ export function SearchDialog({ children }: { children: ReactNode }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
+  // Cmd/Ctrl+K is listened for whether or not the dialog is showing; Escape and
+  // the scroll lock come from the shared overlay hook while it is.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setOpen(true);
       }
-      if (event.key === "Escape") setOpen(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  useOverlay(open, () => setOpen(false));
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -88,13 +92,16 @@ export function SearchDialog({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} aria-label="Search">
+      <button type="button" onClick={() => setOpen(true)} aria-label="Search" className="flex">
         {children}
       </button>
 
       {open ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-ink-950/40 px-4 pt-[12vh]"
+          // Near the top of the screen on a phone, where the keyboard leaves
+          // room for it; a twelfth of the way down on a desktop, as drawn. The
+          // top inset keeps it clear of the notch in landscape.
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-950/40 px-4 pb-6 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-[12vh]"
           onClick={() => setOpen(false)}
           role="presentation"
         >
@@ -102,10 +109,10 @@ export function SearchDialog({ children }: { children: ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-label="Search products"
-            className="w-full max-w-xl overflow-hidden rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)] shadow-2xl"
+            className="flex max-h-[80dvh] w-full max-w-xl flex-col overflow-hidden rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)] shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <form onSubmit={submit} className="flex items-center gap-3 border-b border-[var(--border-subtle)] px-4">
+            <form onSubmit={submit} className="flex shrink-0 items-center gap-3 border-b border-[var(--border-subtle)] px-4">
               <Search className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden />
               <input
                 ref={inputRef}
@@ -120,7 +127,7 @@ export function SearchDialog({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="lx-tap-tight -mr-2.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               >
                 <X className="h-4 w-4" aria-hidden />
                 <span className="sr-only">Close search</span>
@@ -128,21 +135,21 @@ export function SearchDialog({ children }: { children: ReactNode }) {
             </form>
 
             {visibleHits.length > 0 ? (
-              <ul className="max-h-80 overflow-y-auto py-2">
+              <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-2">
                 {visibleHits.map((hit) => (
                   <li key={hit.id}>
                     <Link
                       href={`/product/${hit.slug}`}
                       onClick={() => setOpen(false)}
-                      className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-[var(--surface-sunken)]"
+                      className="flex min-h-14 items-center gap-3 px-4 py-2 transition-colors hover:bg-[var(--surface-sunken)]"
                     >
                       <span className="h-12 w-10 shrink-0 overflow-hidden bg-[var(--surface-sunken)]">
                         {hit.images[0] ? (
                           <Thumb src={hit.images[0].url} width={40} height={48} />
                         ) : null}
                       </span>
-                      <span className="flex-1 text-sm">{hit.title}</span>
-                      <span className="text-sm tabular-nums text-[var(--text-secondary)]">
+                      <span className="min-w-0 flex-1 text-sm">{hit.title}</span>
+                      <span className="shrink-0 whitespace-nowrap text-sm tabular-nums text-[var(--text-secondary)]">
                         {formatMoney(hit.minPrice)}
                       </span>
                     </Link>

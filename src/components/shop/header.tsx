@@ -27,12 +27,16 @@ export async function Header() {
     <>
       {/* Announcement marquee. The list is duplicated so the loop has no seam. */}
       {announcements.length > 0 ? (
-        <div className="overflow-hidden whitespace-nowrap border-b border-[var(--border-subtle)] text-sm uppercase tracking-[0.28em] text-[var(--text-muted)]">
-          <div className="lx-marquee py-2.5">
+        <div className="overflow-hidden whitespace-nowrap border-b border-[var(--border-subtle)] text-sm uppercase tracking-[0.18em] text-[var(--text-muted)] sm:tracking-[0.28em]">
+          <div className="lx-marquee py-2 sm:py-2.5">
             {[0, 1].map((run) => (
-              <span key={run} className="flex shrink-0 gap-16 pr-16" aria-hidden={run === 1}>
+              <span
+                key={run}
+                className="flex shrink-0 gap-8 pr-8 sm:gap-16 sm:pr-16"
+                aria-hidden={run === 1}
+              >
                 {announcements.map((item, index) => (
-                  <span key={`${run}-${index}`} className="flex shrink-0 gap-16">
+                  <span key={`${run}-${index}`} className="flex shrink-0 gap-8 sm:gap-16">
                     <span>{item}</span>
                     <span>—</span>
                   </span>
@@ -43,11 +47,17 @@ export async function Header() {
         </div>
       ) : null}
 
-      <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[rgba(244,238,228,0.85)] backdrop-blur-md">
-        <div className="lx-container flex items-center gap-4 py-4 md:gap-10 md:py-5">
-          {/* Left: the wordmark, and nothing else. */}
-          <Link href="/" className="mr-auto leading-none">
-            <span className="font-display text-2xl font-medium uppercase tracking-[0.18em] md:text-3xl">
+      <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-md">
+        <div className="lx-container flex items-center gap-3 py-3 sm:gap-4 sm:py-4 md:gap-10 md:py-5">
+          {/* Left: the wordmark, and nothing else. It shrinks before the
+              controls do — a name that has to break a line still reads, three
+              icons squeezed off the edge do not. */}
+          <Link href="/" className="mr-auto min-w-0 leading-none">
+            {/* Fluid under `sm`. At a fixed 20px a nine-letter store name is
+                wider than what a 320px header has left once the four controls
+                have taken their touch targets, and the two ran into each
+                other. */}
+            <span className="font-display text-[clamp(1rem,4.6vw,1.25rem)] font-medium uppercase tracking-[0.12em] sm:text-2xl sm:tracking-[0.18em] md:text-3xl">
               {settings.storeName}
             </span>
           </Link>
@@ -68,9 +78,10 @@ export async function Header() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-4 sm:gap-5">
+          {/* `shrink-0` so a long store name never eats into the controls. */}
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <SearchDialog>
-              <span className="grid place-items-center text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]">
+              <span className="lx-tap-tight text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]">
                 <Search className="h-[19px] w-[19px]" strokeWidth={1.5} aria-hidden />
                 <span className="sr-only">Search</span>
               </span>
@@ -78,7 +89,7 @@ export async function Header() {
 
             <Link
               href={user ? (isStaff(user.role) ? "/admin" : "/account") : "/login"}
-              className="grid place-items-center text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+              className="lx-tap-tight text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
             >
               <User className="h-[19px] w-[19px]" strokeWidth={1.5} aria-hidden />
               <span className="sr-only">{user ? "Your account" : "Sign in"}</span>

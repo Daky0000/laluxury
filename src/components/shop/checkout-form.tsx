@@ -128,7 +128,7 @@ export function CheckoutForm({
   /** The radio rows for delivery and payment share one shell. */
   function choiceClass(active: boolean): string {
     return cn(
-      "flex cursor-pointer items-center gap-3.5 border px-4 py-4 transition-colors",
+      "flex min-h-14 cursor-pointer items-center gap-3.5 border px-4 py-3.5 transition-colors",
       active
         ? "border-[var(--accent)] bg-[var(--surface-raised)]"
         : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]",
@@ -343,7 +343,7 @@ export function CheckoutForm({
                     className="sr-only"
                   />
                   {radioDot(active)}
-                  <span className="flex-1 text-left">
+                  <span className="min-w-0 flex-1 text-left">
                     <span className="block text-sm">{rate.name}</span>
                     {rate.estimatedDaysMin !== null ? (
                       <span className="mt-0.5 block text-sm text-[var(--text-muted)]">
@@ -354,7 +354,7 @@ export function CheckoutForm({
                       </span>
                     ) : null}
                   </span>
-                  <span className="text-sm tabular-nums">
+                  <span className="shrink-0 whitespace-nowrap text-sm tabular-nums">
                     {rate.price === 0 ? "Free" : formatPrice(rate.price)}
                   </span>
                 </label>
@@ -379,8 +379,18 @@ export function CheckoutForm({
                   className="sr-only"
                 />
                 {radioDot(active)}
-                <span className="flex-1 text-left text-sm">{option.label}</span>
-                <span className="text-sm text-[var(--text-muted)]">{option.note}</span>
+                {/* "Mobile Money (MTN / Telecel)" and "Momo prompt" side by
+                    side needs about 380px. Under `sm` the note drops beneath
+                    the label rather than squeezing both into two words each. */}
+                <span className="min-w-0 flex-1 text-left text-sm">
+                  {option.label}
+                  <span className="mt-0.5 block text-sm text-[var(--text-muted)] sm:hidden">
+                    {option.note}
+                  </span>
+                </span>
+                <span className="hidden shrink-0 text-sm text-[var(--text-muted)] sm:inline">
+                  {option.note}
+                </span>
               </label>
             );
           })}
@@ -409,13 +419,13 @@ export function CheckoutForm({
 
           {!isSignedIn ? (
             <div>
-              <label className="flex items-center gap-2.5 text-sm">
+              <label className="flex min-h-11 items-center gap-2.5 text-sm">
                 <input
                   type="checkbox"
                   name="createAccount"
                   checked={createAccount}
                   onChange={(event) => setCreateAccount(event.target.checked)}
-                  className="accent-[var(--accent)]"
+                  className="h-5 w-5 shrink-0 accent-[var(--accent)]"
                 />
                 Save my details for next time
               </label>
@@ -442,7 +452,7 @@ export function CheckoutForm({
       </div>
 
       {/* Summary */}
-      <aside className="border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-6 lg:sticky lg:top-8">
+      <aside className="border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-5 sm:p-6 lg:sticky lg:top-8">
         <h2 className="mb-5 font-display text-2xl">Order summary</h2>
 
         {discount}
@@ -474,20 +484,22 @@ export function CheckoutForm({
           </p>
         ) : null}
 
-        <div className="mt-2.5 flex items-baseline justify-between border-t border-[var(--border-strong)] pt-4">
+        <div className="mt-2.5 flex items-baseline justify-between gap-3 border-t border-[var(--border-strong)] pt-4">
           <span className="text-sm uppercase tracking-[0.06em]">Total</span>
-          <span className="text-3xl font-semibold tabular-nums">{formatPrice(total)}</span>
+          <span className="text-[clamp(1.5rem,6vw,1.875rem)] font-semibold tabular-nums">
+            {formatPrice(total)}
+          </span>
         </div>
 
         <button
           type="submit"
           disabled={pending || !selectedRate}
-          className="mt-5 flex w-full items-center justify-center gap-2 bg-[var(--accent)] px-6 py-4 text-sm font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
+          className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 bg-[var(--accent)] px-4 py-4 text-center text-sm font-medium uppercase tracking-[0.1em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50 sm:px-6 sm:tracking-[0.14em]"
         >
           {pending ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
           ) : (
-            <Lock className="h-4 w-4" aria-hidden />
+            <Lock className="h-4 w-4 shrink-0" aria-hidden />
           )}
           {pending ? "Redirecting…" : `Place order · ${formatPrice(total)}`}
         </button>

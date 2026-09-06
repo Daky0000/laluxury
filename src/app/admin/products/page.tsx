@@ -152,8 +152,8 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
       ) : (
         <ProductBulkBar canWrite={canWrite}>
           <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto overscroll-x-contain" tabIndex={0} role="region" aria-label="Scrollable table">
+              <table className="w-full min-w-[880px] text-sm">
                 <thead className="border-b border-[var(--border-subtle)] bg-[var(--surface-sunken)] text-left">
                   <tr>
                     {canWrite ? <th className="w-10 px-4 py-2.5" /> : null}

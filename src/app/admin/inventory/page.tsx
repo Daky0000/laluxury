@@ -136,8 +136,8 @@ export default async function AdminInventoryPage({ searchParams }: PageProps<"/a
       ) : (
         <StockBulkBar canWrite={canWrite}>
           <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto overscroll-x-contain" tabIndex={0} role="region" aria-label="Scrollable table">
+            <table className="w-full min-w-[820px] text-sm">
               <thead className="border-b border-[var(--border-subtle)] bg-[var(--surface-sunken)] text-left">
                 <tr>
                   {canWrite ? (

@@ -163,8 +163,8 @@ export default async function AdminDashboard() {
         {recentOrders.length === 0 ? (
           <EmptyState title="No orders yet" description="They will appear here as they come in." />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
+          <div className="overflow-x-auto overscroll-x-contain" tabIndex={0} role="region" aria-label="Scrollable table">
+            <table className="w-full min-w-[640px] border-collapse">
               <thead>
                 <tr>
                   <th className={tableHead}>Order</th>

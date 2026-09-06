@@ -59,39 +59,44 @@ export async function Footer() {
 
   return (
     <footer className="border-t border-[var(--border-subtle)] bg-[var(--surface-sunken)]">
-      <div className="lx-container grid gap-10 py-16 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
+      {/* Two columns of links on a phone, three plus the blurb from `md`. Four
+          across at 768px gave each column about 160px, which wraps every second
+          label onto a line of its own. */}
+      <div className="lx-container grid gap-x-8 gap-y-10 py-12 sm:py-16 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
           <p className="font-display text-[28px] uppercase tracking-[0.16em]">
             {settings.storeName}
           </p>
-          <p className="mt-4 max-w-[280px] text-sm font-light leading-[1.7] text-[var(--text-secondary)]">
+          <p className="mt-4 max-w-[320px] text-sm font-light leading-[1.7] text-[var(--text-secondary)]">
             {intro} Order online or by WhatsApp — pay by Mobile Money, card or bank transfer.
           </p>
         </div>
 
-        {columns.map((column) => (
-          <nav key={column.head} aria-label={column.head}>
-            <p className="mb-4 text-sm uppercase tracking-[0.18em] text-[var(--text-primary)]">
-              {column.head}
-            </p>
-            <ul>
-              {column.links.map((link) => (
-                <li key={link.label} className="mb-2.5">
-                  <Link
-                    href={link.href}
-                    className="text-sm font-light text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        ))}
+        <div className="grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-3 md:contents">
+          {columns.map((column) => (
+            <nav key={column.head} aria-label={column.head}>
+              <p className="mb-3 text-sm uppercase tracking-[0.18em] text-[var(--text-primary)]">
+                {column.head}
+              </p>
+              <ul>
+                {column.links.map((link) => (
+                  <li key={link.label}>
+                    <Link
+                      href={link.href}
+                      className="flex min-h-11 items-center text-sm font-light text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ))}
+        </div>
       </div>
 
       <div className="border-t border-[var(--border-subtle)]">
-        <div className="lx-container flex flex-col items-start justify-between gap-2 py-5 text-sm tracking-[0.04em] text-[var(--text-muted)] sm:flex-row sm:items-center">
+        <div className="lx-safe-b lx-container flex flex-col items-start justify-between gap-2 pt-5 text-sm tracking-[0.04em] text-[var(--text-muted)] sm:flex-row sm:items-center">
           <p>
             © {year} {settings.storeName} Home &amp; Living
           </p>

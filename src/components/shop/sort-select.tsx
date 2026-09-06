@@ -19,16 +19,19 @@ export function SortSelect({
     <>
       <label
         htmlFor="sort"
-        className="text-sm uppercase tracking-[0.14em] text-[var(--text-muted)]"
+        className="shrink-0 text-sm uppercase tracking-[0.14em] text-[var(--text-muted)]"
       >
         Sort
       </label>
+      {/* `min-w-0` and `truncate`: "Price, high to low" at the type floor is
+          wider than the room a phone has left on that row once the tally is
+          beside it, and a select will not shrink itself. */}
       <select
         id="sort"
         name="sort"
         defaultValue={value}
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
-        className="cursor-pointer border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3.5 py-2 text-sm outline-none"
+        className="min-h-11 min-w-0 cursor-pointer truncate border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 py-2 text-sm outline-none sm:px-3.5"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

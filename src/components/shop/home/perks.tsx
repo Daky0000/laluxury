@@ -2,6 +2,7 @@ import Link from "next/link";
 import { MessageCircle, ShieldCheck, Sparkles, Truck } from "lucide-react";
 import type { StoreSettings } from "@/lib/settings";
 import { formatPrice } from "@/lib/money";
+import { cn } from "@/lib/utils";
 
 /**
  * The four-up promise strip under the hero. It reads the delivery threshold and
@@ -41,15 +42,33 @@ export function Perks({ settings }: { settings: StoreSettings }) {
 
   return (
     <section className="border-b border-[var(--border-subtle)]">
-      <div className="lx-container grid grid-cols-2 md:grid-cols-4">
-        {perks.map(({ icon: Icon, ...perk }) => (
+      {/*
+        One per row on a phone, two on a small tablet, four across from `md`.
+        Two-up on a 360px screen gave each promise about 140px, which is not
+        enough for "Free to your station over GHS 300" at the type floor.
+
+        The rules between them are drawn per cell rather than with `nth-child`:
+        a left border on every cell but the first of its row, plus a top border
+        on every row but the first. The old odd/even rule left a stray line down
+        the container's left edge once the grid went to four columns, because
+        the first cell is odd and had its border put back.
+      */}
+      <div className="lx-container grid sm:grid-cols-2 md:grid-cols-4">
+        {perks.map(({ icon: Icon, ...perk }, index) => (
           <Link
             key={perk.title}
             href={perk.href}
-            className="flex items-center gap-3.5 border-l border-[var(--border-subtle)] px-5 py-7 [&:nth-child(odd)]:border-l-0 md:[&:nth-child(odd)]:border-l"
+            className={cn(
+              "flex items-center gap-3.5 px-1 py-5 sm:px-5 sm:py-7",
+              index > 0 && "border-t border-[var(--border-subtle)] sm:border-t-0",
+              index % 2 === 1 && "sm:border-l sm:border-[var(--border-subtle)]",
+              index >= 2 && "sm:border-t sm:border-[var(--border-subtle)] md:border-t-0",
+              index % 4 !== 0 && "md:border-l md:border-[var(--border-subtle)]",
+              index % 4 === 0 && "md:border-l-0",
+            )}
           >
             <Icon className="h-5 w-5 shrink-0 text-[var(--accent)]" aria-hidden />
-            <span>
+            <span className="min-w-0">
               <span className="block text-sm">{perk.title}</span>
               <span className="mt-0.5 block text-sm font-light text-[var(--text-muted)]">
                 {perk.sub}

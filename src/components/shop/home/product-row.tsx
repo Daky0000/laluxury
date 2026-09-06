@@ -23,12 +23,12 @@ export function ProductRow({
 
   return (
     <section id={section.id} className={`scroll-mt-24 ${sage ? "bg-sage-100" : ""}`}>
-      <div className="lx-container py-20">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border-subtle)] pb-6">
-          <div>
+      <div className="lx-container py-12 sm:py-16 md:py-20">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border-subtle)] pb-5 sm:mb-8 sm:pb-6">
+          <div className="min-w-0">
             {section.eyebrow ? (
               <p
-                className={`text-sm uppercase tracking-[0.32em] ${
+                className={`text-sm uppercase tracking-[0.2em] sm:tracking-[0.32em] ${
                   sage ? "text-sage-600" : "text-[var(--accent)]"
                 }`}
               >
@@ -36,7 +36,9 @@ export function ProductRow({
               </p>
             ) : null}
             {section.title ? (
-              <h2 className="mt-2.5 text-4xl md:text-[2.875rem]">{section.title}</h2>
+              <h2 className="mt-2.5 text-[clamp(1.875rem,6vw,2.875rem)] leading-tight">
+                {section.title}
+              </h2>
             ) : null}
           </div>
 
@@ -52,7 +54,7 @@ export function ProductRow({
           ) : null}
         </div>
 
-        <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-5 md:grid-cols-4">
           {products.map((product) => (
             <article key={product.id} className="group flex flex-col">
               <Link
@@ -71,12 +73,20 @@ export function ProductRow({
                 ) : null}
               </Link>
 
-              <div className="flex items-center justify-between gap-3 pt-3.5">
-                <Link href={`/product/${product.slug}`} className="text-sm hover:underline">
+              {/* Name, price and the add control on one line needs about 300px.
+                  In a two-across grid on a phone there is half that, so the row
+                  becomes two: the name over the price and its button. */}
+              <div className="flex flex-col gap-2 pt-3.5 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
+                <Link
+                  href={`/product/${product.slug}`}
+                  className="min-w-0 text-sm leading-snug hover:underline"
+                >
                   {product.title}
                 </Link>
-                <div className="flex items-center gap-3">
-                  <span className="text-base font-semibold tabular-nums">{formatPrice(product.price)}</span>
+                <div className="flex items-center justify-between gap-3 lg:justify-start">
+                  <span className="text-base font-semibold tabular-nums">
+                    {formatPrice(product.price)}
+                  </span>
                   <AddToBagIcon
                     variantId={product.inStock ? product.variantId : null}
                     href={`/product/${product.slug}`}

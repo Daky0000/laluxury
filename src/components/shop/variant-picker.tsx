@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState, useTransition, type ReactNode } from "react";
+import { Fragment, useId, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Heart, Loader2, X } from "lucide-react";
 import { bulkAddToCartAction, buyNowAction } from "@/app/actions/cart";
@@ -291,8 +291,11 @@ export function VariantPicker({
   return (
     <div>
       {/* Price */}
-      <div className="mt-5 flex flex-wrap items-baseline gap-3.5">
-        <span className="text-[38px] font-semibold leading-none tabular-nums">
+      <div className="mt-5 flex flex-wrap items-baseline gap-x-3.5 gap-y-2">
+        {/* A range reads "GHS 450.00 – GHS 1,200.00" — twenty-odd characters,
+            which at a flat 38px is wider than a phone. The size follows the
+            viewport up to the artboard's 38px and no further. */}
+        <span className="text-[clamp(1.75rem,7vw,38px)] font-semibold leading-none tabular-nums">
           {activeVariant
             ? formatPrice(activeVariant.price)
             : priceRange
@@ -332,7 +335,15 @@ export function VariantPicker({
         )}
       </p>
 
-      {description}
+      {/*
+        Wrapped rather than rendered bare. `description` is authored by the
+        product page and handed across the server/client boundary, so it lands
+        in this component's children list as a node from another owner with no
+        key of its own — which React flags on every render of every product
+        page. The fragment is the child in the list instead, and adds nothing to
+        the DOM.
+      */}
+      <Fragment key="description">{description}</Fragment>
 
       {/* Options */}
       {options.map((option) => {
@@ -386,8 +397,8 @@ export function VariantPicker({
                       isColour
                         ? "h-11 w-11 overflow-hidden rounded-full"
                         : thumbnail
-                          ? "flex w-[104px] flex-col items-center justify-start overflow-hidden p-0"
-                          : "flex min-w-[104px] flex-col items-center justify-center px-4 py-3",
+                          ? "flex w-[92px] flex-col items-center justify-start overflow-hidden p-0 sm:w-[104px]"
+                          : "flex min-h-12 min-w-[92px] flex-col items-center justify-center px-3 py-3 sm:min-w-[104px] sm:px-4",
                       // The chosen value has to be obvious at a glance: a ring
                       // that clears the swatch, and a tick on top of it.
                       isSelected
@@ -476,13 +487,20 @@ export function VariantPicker({
           ) : null}
         </p>
 
-        <div className="flex items-stretch gap-3.5">
-          <div className="flex items-center gap-3 border border-[var(--border-strong)] px-3">
+        {/*
+          Three controls on one line needs about 420px: the stepper is a fixed
+          140, the heart another 54, and "Add to bag" is uppercase and tracked
+          out at the type floor. On a phone that overflowed, so under `sm` the
+          stepper and the heart share the first row and the bag button takes the
+          full width of the second — where it is also easiest to reach.
+        */}
+        <div className="flex flex-wrap items-stretch gap-3 sm:flex-nowrap sm:gap-3.5">
+          <div className="flex min-h-12 items-center border border-[var(--border-strong)]">
             <button
               type="button"
               onClick={() => setQuantity(quantity - 1)}
               disabled={!activeVariant || quantity <= 0}
-              className="px-1 text-lg text-[var(--accent)] disabled:opacity-30"
+              className="lx-tap-tight text-lg text-[var(--accent)] disabled:opacity-30"
               aria-label="Decrease quantity"
             >
               &minus;
@@ -503,14 +521,14 @@ export function VariantPicker({
               aria-label={
                 activeVariant ? `Quantity of ${activeVariant.title}` : "Quantity"
               }
-              className="w-12 border-0 bg-transparent p-0 text-center text-base tabular-nums outline-none [appearance:textfield] focus:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="w-10 shrink-0 border-0 bg-transparent p-0 text-center text-base tabular-nums outline-none [appearance:textfield] focus:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
 
             <button
               type="button"
               onClick={() => setQuantity(quantity + 1)}
               disabled={!activeVariant || quantity >= maxQuantity}
-              className="px-1 text-lg text-[var(--accent)] disabled:opacity-30"
+              className="lx-tap-tight text-lg text-[var(--accent)] disabled:opacity-30"
               aria-label="Increase quantity"
             >
               +
@@ -519,7 +537,7 @@ export function VariantPicker({
 
           {/* Blocked rather than disabled: a disabled button swallows the
               hover, and with it the one explanation the shopper needs. */}
-          <div className="group relative flex flex-1">
+          <div className="group relative order-last flex w-full sm:order-none sm:w-auto sm:flex-1">
             <button
               type="button"
               onClick={add}
@@ -527,7 +545,7 @@ export function VariantPicker({
               aria-disabled={blockedFromBag !== null}
               aria-describedby={blockedFromBag ? `${hintId}-bag` : undefined}
               className={cn(
-                "flex w-full items-center justify-center gap-2 bg-[var(--accent)] px-6 py-4 text-sm font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors",
+                "flex min-h-12 w-full items-center justify-center gap-2 bg-[var(--accent)] px-4 py-4 text-center text-sm font-medium uppercase tracking-[0.1em] text-[var(--accent-contrast)] transition-colors sm:px-6 sm:tracking-[0.14em]",
                 blockedFromBag
                   ? "cursor-not-allowed opacity-50"
                   : "hover:bg-[var(--accent-hover)]",
@@ -555,7 +573,7 @@ export function VariantPicker({
             disabled={savePending}
             aria-pressed={saved}
             className={cn(
-              "grid w-[54px] place-items-center border text-[var(--accent)] transition-colors",
+              "grid min-h-12 w-[54px] shrink-0 place-items-center border text-[var(--accent)] transition-colors",
               saved ? "border-[var(--accent)]" : "border-[var(--border-strong)]",
             )}
           >
@@ -590,9 +608,13 @@ export function VariantPicker({
                 const swatch = details.find((detail) => detail.hexColor)?.hexColor ?? null;
 
                 return (
+                // Name, unit price, line total and a remove control is four
+                // columns of a table, and a phone has room for two. Below `sm`
+                // the unit price moves under the name and only the line total
+                // stays on the right, where the eye is already adding them up.
                 <li
                   key={line.variant.id}
-                  className="flex items-center gap-3 px-3.5 py-2.5 text-sm"
+                  className="flex items-center gap-2.5 px-3 py-2 text-sm sm:gap-3 sm:px-3.5 sm:py-2.5"
                 >
                   {swatch ? (
                     <span
@@ -611,11 +633,14 @@ export function VariantPicker({
                           .join(" · ")}
                       </span>
                     ) : null}
+                    <span className="block whitespace-nowrap text-sm tabular-nums text-[var(--text-secondary)] sm:hidden">
+                      {line.quantity} × {formatPrice(line.variant.price)}
+                    </span>
                   </span>
-                  <span className="tabular-nums text-[var(--text-secondary)]">
+                  <span className="hidden whitespace-nowrap tabular-nums text-[var(--text-secondary)] sm:inline">
                     {line.quantity} × {formatPrice(line.variant.price)}
                   </span>
-                  <span className="w-20 text-right tabular-nums">
+                  <span className="shrink-0 whitespace-nowrap text-right tabular-nums sm:w-20">
                     {formatPrice(line.quantity * line.variant.price)}
                   </span>
                   <button
@@ -627,7 +652,7 @@ export function VariantPicker({
                         return copy;
                       })
                     }
-                    className="text-[var(--text-muted)] transition-colors hover:text-danger"
+                    className="lx-tap-tight -mr-2 shrink-0 text-[var(--text-muted)] transition-colors hover:text-danger"
                     aria-label={`Remove ${line.variant.title}`}
                   >
                     <X className="h-3.5 w-3.5" aria-hidden />
@@ -656,7 +681,7 @@ export function VariantPicker({
           aria-disabled={blockedFromBuying !== null}
           aria-describedby={blockedFromBuying ? `${hintId}-buy` : undefined}
           className={cn(
-            "flex w-full items-center justify-center gap-2 border border-[var(--text-primary)] px-6 py-4 text-sm font-medium uppercase tracking-[0.14em] transition-colors",
+            "flex min-h-12 w-full items-center justify-center gap-2 border border-[var(--text-primary)] px-4 py-4 text-sm font-medium uppercase tracking-[0.1em] transition-colors sm:px-6 sm:tracking-[0.14em]",
             blockedFromBuying
               ? "cursor-not-allowed opacity-40"
               : "hover:bg-[var(--text-primary)] hover:text-[var(--surface-raised)]",

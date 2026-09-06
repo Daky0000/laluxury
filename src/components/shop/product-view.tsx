@@ -81,13 +81,13 @@ export function ProductView({
   }
 
   return (
-    <div className="grid items-start gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-14">
-      <div className="flex flex-col-reverse gap-4 sm:flex-row lg:sticky lg:top-28">
+    <div className="grid items-start gap-8 sm:gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-14">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:gap-4 lg:sticky lg:top-28">
         {images.length > 1 ? (
           <div
             role="tablist"
             aria-label="Product images"
-            className="flex gap-3 overflow-x-auto sm:max-h-[600px] sm:w-[92px] sm:shrink-0 sm:flex-col sm:overflow-y-auto sm:pr-1.5"
+            className="lx-scroll-x lx-bleed flex gap-3 sm:max-h-[600px] sm:w-[92px] sm:shrink-0 sm:flex-col sm:overflow-x-visible sm:overflow-y-auto sm:pr-1.5"
           >
             {images.map((image, index) => (
               <button
@@ -106,7 +106,10 @@ export function ProductView({
                     : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]",
                 )}
               >
-                <Photo src={image.url} sizes="96px" />
+                {/* The first thumbnail shows the same file as the hero, so on
+                    a wide screen the browser can pick either as the largest
+                    paint. Both are eager; the rest wait their turn. */}
+                <Photo src={image.url} sizes="96px" priority={index === 0} />
                 <span className="sr-only">View image {index + 1}</span>
               </button>
             ))}
@@ -115,7 +118,7 @@ export function ProductView({
 
         {/* Sized by its own 4:5 crop, not stretched to the rail: otherwise the
             hero changes shape with the number of photographs beside it. */}
-        <div className="relative aspect-[4/5] flex-1 self-start overflow-hidden bg-[var(--surface-media)]">
+        <div className="relative aspect-[4/5] w-full overflow-hidden bg-[var(--surface-media)] sm:w-auto sm:flex-1 sm:self-start">
           {hero ? (
             <Photo
               src={hero.url}

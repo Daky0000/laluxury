@@ -9,7 +9,12 @@ import { Photo } from "@/components/shop/photo";
  */
 export function Hero({ settings }: { settings: StoreSettings }) {
   return (
-    <section className="relative h-[88vh] min-h-[560px] overflow-hidden md:min-h-[640px]">
+    // `svh` rather than `vh`: on a phone `vh` is measured against the viewport
+    // with the browser's toolbar hidden, so a `88vh` hero is taller than the
+    // screen on arrival and the buttons at its foot start below the fold. `svh`
+    // is the smallest the viewport gets, which is what it is when the page
+    // loads. The minimums keep the crop from collapsing in landscape.
+    <section className="relative h-[88svh] min-h-[520px] overflow-hidden sm:min-h-[560px] md:min-h-[640px]">
       {settings.heroImageUrl ? (
         <Photo src={settings.heroImageUrl} priority sizes="100vw" />
       ) : (
@@ -24,14 +29,14 @@ export function Hero({ settings }: { settings: StoreSettings }) {
         }}
       />
 
-      <div className="lx-container relative flex h-full flex-col justify-end pb-16">
+      <div className="lx-container relative flex h-full flex-col justify-end pb-10 sm:pb-16">
         {settings.heroEyebrow ? (
-          <p className="mb-5 text-sm uppercase tracking-[0.34em] text-[#EDEAE3]">
+          <p className="mb-4 text-sm uppercase tracking-[0.2em] text-[#EDEAE3] sm:mb-5 sm:tracking-[0.34em]">
             {settings.heroEyebrow}
           </p>
         ) : null}
 
-        <h1 className="max-w-[760px] text-[clamp(2.75rem,8vw,5.5rem)] leading-[0.98] text-[#FBFAF6]">
+        <h1 className="max-w-[760px] text-[clamp(2.25rem,8vw,5.5rem)] leading-[1.02] text-[#FBFAF6] sm:leading-[0.98]">
           {settings.heroTitle}
           {settings.heroTitleAccent ? (
             <>
@@ -42,12 +47,15 @@ export function Hero({ settings }: { settings: StoreSettings }) {
         </h1>
 
         {settings.heroBody ? (
-          <p className="mt-6 max-w-[440px] text-base leading-relaxed font-light text-[#E4E1D9]">
+          <p className="mt-5 max-w-[440px] text-base leading-relaxed font-light text-[#E4E1D9] sm:mt-6">
             {settings.heroBody}
           </p>
         ) : null}
 
-        <div className="mt-8 flex flex-wrap gap-4">
+        {/* Stacked and full-bleed on a phone: side by side, two tracked-out
+            uppercase labels each take most of the screen and the second wraps
+            to three lines. */}
+        <div className="mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap sm:gap-4">
           <Link href="/shop" className="lx-cta">
             Explore the collection
           </Link>

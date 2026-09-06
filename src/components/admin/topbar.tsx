@@ -29,19 +29,29 @@ export function AdminTopbar() {
   const match = TITLES.find((entry) => pathname.startsWith(entry.prefix)) ?? TITLES[TITLES.length - 1];
 
   return (
-    <header className="sticky top-0 z-10 border-b border-[var(--border-subtle)] bg-[rgba(252,251,248,0.92)] px-5 py-4 backdrop-blur lg:px-8">
-      <div className="flex flex-wrap items-center gap-4 pl-12 lg:pl-0">
-        <div>
-          <h1 className="font-display text-[28px] font-medium leading-none">{match.title}</h1>
+    <header className="sticky top-0 z-10 border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--surface-raised)_92%,transparent)] px-5 py-3 backdrop-blur lg:px-8 lg:py-4">
+      {/*
+        Title on the first row, search and the storefront link on the second,
+        until there is room for both on one. The search box used to be a fixed
+        240px and the row `flex-wrap`, which on a phone put it on a line of its
+        own anyway — 240px plus the 38px button being wider than the screen.
+      */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+        {/* The rail's own trigger is fixed at the top-left corner below `lg`,
+            so the title starts clear of it. */}
+        <div className="min-w-0 pl-12 lg:pl-0">
+          <h1 className="font-display text-2xl font-medium leading-none sm:text-[28px]">
+            {match.title}
+          </h1>
           <p className="mt-1 text-xs text-[var(--text-muted)]">{match.subtitle}</p>
         </div>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="flex items-center gap-3 sm:ml-auto">
           {match.search ? (
             <form
               method="get"
               action={match.search}
-              className="flex w-[240px] items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3.5 py-2.5"
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3.5 py-2 sm:w-[240px] sm:flex-none sm:py-2.5"
             >
               <label htmlFor="admin-search" className="sr-only">
                 Search {match.title.toLowerCase()}
@@ -63,7 +73,7 @@ export function AdminTopbar() {
           <Link
             href="/"
             title="View storefront"
-            className="grid h-[38px] w-[38px] place-items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] sm:h-[38px] sm:w-[38px]"
           >
             <Store className="h-[17px] w-[17px]" strokeWidth={1.6} aria-hidden />
             <span className="sr-only">View storefront</span>

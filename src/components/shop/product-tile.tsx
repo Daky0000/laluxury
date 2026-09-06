@@ -31,11 +31,15 @@ export function ProductTile({
   return (
     <article className="group flex flex-col">
       <div
-        className={`relative overflow-hidden bg-[var(--surface-media)] ${
+        className={`@container/tile relative overflow-hidden bg-[var(--surface-media)] ${
           aspect === "square" ? "aspect-square" : "aspect-[4/5]"
         }`}
       >
-        <Link href={`/product/${product.slug}`} className="block h-full w-full">
+        {/* `relative`: Photo fills its container by absolute positioning, and
+            without it the nearest positioned ancestor is the tile rather than
+            the link — which happens to be the same box, but Next warns on
+            every image and the contract is only accidentally true. */}
+        <Link href={`/product/${product.slug}`} className="relative block h-full w-full">
           {product.imageUrl ? (
             <Photo
               src={product.imageUrl}
@@ -50,11 +54,16 @@ export function ProductTile({
             </span>
           )}
 
+          {/* The second shot only ever appears on hover, so on a touchscreen it
+              is a whole extra photograph downloaded to be seen by nobody. Hidden
+              outright there rather than merely transparent, which keeps it out
+              of the request queue on exactly the connections that can least
+              afford it. */}
           {product.hoverImageUrl ? (
             <Photo
               src={product.hoverImageUrl}
               sizes={TILE_SIZES}
-              className="opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+              className="opacity-0 transition-opacity duration-500 group-hover:opacity-100 pointer-coarse:hidden"
             />
           ) : null}
         </Link>
@@ -78,8 +87,12 @@ export function ProductTile({
         ) : null}
       </div>
 
-      <div className="flex items-start justify-between gap-2.5 pt-3.5">
-        <div>
+      {/* Name and price share a line where there is room for both. In a
+          two-across grid on a phone there is not: a name of any length and a
+          four-figure cedi price in the same row leaves each of them a couple of
+          words wide, so under `sm` the price drops to its own line instead. */}
+      <div className="flex flex-col gap-1 pt-3.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2.5">
+        <div className="min-w-0">
           <h3 className="font-sans text-sm font-normal leading-snug tracking-normal">
             <Link href={`/product/${product.slug}`} className="hover:underline">
               {product.title}
@@ -105,13 +118,13 @@ export function ProductTile({
           ) : null}
         </div>
 
-        <div className="whitespace-nowrap text-right">
+        <div className="flex shrink-0 flex-wrap items-baseline gap-x-2 whitespace-nowrap sm:block sm:text-right">
           {product.hasRange ? (
             <span className="text-sm text-[var(--text-muted)]">from </span>
           ) : null}
           <span className="text-[17px] font-semibold tabular-nums">{formatPrice(product.price)}</span>
           {onSale ? (
-            <span className="mt-0.5 block text-sm text-[var(--text-muted)] line-through">
+            <span className="text-sm text-[var(--text-muted)] line-through sm:mt-0.5 sm:block">
               {formatPrice(product.compareAtPrice!)}
             </span>
           ) : null}

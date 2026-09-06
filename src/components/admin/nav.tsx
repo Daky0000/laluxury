@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useOverlay } from "@/lib/use-overlay";
 
 const ICONS = {
   dashboard: LayoutDashboard,
@@ -51,6 +52,8 @@ export function AdminNav({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
+  useOverlay(open, () => setOpen(false));
+
   /** /admin only matches exactly; the rest match their subtree. */
   function isActive(href: string): boolean {
     return href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
@@ -79,16 +82,16 @@ export function AdminNav({
                 onClick={() => setOpen(false)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-3 rounded-r-lg border-l-[3px] px-4 py-2.5 text-sm transition-colors",
+                  "flex min-h-11 items-center gap-3 rounded-r-lg border-l-[3px] px-4 py-2.5 text-sm transition-colors",
                   active
                     ? "border-[var(--color-clay-700)] bg-white/9 text-[#f5f4ef]"
                     : "border-transparent text-[#b6b3aa] hover:bg-white/5 hover:text-[#f5f4ef]",
                 )}
               >
                 <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.6} aria-hidden />
-                {item.label}
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
                 {item.badge ? (
-                  <span className="ml-auto rounded-full bg-[var(--color-clay-700)] px-2 py-0.5 text-sm text-white tabular-nums">
+                  <span className="shrink-0 rounded-full bg-[var(--color-clay-700)] px-2 py-0.5 text-sm text-white tabular-nums">
                     {item.badge}
                   </span>
                 ) : null}
@@ -115,7 +118,7 @@ export function AdminNav({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed left-4 top-4 z-30 grid h-9 w-9 place-items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] lg:hidden"
+        className="fixed left-4 top-3 z-30 grid h-10 w-10 place-items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] lg:hidden"
         aria-label="Open admin menu"
       >
         <Menu className="h-4 w-4" aria-hidden />
@@ -123,7 +126,7 @@ export function AdminNav({
 
       <nav
         aria-label="Admin"
-        className="adm-rail sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col py-6.5 lg:flex"
+        className="adm-rail sticky top-0 hidden h-dvh w-[236px] shrink-0 flex-col overflow-y-auto py-6.5 lg:flex"
       >
         {rail}
       </nav>
@@ -136,14 +139,14 @@ export function AdminNav({
         >
           <nav
             aria-label="Admin"
-            className="adm-rail flex h-full w-[264px] flex-col py-6.5"
+            className="adm-rail flex h-dvh w-[264px] max-w-[86vw] flex-col overflow-y-auto overscroll-contain py-6.5"
             onClick={(event) => event.stopPropagation()}
           >
             <button
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close menu"
-              className="mb-2 self-end px-6 text-[#b6b3aa]"
+              className="lx-tap-tight mb-2 mr-4 self-end text-[#b6b3aa]"
             >
               <X className="h-5 w-5" aria-hidden />
             </button>

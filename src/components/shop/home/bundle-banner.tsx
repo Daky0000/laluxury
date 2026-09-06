@@ -17,29 +17,40 @@ export function BundleBanner({ settings }: { settings: StoreSettings }) {
       : 0;
 
   return (
-    <section className="relative mt-16 min-h-[600px] overflow-hidden">
+    <section className="relative mt-12 overflow-hidden sm:mt-16">
       {settings.bundleImageUrl ? (
         <Photo src={settings.bundleImageUrl} sizes="100vw" />
       ) : (
         <div className="absolute inset-0 bg-[var(--surface-media)]" />
       )}
 
+      {/* The wash runs left-to-right behind the copy on a wide banner. On a
+          phone the copy fills the width, so a horizontal wash leaves the last
+          words of every line on bare photograph; there it runs top-to-bottom
+          instead and the text keeps its contrast whatever is underneath. */}
       <div
-        className="pointer-events-none absolute inset-0"
+        className="pointer-events-none absolute inset-0 md:hidden"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(43,39,36,.55) 0%, rgba(43,39,36,.78) 100%)",
+        }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 hidden md:block"
         style={{
           background:
             "linear-gradient(90deg, rgba(43,39,36,.86) 0%, rgba(43,39,36,.45) 50%, rgba(43,39,36,.12) 100%)",
         }}
       />
 
-      <div className="lx-container relative flex min-h-[600px] flex-col justify-center py-24">
+      <div className="lx-container relative flex min-h-[420px] flex-col justify-center py-14 sm:min-h-[500px] sm:py-20 md:min-h-[600px] md:py-24">
         {settings.bundleEyebrow ? (
-          <p className="text-sm uppercase tracking-[0.32em] text-[#EDEAE3]">
+          <p className="text-sm uppercase tracking-[0.2em] text-[#EDEAE3] sm:tracking-[0.32em]">
             {settings.bundleEyebrow}
           </p>
         ) : null}
 
-        <h2 className="my-5 max-w-[520px] text-[clamp(2.25rem,5vw,3.625rem)] leading-[1.02] text-[#FBFAF6]">
+        <h2 className="my-4 max-w-[520px] text-[clamp(1.875rem,6vw,3.625rem)] leading-[1.06] text-[#FBFAF6] sm:my-5 sm:leading-[1.02]">
           {settings.bundleTitle}
         </h2>
 
@@ -50,8 +61,8 @@ export function BundleBanner({ settings }: { settings: StoreSettings }) {
         ) : null}
 
         {settings.bundlePrice !== null ? (
-          <div className="my-8 flex flex-wrap items-baseline gap-4">
-            <span className="text-[2.25rem] text-[#FBFAF6] tabular-nums">
+          <div className="my-6 flex flex-wrap items-baseline gap-x-4 gap-y-2 sm:my-8">
+            <span className="text-[clamp(1.75rem,7vw,2.25rem)] text-[#FBFAF6] tabular-nums">
               {formatPrice(settings.bundlePrice)}
             </span>
             {settings.bundleCompareAtPrice !== null ? (
@@ -67,7 +78,10 @@ export function BundleBanner({ settings }: { settings: StoreSettings }) {
           </div>
         ) : null}
 
-        <Link href={settings.bundleHref || "/shop"} className="lx-cta self-start">
+        <Link
+          href={settings.bundleHref || "/shop"}
+          className="lx-cta w-full self-start sm:w-auto"
+        >
           Shop the set
         </Link>
       </div>

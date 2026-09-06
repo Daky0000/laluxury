@@ -82,7 +82,7 @@ const heading = "mb-3 text-sm uppercase tracking-[0.18em] text-[var(--text-prima
 /** The pill used for price bands and non-colour option values. */
 const chipClass = (active: boolean) =>
   cn(
-    "inline-flex items-center border px-3.5 py-2 text-sm transition-colors",
+    "inline-flex min-h-11 items-center border px-3.5 py-2 text-sm transition-colors",
     active
       ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--surface-raised)]"
       : "border-[var(--border-subtle)] bg-[var(--surface-raised)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]",
@@ -91,7 +91,12 @@ const chipClass = (active: boolean) =>
 /** The 42x24 switch from the artboard, as a link so it works without JS. */
 function Switch({ href, label, on }: { href: string; label: string; on: boolean }) {
   return (
-    <Link href={href} role="switch" aria-checked={on} className="flex items-center justify-between">
+    <Link
+      href={href}
+      role="switch"
+      aria-checked={on}
+      className="flex min-h-11 items-center justify-between gap-4 py-1"
+    >
       <span className="text-sm text-[var(--text-secondary)]">{label}</span>
       <span
         aria-hidden
@@ -132,7 +137,7 @@ export function FilterRail({
                     href={toggleQuery(carried, "category", category.slug)}
                     aria-pressed={active}
                     className={cn(
-                      "flex w-full items-center gap-3 py-2 text-sm transition-colors",
+                      "flex min-h-11 w-full items-center gap-3 py-2 text-sm transition-colors",
                       active
                         ? "font-medium text-[var(--text-primary)]"
                         : "font-light text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
@@ -215,7 +220,7 @@ export function FilterRail({
               something to press, so it keeps a compact submit. */}
           <button
             type="submit"
-            className="shrink-0 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-2.5 py-2.5 text-sm text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)]"
+            className="min-h-11 shrink-0 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 text-sm text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)]"
           >
             Go
           </button>
@@ -248,7 +253,7 @@ export function FilterRail({
           <section key={option.name}>
             <h2 className={heading}>{option.name}</h2>
             {isColour ? (
-              <div className="flex flex-wrap gap-2.5">
+              <div className="flex flex-wrap gap-3">
                 {option.values.map((value) => {
                   const active = chosen.includes(value.value);
                   return (
@@ -258,7 +263,11 @@ export function FilterRail({
                       title={value.value}
                       aria-pressed={active}
                       className={cn(
-                        "grid h-[34px] w-[34px] place-items-center rounded-full border transition-colors",
+                        // The ring stays the 34px the artboard draws; `lx-tap`
+                        // grows only the pressable area around it to 44px, so a
+                        // row of swatches keeps its rhythm and still takes a
+                        // thumb.
+                        "lx-tap grid h-[34px] w-[34px] place-items-center rounded-full border transition-colors",
                         active ? "border-[var(--text-primary)]" : "border-[var(--border-strong)]",
                       )}
                     >
@@ -321,7 +330,7 @@ export function FilterRail({
 
       <Link
         href="/shop"
-        className="self-start text-sm tracking-[0.06em] text-[var(--accent-hover)] underline underline-offset-4"
+        className="inline-flex min-h-11 items-center self-start text-sm tracking-[0.06em] text-[var(--accent-hover)] underline underline-offset-4"
       >
         Clear all filters
       </Link>
@@ -339,45 +348,59 @@ export function ActiveFilters({
   facets: Facets;
   carried: Carried;
 }) {
-  const chips: { label: string; href: string }[] = [];
+  /**
+   * `id` rather than the label as the React key: a colour called "Ivory", a tag
+   * called "Ivory" and a room called "Ivory" are three different filters, and
+   * keying by the word they share made React treat them as one chip.
+   */
+  const chips: { id: string; label: string; href: string }[] = [];
 
   for (const slug of selected.categorySlugs) {
     const category = facets.categories.find((c) => c.slug === slug);
-    chips.push({ label: category?.name ?? slug, href: removeQuery(carried, "category", slug) });
+    chips.push({
+      id: `category:${slug}`,
+      label: category?.name ?? slug,
+      href: removeQuery(carried, "category", slug),
+    });
   }
 
   for (const [name, values] of Object.entries(selected.options)) {
     for (const value of values) {
-      chips.push({ label: value, href: removeQuery(carried, `${OPTION_PREFIX}${name}`, value) });
+      chips.push({
+        id: `option:${name}:${value}`,
+        label: value,
+        href: removeQuery(carried, `${OPTION_PREFIX}${name}`, value),
+      });
     }
   }
 
   for (const tag of selected.tags) {
-    chips.push({ label: tag, href: removeQuery(carried, "tag", tag) });
+    chips.push({ id: `tag:${tag}`, label: tag, href: removeQuery(carried, "tag", tag) });
   }
 
   const band = PRICE_BANDS.find((b) => isBandActive(b, selected));
 
   if (band) {
     chips.push({
+      id: "band",
       label: band.label,
       href: `/shop${buildQuery({ ...carried, min: undefined, max: undefined, show: undefined })}`,
     });
   } else {
     if (selected.min) {
-      chips.push({ label: `Min ₵${selected.min}`, href: removeQuery(carried, "min") });
+      chips.push({ id: "min", label: `Min ₵${selected.min}`, href: removeQuery(carried, "min") });
     }
     if (selected.max) {
-      chips.push({ label: `Max ₵${selected.max}`, href: removeQuery(carried, "max") });
+      chips.push({ id: "max", label: `Max ₵${selected.max}`, href: removeQuery(carried, "max") });
     }
   }
 
   if (selected.inStockOnly) {
-    chips.push({ label: "In stock", href: removeQuery(carried, "inStock") });
+    chips.push({ id: "inStock", label: "In stock", href: removeQuery(carried, "inStock") });
   }
 
   if (selected.onSaleOnly) {
-    chips.push({ label: "On sale", href: removeQuery(carried, "onSale") });
+    chips.push({ id: "onSale", label: "On sale", href: removeQuery(carried, "onSale") });
   }
 
   if (chips.length === 0) return null;
@@ -389,18 +412,18 @@ export function ActiveFilters({
       </span>
       {chips.map((chip) => (
         <Link
-          key={chip.label}
+          key={chip.id}
           href={chip.href}
-          className="inline-flex items-center gap-2 bg-[var(--text-primary)] px-3.5 py-1.5 text-sm text-[var(--surface-raised)] transition-opacity hover:opacity-80"
+          className="inline-flex min-h-9 items-center gap-2 bg-[var(--text-primary)] px-3.5 py-1.5 text-sm text-[var(--surface-raised)] transition-opacity hover:opacity-80"
         >
           {chip.label}
-          <X className="h-3 w-3" strokeWidth={2.2} aria-hidden />
+          <X className="h-3 w-3 shrink-0" strokeWidth={2.2} aria-hidden />
           <span className="sr-only">Remove filter</span>
         </Link>
       ))}
       <Link
         href="/shop"
-        className="px-1 text-sm text-[var(--accent-hover)] underline underline-offset-4"
+        className="inline-flex min-h-9 items-center px-1 text-sm text-[var(--accent-hover)] underline underline-offset-4"
       >
         Clear all
       </Link>

@@ -113,21 +113,23 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
   return (
     <>
       {/* Page head */}
-      <section className="lx-container pb-2 pt-11 text-center">
-        <p className="lx-eyebrow">Every piece</p>
-        <h1 className="mt-3 text-[clamp(2.5rem,6vw,3.625rem)] leading-tight">{heading}</h1>
+      <section className="lx-container pb-2 pt-8 text-center sm:pt-11">
+        <p className="lx-eyebrow tracking-[0.2em] sm:tracking-[0.32em]">Every piece</p>
+        <h1 className="mt-3 text-[clamp(2rem,7vw,3.625rem)] leading-tight">{heading}</h1>
         <p className="mt-2.5 text-base font-light text-[var(--text-muted)]">
           Bedding, living, windows and student essentials — filter your way to it.
         </p>
       </section>
 
-      {/* Toolbar: search, tally, sort */}
+      {/* Toolbar: search, tally, sort. The search takes its own row on a phone
+          and the tally and sort share the one below it, rather than all three
+          wrapping into three rows of one thing each. */}
       <div className="lx-container pt-6">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-y border-[var(--border-subtle)] py-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-y border-[var(--border-subtle)] py-3.5">
           <form
             method="get"
             action="/shop"
-            className="flex w-full items-center gap-2.5 border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3.5 py-2 sm:w-[300px]"
+            className="flex min-h-11 w-full items-center gap-2.5 border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3.5 sm:w-[300px]"
           >
             {/* Searching starts the results over, so `show` is deliberately dropped. */}
             {Object.entries(carried).flatMap(([key, value]) =>
@@ -147,18 +149,22 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
               type="search"
               defaultValue={q}
               placeholder="Search all products…"
-              className="w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-ink-400"
+              className="w-full min-w-0 self-stretch bg-transparent text-sm outline-none placeholder:text-ink-400"
             />
             <button type="submit" className="sr-only">
               Search
             </button>
           </form>
 
-          <span className="text-sm tracking-[0.06em] text-[var(--text-secondary)]">
+          <span className="shrink-0 text-sm tracking-[0.06em] text-[var(--text-secondary)]">
             {results.total} of {facets.productTotal} pieces
           </span>
 
-          <form method="get" action="/shop" className="flex items-center gap-3">
+          <form
+            method="get"
+            action="/shop"
+            className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:flex-none sm:gap-3"
+          >
             {/* Carry the current filters through the sort change. */}
             {Object.entries(carried).flatMap(([key, value]) =>
               (Array.isArray(value) ? value : value ? [value] : []).map((v, i) => (
@@ -183,7 +189,7 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
       </div>
 
       {/* Body */}
-      <section className="lx-container grid items-start gap-x-13 gap-y-10 pb-16 pt-7 lg:grid-cols-[238px_1fr]">
+      <section className="lx-container grid items-start gap-x-13 gap-y-6 pb-16 pt-6 sm:gap-y-10 sm:pt-7 lg:grid-cols-[238px_1fr]">
         <FilterDrawer activeCount={activeFilterCount}>
           <FilterRail
             facets={facets}
@@ -215,14 +221,14 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-[34px] md:grid-cols-3">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-[34px] md:grid-cols-3">
                 {results.items.map((product, index) => (
                   <ProductTile key={product.id} product={toTile(product)} priority={index < 3} />
                 ))}
               </div>
 
               {remaining > 0 ? (
-                <div className="mt-11 flex justify-center">
+                <div className="mt-9 flex justify-center sm:mt-11">
                   <Link
                     href={`/shop${buildQuery({
                       ...carried,
@@ -230,7 +236,7 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
                       show: Math.min(MAX_SHOWN, show + LOAD_MORE_STEP),
                     })}`}
                     scroll={false}
-                    className="border border-[var(--border-strong)] px-10 py-4 text-sm uppercase tracking-[0.14em] transition-colors hover:bg-[var(--surface-sunken)]"
+                    className="flex w-full items-center justify-center border border-[var(--border-strong)] px-6 py-4 text-sm uppercase tracking-[0.14em] transition-colors hover:bg-[var(--surface-sunken)] sm:w-auto sm:px-10"
                   >
                     Load more ({remaining})
                   </Link>

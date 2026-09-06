@@ -96,8 +96,8 @@ export default async function AdminCustomersPage({ searchParams }: PageProps<"/a
         />
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto overscroll-x-contain" tabIndex={0} role="region" aria-label="Scrollable table">
+            <table className="w-full min-w-[760px] text-sm">
               <thead className="border-b border-[var(--border-subtle)] bg-[var(--surface-sunken)] text-left">
                 <tr>
                   <th className="px-4 py-2.5 font-medium">Customer</th>

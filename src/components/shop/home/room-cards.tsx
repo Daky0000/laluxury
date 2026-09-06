@@ -23,17 +23,21 @@ export function RoomCards({
   if (cards.length === 0) return null;
 
   return (
-    <section id={anchor} className="lx-container scroll-mt-24 pb-10 pt-20 md:pt-22">
+    <section id={anchor} className="lx-container scroll-mt-24 pb-8 pt-12 sm:pb-10 sm:pt-16 md:pt-22">
       {section.eyebrow || section.title ? (
-        <div className="mb-12 text-center">
-          {section.eyebrow ? <p className="lx-eyebrow">{section.eyebrow}</p> : null}
+        <div className="mb-8 text-center sm:mb-12">
+          {section.eyebrow ? (
+            <p className="lx-eyebrow tracking-[0.2em] sm:tracking-[0.32em]">{section.eyebrow}</p>
+          ) : null}
           {section.title ? (
-            <h2 className="mt-3 text-4xl md:text-[2.875rem]">{section.title}</h2>
+            <h2 className="mt-3 text-[clamp(1.875rem,6vw,2.875rem)] leading-tight">
+              {section.title}
+            </h2>
           ) : null}
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:gap-5 md:grid-cols-4">
         {cards.map((room) => (
           <Link key={room.slug} href={`/shop?category=${room.slug}`} className="group block">
             <div className="relative aspect-[3/4] overflow-hidden bg-[var(--surface-media)]">
@@ -57,9 +61,9 @@ export function RoomCards({
               />
             </div>
 
-            <div className="px-1 pt-4">
-              <p className="text-xl">{room.name}</p>
-              <p className="mt-1 text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">
+            <div className="px-1 pt-3.5 sm:pt-4">
+              <p className="text-lg leading-snug sm:text-xl">{room.name}</p>
+              <p className="mt-1 text-sm uppercase tracking-[0.12em] text-[var(--text-muted)] sm:tracking-[0.16em]">
                 {room.count} {room.count === 1 ? "piece" : "pieces"}
               </p>
             </div>

@@ -5,9 +5,11 @@ import { NewsletterForm } from "@/components/shop/newsletter-form";
 export function NewsletterBlock({ settings }: { settings: StoreSettings }) {
   return (
     <section className="border-t border-[var(--border-subtle)]">
-      <div className="mx-auto max-w-[640px] px-5 py-20 text-center md:px-10">
-        <h2 className="text-[2.5rem] leading-tight">{settings.newsletterTitle}</h2>
-        <p className="mb-8 mt-3.5 text-base font-light text-[var(--text-muted)]">
+      <div className="mx-auto max-w-[640px] px-5 py-14 text-center sm:py-20 md:px-10">
+        <h2 className="text-[clamp(1.75rem,6vw,2.5rem)] leading-tight">
+          {settings.newsletterTitle}
+        </h2>
+        <p className="mb-7 mt-3.5 text-base font-light text-[var(--text-muted)] sm:mb-8">
           {settings.newsletterBody}
         </p>
         <NewsletterForm variant="inline" />
