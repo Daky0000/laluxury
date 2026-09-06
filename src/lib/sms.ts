@@ -98,10 +98,14 @@ async function call(
       },
       body: JSON.stringify(body),
       cache: "no-store",
+      // An edge that accepts the connection and then says nothing would
+      // otherwise hold the sign-up open indefinitely, and the shopper would
+      // watch a spinner rather than get an answer.
+      signal: AbortSignal.timeout(15_000),
     });
     text = await response.text();
   } catch (error) {
-    // DNS, TLS or a dropped connection — never a reply we can read.
+    // DNS, TLS, a dropped connection, or the timeout above.
     console.error(`[sms] ${path} did not complete:`, error);
     return { status: 0, data: {} };
   }

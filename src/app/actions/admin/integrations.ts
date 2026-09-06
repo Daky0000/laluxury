@@ -212,6 +212,7 @@ export async function testIntegrationAction(
             "User-Agent": "LaLuxury-Shop/1.0 (+https://laluxurys.com)",
           },
           cache: "no-store",
+          signal: AbortSignal.timeout(15_000),
         });
         const body = await response.text();
 

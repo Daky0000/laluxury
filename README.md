@@ -78,6 +78,7 @@ readiness on the admin dashboard, so the store boots and runs with just a databa
 | `WHATSAPP_*` | — | Agent on WhatsApp |
 | `SMTP_*` | — | Transactional email |
 | `VYNFY_API_KEY`, `VYNFY_SENDER_ID` | — | SMS one-time codes; without it nobody can register |
+| `DATABASE_POOL_MAX` | — | Connections per instance; defaults to 5 |
 | `CLOUDINARY_*` | — | Optional image CDN; without it uploads are stored in Postgres |
 
 See `.env.example` for the full list with setup notes.
