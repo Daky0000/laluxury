@@ -40,7 +40,45 @@ export const OTP_MAX_ATTEMPTS = 3;
 
 export type SmsResult =
   | { ok: true; otpId?: number }
-  | { ok: false; code: string; message: string };
+  | {
+      ok: false;
+      code: string;
+      message: string;
+      /**
+       * True when no code can have gone out and trying again unchanged is
+       * pointless — a number we cannot send to, a key the gateway refuses,
+       * an empty balance. False when the outcome is merely unknown, which is
+       * the common case and the one that must not strand anybody.
+       */
+      fatal: boolean;
+    };
+
+/**
+ * Failures where the sign-up genuinely cannot continue.
+ *
+ * Everything not on this list — an unrecognised code, a 500, an edge challenge,
+ * a timeout — is treated as "we do not know". Vynfy has been observed to text
+ * the code and *then* fail its own response, so refusing to move on because the
+ * reply was unhappy left people holding a code with nowhere to type it.
+ */
+const FATAL_CODES = new Set([
+  "NOT_CONFIGURED",
+  "UNAUTHORISED",
+  "INVALID_PHONE",
+  "MISSING_PHONE",
+  "EMPTY_PHONE",
+  "INSUFFICIENT_BALANCE",
+  // Our own payload being wrong. Retrying sends the same payload.
+  "EMPTY_MESSAGE",
+  "INVALID_MESSAGE",
+  "MESSAGE_TOO_LONG",
+  "EMPTY_SENDER_ID",
+  "SENDER_ID_TOO_LONG",
+  "INVALID_LENGTH",
+  "INVALID_EXPIRY",
+  "INVALID_MEDIUM",
+  "INVALID_OTP_TYPE",
+]);
 
 async function credentials(): Promise<{ apiKey: string; senderId: string } | null> {
   const { sms } = await getIntegrations();
@@ -127,16 +165,29 @@ async function call(
  * Vynfy names its failures. Turning them into sentences here keeps the wording
  * in one place and keeps gateway vocabulary off the customer's screen.
  */
-function readableError(status: number, data: VynfyResponse): { code: string; message: string } {
+function readableError(
+  path: string,
+  status: number,
+  data: VynfyResponse,
+): { code: string; message: string; fatal: boolean } {
   const code = data.error_code ?? data.error ?? `HTTP_${status}`;
+
+  // Whatever the gateway said, in full, in our own log. Nothing below passes it
+  // on to the customer: it is Vynfy's internal wording, and when their own
+  // backend fails it has been seen to hand back things like a raw database
+  // error — which is meaningless to a shopper and looks like our bug.
+  console.error(
+    `[sms] ${path} failed: status=${status} code=${JSON.stringify(code)} ` +
+      `message=${JSON.stringify(data.message ?? null)}`,
+  );
 
   // Vynfy answers an unusable key with a 401 and "Invalid API key". That is a
   // setup fault rather than something the customer can do anything about, so it
   // is named plainly here and loudly in the log.
   if (status === 401) {
-    console.error(`[sms] rejected the API key: ${data.message ?? data.error ?? "401"}`);
     return {
       code: "UNAUTHORISED",
+      fatal: true,
       message:
         "Our SMS account needs attention, so we could not do that just now. " +
         "Please contact us and we will set your account up.",
@@ -161,14 +212,14 @@ function readableError(status: number, data: VynfyResponse): { code: string; mes
   };
 
   // The reference on the end is the point of this branch: a shopper reporting
-  // "it said SMS-403" tells the owner in four characters what a screenshot of
-  // the old wording never did.
+  // "it said SMS-500" tells the owner in three characters what a screenshot of
+  // a generic sentence never did. Vynfy's own wording is logged, not shown.
   return {
     code,
+    fatal: FATAL_CODES.has(code),
     message:
       messages[code] ??
-      data.message ??
-      `We could not reach the SMS network. Please try again in a moment, and tell us if it keeps happening (SMS-${status || "NET"}).`,
+      `The SMS network had trouble with that. If the code does not arrive, ask for another — and tell us if it keeps happening (SMS-${status || "NET"}).`,
   };
 }
 
@@ -182,6 +233,7 @@ export async function sendOtp(phone: string, storeName: string): Promise<SmsResu
     return {
       ok: false,
       code: "INVALID_PHONE",
+      fatal: true,
       message: "Enter your number with its country code, e.g. +233 24 000 0000.",
     };
   }
@@ -191,6 +243,7 @@ export async function sendOtp(phone: string, storeName: string): Promise<SmsResu
     return {
       ok: false,
       code: "NOT_CONFIGURED",
+      fatal: true,
       message: "Phone verification is not switched on yet. Please contact us to set up an account.",
     };
   }
@@ -212,7 +265,7 @@ export async function sendOtp(phone: string, storeName: string): Promise<SmsResu
   });
 
   if (status === 200 && data.success) return { ok: true, otpId: data.otp_id };
-  return { ok: false, ...readableError(status, data) };
+  return { ok: false, ...readableError("/otp/generate", status, data) };
 }
 
 /** Checks a code against the pending OTP for that number. */
@@ -222,6 +275,7 @@ export async function verifyOtp(phone: string, code: string): Promise<SmsResult>
     return {
       ok: false,
       code: "INVALID_PHONE",
+      fatal: true,
       message: "Enter your number with its country code, e.g. +233 24 000 0000.",
     };
   }
@@ -231,6 +285,7 @@ export async function verifyOtp(phone: string, code: string): Promise<SmsResult>
     return {
       ok: false,
       code: "NOT_CONFIGURED",
+      fatal: true,
       message: "Phone verification is not switched on yet. Please contact us.",
     };
   }
@@ -242,7 +297,7 @@ export async function verifyOtp(phone: string, code: string): Promise<SmsResult>
 
   if (status === 200 && data.success) return { ok: true };
 
-  const error = readableError(status, data);
+  const error = readableError("/otp/verify", status, data);
   // Vynfy counts down the attempts for us; saying how many are left is one of
   // its own documented best practices, and stops a customer burning the code.
   if (error.code === "INVALID_OTP" && typeof data.attempts_remaining === "number") {
@@ -262,12 +317,12 @@ export async function verifyOtp(phone: string, code: string): Promise<SmsResult>
 export async function sendSms(phone: string, message: string): Promise<SmsResult> {
   const number = normalisePhone(phone);
   if (!number) {
-    return { ok: false, code: "INVALID_PHONE", message: "Not a usable phone number." };
+    return { ok: false, code: "INVALID_PHONE", fatal: true, message: "Not a usable phone number." };
   }
 
   const config = await credentials();
   if (!config) {
-    return { ok: false, code: "NOT_CONFIGURED", message: "SMS is not configured." };
+    return { ok: false, code: "NOT_CONFIGURED", fatal: true, message: "SMS is not configured." };
   }
 
   const { status, data } = await call("/api/v1/send", config.apiKey, {
@@ -277,5 +332,5 @@ export async function sendSms(phone: string, message: string): Promise<SmsResult
   });
 
   if (status === 200 && data.success) return { ok: true };
-  return { ok: false, ...readableError(status, data) };
+  return { ok: false, ...readableError("/api/v1/send", status, data) };
 }

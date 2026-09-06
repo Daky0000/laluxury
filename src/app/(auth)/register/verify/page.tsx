@@ -5,6 +5,7 @@ import { cooldownRemaining, getPendingSignup } from "@/lib/auth/signup";
 import { cancelSignupAction } from "@/app/actions/auth";
 import { maskPhone } from "@/lib/phone";
 import { OtpForm } from "@/components/auth-forms";
+import { Alert } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Confirm your number", robots: { index: false } };
 
@@ -29,6 +30,18 @@ export default async function VerifyPage() {
         We have texted a 6-digit code to <strong>{maskPhone(pending.phone)}</strong>. Type it in to
         finish setting up your account.
       </p>
+
+      {/* The send was not confirmed. The code often arrives anyway — the
+          gateway texts first and answers afterwards — so the screen says what
+          it knows rather than pretending either way. */}
+      {!pending.delivered ? (
+        <div className="mt-6">
+          <Alert tone="warning">
+            Our SMS network did not confirm that send. The code may still arrive — give it a
+            moment, and use &ldquo;Send another code&rdquo; below if it does not.
+          </Alert>
+        </div>
+      ) : null}
 
       <div className="mt-8">
         <OtpForm

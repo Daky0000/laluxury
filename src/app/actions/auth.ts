@@ -100,14 +100,14 @@ export async function loginAction(
   if (user.phone && !user.phoneVerified && !user.email) {
     const settings = await getSettings();
     const sent = await sendOtp(user.phone, settings.storeName);
+    if (!sent.ok && sent.fatal) return { ok: false, message: sent.message };
+
     await setPendingSignup({
       userId: user.id,
       phone: user.phone,
       sentAt: Math.floor(Date.now() / 1000),
+      delivered: sent.ok,
     });
-    if (!sent.ok && sent.code !== "OTP_PENDING") {
-      return { ok: false, message: sent.message };
-    }
     redirect("/register/verify");
   }
 
@@ -188,14 +188,19 @@ export async function registerAction(
     : await db.user.create({ data: { ...data, role: "CUSTOMER" } });
 
   const sent = await sendOtp(phone, settings.storeName);
-  if (!sent.ok && sent.code !== "OTP_PENDING") {
-    return { ok: false, message: sent.message };
-  }
+
+  // Only a failure that rules out a code arriving keeps someone on this form.
+  // Anything else — an unrecognised error, a 500, a timeout — carries on to the
+  // code screen, because the gateway has been seen to send the text and then
+  // fail its own reply, and stopping here left people holding a code with
+  // nowhere to type it. The screen says whether the send was confirmed.
+  if (!sent.ok && sent.fatal) return { ok: false, message: sent.message };
 
   await setPendingSignup({
     userId: user.id,
     phone,
     sentAt: Math.floor(Date.now() / 1000),
+    delivered: sent.ok,
   });
 
   redirect("/register/verify");
@@ -254,9 +259,14 @@ export async function resendSignupOtpAction(): Promise<AuthState> {
 
   const settings = await getSettings();
   const sent = await sendOtp(pending.phone, settings.storeName);
-  if (!sent.ok) return { ok: false, message: sent.message };
 
-  await setPendingSignup({ ...pending, sentAt: Math.floor(Date.now() / 1000) });
+  await setPendingSignup({
+    ...pending,
+    sentAt: Math.floor(Date.now() / 1000),
+    delivered: sent.ok,
+  });
+
+  if (!sent.ok) return { ok: false, message: sent.message };
   return { ok: true, message: "A new code is on its way." };
 }
 

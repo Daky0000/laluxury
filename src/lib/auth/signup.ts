@@ -24,10 +24,19 @@ export const RESEND_COOLDOWN_SECONDS = 60;
 
 export type PendingSignup = {
   userId: string;
-  /** Canonical 233XXXXXXXXX. */
+  /** Canonical E.164 digits. */
   phone: string;
   /** Epoch seconds of the last code we asked Vynfy to send. */
   sentAt: number;
+  /**
+   * Whether the gateway actually confirmed that send.
+   *
+   * False means we asked and did not get a clean answer — the code may well
+   * have gone out anyway, which is why the sign-up continues. The verify screen
+   * uses this to say so rather than leaving someone waiting on a text that may
+   * never come.
+   */
+  delivered: boolean;
 };
 
 function secretKey(): Uint8Array {
@@ -63,6 +72,9 @@ export async function getPendingSignup(): Promise<PendingSignup | null> {
       userId: payload.userId,
       phone: payload.phone,
       sentAt: typeof payload.sentAt === "number" ? payload.sentAt : 0,
+      // Absent on a cookie issued before this field existed; assume the send
+      // was fine rather than warning everyone mid-sign-up.
+      delivered: payload.delivered !== false,
     };
   } catch {
     return null;
