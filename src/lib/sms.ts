@@ -1,3 +1,4 @@
+import { OTP_LENGTH } from "./constants";
 import { getIntegrations } from "./integrations";
 import { isGhanaian, normalisePhone } from "./phone";
 
@@ -33,7 +34,7 @@ function forGateway(canonical: string): string {
 }
 
 /** Vynfy's own limits, repeated here so callers can be told before a round trip. */
-export const OTP_LENGTH = 6;
+export { OTP_LENGTH };
 export const OTP_EXPIRY_MINUTES = 5;
 /** Vynfy allows three verification attempts per code. */
 export const OTP_MAX_ATTEMPTS = 3;

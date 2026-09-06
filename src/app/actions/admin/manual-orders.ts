@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import { uniqueOrderNumber, logOrderEvent } from "@/lib/orders";
+import { notifyOrder } from "@/lib/notify";
 import { commitStock } from "@/lib/inventory";
 import { GHANA_REGIONS } from "@/lib/constants";
 import type { AdminState } from "./products";
@@ -161,6 +162,15 @@ async function writeOrder(args: {
     entityId: order.id,
     after: { orderNumber, total, channel: args.channel },
   });
+
+  // An order raised over WhatsApp or in the showroom is the one case where the
+  // customer has nothing on screen to confirm it, so the text is the receipt.
+  // There is no Paystack reference behind a paid one — the money came in by
+  // hand — so none is quoted.
+  await notifyOrder(
+    order.id,
+    args.markPaid ? { kind: "payment.received" } : { kind: "order.placed" },
+  );
 
   return order;
 }

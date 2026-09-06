@@ -19,6 +19,7 @@ import {
 import { isStaff } from "@/lib/auth/rbac";
 import { getOrCreateCart } from "@/lib/cart";
 import { normalisePhone } from "@/lib/phone";
+import { OTP_LENGTH } from "@/lib/constants";
 import { sendOtp, verifyOtp } from "@/lib/sms";
 import { getSettings } from "@/lib/settings";
 
@@ -206,11 +207,15 @@ export async function registerAction(
   redirect("/register/verify");
 }
 
-/** Step two: the code. This is what creates the session. */
-export async function verifySignupAction(
-  _prev: AuthState | null,
-  formData: FormData,
-): Promise<AuthState> {
+/**
+ * Step two: the code. This is what creates the session.
+ *
+ * Called straight from the code screen rather than through a form post — the
+ * six boxes verify themselves the moment the last digit lands, so there is no
+ * form to submit and nothing to serialise. The redirect below still works from
+ * there: a Server Action that redirects navigates the client router.
+ */
+export async function verifySignupAction(code: string): Promise<AuthState> {
   const pending = await getPendingSignup();
   if (!pending) {
     return {
@@ -219,12 +224,14 @@ export async function verifySignupAction(
     };
   }
 
-  const code = String(formData.get("code") ?? "").replace(/\s/g, "");
-  if (!/^[0-9]{4,8}$/.test(code)) {
-    return { ok: false, fieldErrors: { code: "Enter the code we texted you." } };
+  const digits = String(code ?? "").replace(/[^0-9]/g, "");
+  // Vynfy issues exactly six digits, so anything else cannot be one of ours and
+  // is refused here rather than spent as one of the three attempts.
+  if (digits.length !== OTP_LENGTH) {
+    return { ok: false, fieldErrors: { code: `Enter the ${OTP_LENGTH}-digit code we texted you.` } };
   }
 
-  const result = await verifyOtp(pending.phone, code);
+  const result = await verifyOtp(pending.phone, digits);
   if (!result.ok) return { ok: false, fieldErrors: { code: result.message } };
 
   const user = await db.user.findUnique({ where: { id: pending.userId } });

@@ -15,7 +15,9 @@ import {
   restockUnits,
   stockLinesForOrder,
 } from "./inventory";
+import { notifyOrder } from "./notify";
 import { quoteShipping } from "./shipping";
+import type { OrderNotice } from "./notify";
 import type { OrderStatus, Prisma } from "@/generated/prisma";
 
 export const orderInclude = {
@@ -369,14 +371,32 @@ export async function markOrderPaid(args: {
     });
   }
 
+  // Told last, so nothing about the sale depends on a gateway answering.
+  await notifyOrder(order.id, {
+    kind: "payment.received",
+    reference: args.reference,
+    channel: args.channel,
+  });
+
   return { alreadyPaid: false };
 }
 
+/**
+ * Records a failed payment attempt. Like `markOrderPaid`, this runs more than
+ * once for the same attempt — the webhook and the confirmation page both reach
+ * it — so the customer is only told about it the first time.
+ */
 export async function markPaymentFailed(args: {
   orderId: string;
   reference: string;
   reason?: string;
 }): Promise<void> {
+  const before = await db.payment.findUnique({
+    where: { reference: args.reference },
+    select: { status: true },
+  });
+  const alreadyFailed = before?.status === "FAILED";
+
   await db.payment.updateMany({
     where: { reference: args.reference },
     data: { status: "FAILED" },
@@ -385,11 +405,16 @@ export async function markPaymentFailed(args: {
     where: { id: args.orderId },
     data: { paymentStatus: "FAILED" },
   });
+
+  if (alreadyFailed) return;
+
   await logOrderEvent({
     orderId: args.orderId,
     type: "payment.failed",
     message: args.reason ?? "Payment attempt failed.",
   });
+
+  await notifyOrder(args.orderId, { kind: "payment.failed", reason: args.reason ?? null });
 }
 
 /** Cancels an unpaid order and gives its reserved stock back. */
@@ -422,6 +447,8 @@ export async function cancelOrder(
     message: reason,
     actorId,
   });
+
+  await notifyOrder(orderId, { kind: "order.cancelled", reason });
 }
 
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -438,6 +465,14 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
   return ALLOWED_TRANSITIONS[from].includes(to);
 }
+
+/** Which status changes are worth texting a customer about, and as what. */
+const STATUS_NOTICES: Partial<Record<OrderStatus, OrderNotice>> = {
+  PROCESSING: { kind: "order.processing" },
+  FULFILLED: { kind: "order.fulfilled" },
+  SHIPPED: { kind: "order.shipped" },
+  DELIVERED: { kind: "order.delivered" },
+};
 
 export async function updateOrderStatus(args: {
   orderId: string;
@@ -477,6 +512,11 @@ export async function updateOrderStatus(args: {
     message: `Status changed to ${args.status.toLowerCase()}.`,
     actorId: args.actorId,
   });
+
+  // PAID is announced by `markOrderPaid` — with the payment reference on it —
+  // and CANCELLED left above through `cancelOrder`, which sends its own.
+  const notice = STATUS_NOTICES[args.status];
+  if (notice) await notifyOrder(args.orderId, notice);
 }
 
 /** Records a refund against the order and restocks the goods. */
@@ -514,6 +554,8 @@ export async function recordRefund(args: {
     actorId: args.actorId,
     meta: { amount: args.amount, restock: args.restock },
   });
+
+  await notifyOrder(args.orderId, { kind: "order.refunded", amount: args.amount });
 }
 
 export async function getOrderByNumber(orderNumber: string): Promise<FullOrder | null> {

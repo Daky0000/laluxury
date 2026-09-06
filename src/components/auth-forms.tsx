@@ -1,6 +1,15 @@
 "use client";
 
-import { useActionState, useEffect, useId, useMemo, useState } from "react";
+import {
+  useActionState,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import Link from "next/link";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import {
@@ -12,6 +21,7 @@ import {
 } from "@/app/actions/auth";
 import { Field, Alert } from "@/components/ui";
 import { isValidPhone, networkOf, normalisePhone, isGhanaian } from "@/lib/phone";
+import { OTP_LENGTH } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const submitClass =
@@ -322,24 +332,100 @@ export function RegisterForm() {
 // --- The code ---------------------------------------------------------------
 
 /**
- * One box rather than six.
+ * Six boxes, one per digit, that verify themselves.
  *
- * Six single-character inputs look the part and then fight the phone: paste
- * lands in the first box, autofill fills the first box, and backspace behaves
- * differently in every browser. A single field with `autocomplete="one-time-code"`
- * is what iOS and Android actually offer to fill from the SMS notification.
+ * Every code Vynfy issues is six digits, so the screen shows exactly six boxes
+ * and checks the code the instant the last one is filled — nobody has to hunt
+ * for a button after typing the last digit they were already reading off a
+ * text. The check is a direct call to the Server Action rather than a form
+ * post, so the page never reloads.
+ *
+ * The awkward parts of a split code field are all handled explicitly, because
+ * left alone every one of them behaves differently per browser: pasting a whole
+ * code spreads across the boxes instead of landing in the first, autofill from
+ * the SMS notification does the same, backspace in an empty box steps back and
+ * clears the one before it, and the arrow keys move between boxes.
  */
 export function OtpForm({ maskedPhone, cooldown }: { maskedPhone: string; cooldown: number }) {
-  const [state, action, pending] = useActionState<AuthState | null, FormData>(
-    verifySignupAction,
-    null,
-  );
-  const [code, setCode] = useState("");
+  const [digits, setDigits] = useState<string[]>(() => Array(OTP_LENGTH).fill(""));
+  const [state, setState] = useState<AuthState | null>(null);
+  const [verifying, startVerifying] = useTransition();
   const [wait, setWait] = useState(cooldown);
   const [resend, setResend] = useState<AuthState | null>(null);
   const [resending, setResending] = useState(false);
+
+  const boxes = useRef<Array<HTMLInputElement | null>>([]);
+  /** The last code sent to the server, so the same one is not tried twice over. */
+  const attempted = useRef<string | null>(null);
   const id = useId();
-  const errors = state?.fieldErrors ?? {};
+
+  const code = digits.join("");
+  const complete = code.length === OTP_LENGTH;
+  const busy = verifying || resending;
+
+  function focusBox(index: number) {
+    boxes.current[Math.min(Math.max(index, 0), OTP_LENGTH - 1)]?.focus();
+  }
+
+  function clearDigit(index: number) {
+    setDigits((current) => current.map((digit, i) => (i === index ? "" : digit)));
+  }
+
+  /** Writes `value` across the boxes from `start`, and returns where to go next. */
+  function fill(start: number, value: string) {
+    const incoming = value.replace(/[^0-9]/g, "");
+    setDigits((current) => {
+      const next = [...current];
+      for (let offset = 0; offset < incoming.length && start + offset < OTP_LENGTH; offset += 1) {
+        next[start + offset] = incoming[offset];
+      }
+      return next;
+    });
+    return Math.min(start + incoming.length, OTP_LENGTH - 1);
+  }
+
+  function reset() {
+    setDigits(Array(OTP_LENGTH).fill(""));
+    attempted.current = null;
+    focusBox(0);
+  }
+
+  const verify = useCallback((value: string) => {
+    attempted.current = value;
+    setState(null);
+    startVerifying(async () => {
+      try {
+        // A good code redirects from inside the action, so there is nothing to
+        // handle on the way out — only the refusals come back here.
+        const result = await verifySignupAction(value);
+        if (result && !result.ok) {
+          setState(result);
+          setDigits(Array(OTP_LENGTH).fill(""));
+          attempted.current = null;
+        }
+      } catch {
+        // The request itself did not land. The code is almost certainly still
+        // good, so the boxes keep it and the button below offers another go —
+        // and `attempted` deliberately stays set, or a network that is down
+        // would have the boxes retrying themselves in a loop.
+        setState({ ok: false, message: "We could not reach us just now. Try that again." });
+      }
+    });
+  }, []);
+
+  // Putting the cursor back after a refusal has to wait for a render: the boxes
+  // are disabled while a code is in flight, and a disabled input cannot take
+  // focus, so doing it in the handler above would silently do nothing.
+  useEffect(() => {
+    if (state && !state.ok && !verifying) boxes.current[0]?.focus();
+  }, [state, verifying]);
+
+  // The whole point of six boxes: the last digit is the submit.
+  useEffect(() => {
+    if (!complete || verifying) return;
+    if (attempted.current === code) return;
+    verify(code);
+  }, [code, complete, verifying, verify]);
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -350,58 +436,141 @@ export function OtpForm({ maskedPhone, cooldown }: { maskedPhone: string; cooldo
   async function askAgain() {
     setResending(true);
     setResend(null);
+    setState(null);
     const result = await resendSignupOtpAction();
     setResend(result);
     setResending(false);
-    if (result.ok) setWait(60);
+    // A fresh code makes whatever is in the boxes stale, so they are emptied
+    // ready for it. A refusal leaves them alone and starts the cooldown again.
+    if (result.ok) {
+      setDigits(Array(OTP_LENGTH).fill(""));
+      attempted.current = null;
+      focusBox(0);
+      setWait(60);
+    }
   }
+
+  const wrong = Boolean(state?.fieldErrors?.code ?? state?.message);
 
   return (
     <div className="flex flex-col gap-4">
-      <form action={action} className="flex flex-col gap-4">
-        {state?.message ? <Alert tone="danger">{state.message}</Alert> : null}
+      {state?.message ? <Alert tone="danger">{state.message}</Alert> : null}
 
-        <Field
-          label="Verification code"
-          htmlFor={id}
-          required
-          error={errors.code}
-          hint={`Sent by text to ${maskedPhone}. It expires in 5 minutes.`}
+      <Field
+        label="Verification code"
+        htmlFor={`${id}-0`}
+        required
+        error={state?.fieldErrors?.code}
+        hint={`Sent by text to ${maskedPhone}. It expires in 5 minutes.`}
+      >
+        <div
+          role="group"
+          aria-label={`${OTP_LENGTH}-digit verification code`}
+          className="flex justify-between gap-2"
         >
-          <input
-            id={id}
-            name="code"
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={8}
-            required
-            autoFocus
-            autoComplete="one-time-code"
-            value={code}
-            onChange={(event) => setCode(event.target.value.replace(/[^0-9]/g, ""))}
-            className="lx-field text-center font-sans text-[1.75rem] tracking-[0.4em]"
-          />
-        </Field>
+          {digits.map((digit, index) => (
+            <input
+              key={index}
+              ref={(element) => {
+                boxes.current[index] = element;
+              }}
+              id={`${id}-${index}`}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              // iOS and Android offer the code from the SMS notification to a
+              // run of one-character boxes only when every one of them asks.
+              autoComplete="one-time-code"
+              autoFocus={index === 0}
+              disabled={verifying}
+              aria-label={`Digit ${index + 1} of ${OTP_LENGTH}`}
+              aria-invalid={wrong || undefined}
+              value={digit}
+              // Typing into a box that already holds a digit should replace it
+              // rather than push a second character in beside it.
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => {
+                const value = event.target.value.replace(/[^0-9]/g, "");
+                if (!value) {
+                  clearDigit(index);
+                  return;
+                }
+                focusBox(fill(index, value));
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Backspace") {
+                  event.preventDefault();
+                  if (digit) {
+                    clearDigit(index);
+                  } else if (index > 0) {
+                    clearDigit(index - 1);
+                    focusBox(index - 1);
+                  }
+                } else if (event.key === "ArrowLeft") {
+                  event.preventDefault();
+                  focusBox(index - 1);
+                } else if (event.key === "ArrowRight") {
+                  event.preventDefault();
+                  focusBox(index + 1);
+                }
+              }}
+              onPaste={(event) => {
+                const pasted = event.clipboardData.getData("text").replace(/[^0-9]/g, "");
+                if (!pasted) return;
+                event.preventDefault();
+                // A whole code fills from the start wherever it was dropped; a
+                // fragment carries on from the box that took it.
+                focusBox(fill(pasted.length >= OTP_LENGTH ? 0 : index, pasted));
+              }}
+              className={cn(
+                "lx-field h-14 flex-1 px-0 text-center font-sans text-[1.5rem] tabular-nums",
+                wrong ? "border-danger" : undefined,
+              )}
+            />
+          ))}
+        </div>
+      </Field>
 
-        <button type="submit" disabled={pending || code.length < 4} className={submitClass}>
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-          Verify and continue
-        </button>
-      </form>
+      <p aria-live="polite" className="min-h-5 text-xs text-[var(--text-muted)]">
+        {verifying ? "Checking your code…" : null}
+      </p>
+
+      {/* The boxes verify themselves the moment they are full, so this is here
+          for the one case they cannot cover: trying the same code again after
+          the network dropped the first attempt. */}
+      <button
+        type="button"
+        onClick={() => complete && verify(code)}
+        disabled={!complete || busy}
+        className={submitClass}
+      >
+        {verifying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+        Verify and continue
+      </button>
 
       {resend?.message ? (
         <Alert tone={resend.ok ? "success" : "danger"}>{resend.message}</Alert>
       ) : null}
 
-      <button
-        type="button"
-        onClick={askAgain}
-        disabled={resending || wait > 0}
-        className="min-h-11 text-sm text-[var(--text-secondary)] underline underline-offset-4 transition-colors hover:text-[var(--accent)] disabled:no-underline disabled:opacity-60"
-      >
-        {wait > 0 ? `Send another code in ${wait}s` : resending ? "Sending…" : "Send another code"}
-      </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={askAgain}
+          disabled={busy || wait > 0}
+          className="min-h-11 text-sm text-[var(--text-secondary)] underline underline-offset-4 transition-colors hover:text-[var(--accent)] disabled:no-underline disabled:opacity-60"
+        >
+          {wait > 0 ? `Send another code in ${wait}s` : resending ? "Sending…" : "Send another code"}
+        </button>
+
+        <button
+          type="button"
+          onClick={reset}
+          disabled={busy || code.length === 0}
+          className="min-h-11 text-sm text-[var(--text-secondary)] underline underline-offset-4 transition-colors hover:text-[var(--accent)] disabled:no-underline disabled:opacity-60"
+        >
+          Clear the boxes
+        </button>
+      </div>
     </div>
   );
 }

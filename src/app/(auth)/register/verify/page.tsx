@@ -4,6 +4,7 @@ import { currentUser } from "@/lib/auth";
 import { cooldownRemaining, getPendingSignup } from "@/lib/auth/signup";
 import { cancelSignupAction } from "@/app/actions/auth";
 import { maskPhone } from "@/lib/phone";
+import { OTP_LENGTH } from "@/lib/constants";
 import { OtpForm } from "@/components/auth-forms";
 import { Alert } from "@/components/ui";
 
@@ -27,8 +28,8 @@ export default async function VerifyPage() {
     <div className="w-full max-w-md">
       <h1 className="text-3xl">Confirm your number</h1>
       <p className="mt-1.5 text-sm text-[var(--text-secondary)]">
-        We have texted a 6-digit code to <strong>{maskPhone(pending.phone)}</strong>. Type it in to
-        finish setting up your account.
+        We have texted a {OTP_LENGTH}-digit code to <strong>{maskPhone(pending.phone)}</strong>.
+        Type it in and we will check it as soon as the last digit lands.
       </p>
 
       {/* The send was not confirmed. The code often arrives anyway — the

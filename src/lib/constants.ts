@@ -27,6 +27,16 @@ export const GHANA_REGIONS = [
 
 export type GhanaRegion = (typeof GHANA_REGIONS)[number];
 
+/**
+ * How many digits a one-time code has.
+ *
+ * Vynfy is asked for exactly this many, the sign-up screen draws exactly this
+ * many boxes, and the server accepts exactly this many — so the three can never
+ * drift apart. It lives here rather than in `lib/sms` because the code screen is
+ * a client component and `lib/sms` reaches the database.
+ */
+export const OTP_LENGTH = 6;
+
 export const ORDER_STATUS_LABELS = {
   PENDING: "Awaiting payment",
   PAID: "Paid",
