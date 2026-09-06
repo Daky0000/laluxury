@@ -76,7 +76,10 @@ export async function loginAction(
   if (!parsed.success) return { ok: false, fieldErrors: fieldErrors(parsed.error) };
 
   const identifier = parsed.data.identifier.trim();
-  const phone = normalisePhone(identifier);
+  // An "@" settles it before the number parser gets a look in. Without that,
+  // an address with enough digits in the local part could be read as a phone
+  // number and looked up against the wrong column.
+  const phone = identifier.includes("@") ? null : normalisePhone(identifier);
 
   const user = phone
     ? await db.user.findUnique({ where: { phone } })
@@ -85,7 +88,7 @@ export async function loginAction(
   // One message for both cases, so this cannot be used to enumerate accounts.
   const valid = await verifyPassword(parsed.data.password, user?.passwordHash ?? null);
   if (!user || !valid) {
-    return { ok: false, message: "That phone number and password do not match." };
+    return { ok: false, message: "Those details do not match an account." };
   }
   if (!user.isActive) {
     return { ok: false, message: "That account has been disabled." };
@@ -143,7 +146,11 @@ export async function registerAction(
   if (!phone) {
     return {
       ok: false,
-      fieldErrors: { phone: "Enter a Ghanaian mobile number, e.g. 024 000 0000." },
+      fieldErrors: {
+        phone:
+          "Enter a Ghanaian number like 024 000 0000, or one from anywhere else " +
+          "with its country code, like +44 7700 900123.",
+      },
     };
   }
 

@@ -15,6 +15,20 @@ import {
 } from "@/lib/consent";
 
 /**
+ * The banner's buttons.
+ *
+ * `.lx-cta` cannot live here. Its side padding opens to 2.125rem on a desktop,
+ * so "Accept all" wanted 178px in a column that gave it 135 — it wrapped onto
+ * two lines and became a tall square. These keep the shop's uppercase button
+ * voice at a padding that fits, and never wrap the label.
+ */
+const choiceButton =
+  "flex min-h-11 w-full items-center justify-center whitespace-nowrap rounded-(--radius-card) px-3 py-2 text-sm font-medium uppercase tracking-[0.06em] transition-colors";
+
+/** Side by side where the pair fits on one row, stacked where it does not. */
+const choicePair = `${choiceButton} min-w-[8.5rem] flex-1`;
+
+/**
  * The cookie notice.
  *
  * Built to the shape the GDPR and the ePrivacy Directive actually ask for:
@@ -141,29 +155,32 @@ export function CookieConsent() {
 
         {/* Accept and reject are the same size, the same colour weight and the
             same distance from the thumb. */}
-        <div className="flex shrink-0 flex-col gap-2.5 md:w-[280px]">
+        <div className="flex shrink-0 flex-col gap-2.5 md:w-[300px]">
           {detail ? (
             <button
               type="button"
               onClick={() => save({ analytics, marketing })}
-              className="lx-cta w-full text-sm"
+              className={`${choiceButton} bg-[var(--accent)] text-[var(--accent-contrast)] hover:bg-[var(--accent-hover)]`}
             >
               Save my choices
             </button>
           ) : null}
 
-          <div className="grid grid-cols-2 gap-2.5">
+          {/* Wrap rather than a fixed two-column grid: the pair sits side by
+              side wherever both fit, and stacks full-width where they do not,
+              so no width can squeeze a label into two lines again. */}
+          <div className="flex flex-wrap gap-2.5">
             <button
               type="button"
               onClick={() => save({ analytics: false, marketing: false })}
-              className="lx-cta-ghost w-full text-sm"
+              className={`${choicePair} border border-[var(--border-strong)] text-[var(--text-primary)] hover:bg-[var(--surface-sunken)]`}
             >
               Reject all
             </button>
             <button
               type="button"
               onClick={() => save({ analytics: true, marketing: true })}
-              className="lx-cta w-full text-sm"
+              className={`${choicePair} bg-[var(--accent)] text-[var(--accent-contrast)] hover:bg-[var(--accent-hover)]`}
             >
               Accept all
             </button>

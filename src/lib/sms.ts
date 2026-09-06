@@ -1,5 +1,5 @@
 import { getIntegrations } from "./integrations";
-import { normalisePhone } from "./phone";
+import { isGhanaian, normalisePhone } from "./phone";
 
 /**
  * Vynfy — the SMS and OTP gateway the shop sends through.
@@ -16,6 +16,21 @@ import { normalisePhone } from "./phone";
  */
 
 const BASE_URL = "https://sms.vynfy.com";
+
+/**
+ * Vynfy documents three accepted spellings, all Ghanaian: `233XXXXXXXXX`,
+ * `+233XXXXXXXXX` and `0XXXXXXXXX`. A Ghanaian number therefore goes out in the
+ * bare form its examples use, and anything else goes out as `+` and the digits
+ * — unambiguous, and the only form that could carry a country code at all.
+ *
+ * Whether Vynfy delivers to that number is Vynfy's to answer: its OTP endpoint
+ * validates for "a valid Ghanaian phone number". We send and let it decide,
+ * rather than refusing here — if the account is enabled for international
+ * traffic this works, and if it is not, the failure is named accurately.
+ */
+function forGateway(canonical: string): string {
+  return isGhanaian(canonical) ? canonical : `+${canonical}`;
+}
 
 /** Vynfy's own limits, repeated here so callers can be told before a round trip. */
 export const OTP_LENGTH = 6;
@@ -79,7 +94,10 @@ function readableError(status: number, data: VynfyResponse): { code: string; mes
   const code = data.error_code ?? data.error ?? `HTTP_${status}`;
 
   const messages: Record<string, string> = {
-    INVALID_PHONE: "That does not look like a Ghanaian mobile number.",
+    INVALID_PHONE:
+      "Our SMS network would not accept that number. Codes reach Ghanaian " +
+      "networks reliably; if yours is elsewhere, contact us and we will set the " +
+      "account up for you.",
     MISSING_PHONE: "Enter your phone number.",
     OTP_PENDING:
       "A code is already on its way to that number. Wait for it, or try again in a few minutes.",
@@ -108,7 +126,11 @@ function readableError(status: number, data: VynfyResponse): { code: string; mes
 export async function sendOtp(phone: string, storeName: string): Promise<SmsResult> {
   const number = normalisePhone(phone);
   if (!number) {
-    return { ok: false, code: "INVALID_PHONE", message: "Enter a valid Ghanaian mobile number." };
+    return {
+      ok: false,
+      code: "INVALID_PHONE",
+      message: "Enter your number with its country code, e.g. +233 24 000 0000.",
+    };
   }
 
   const config = await credentials();
@@ -127,7 +149,7 @@ export async function sendOtp(phone: string, storeName: string): Promise<SmsResu
     `It expires in ${OTP_EXPIRY_MINUTES} minutes. Do not share it with anyone.`;
 
   const { status, data } = await call("/otp/generate", config.apiKey, {
-    number,
+    number: forGateway(number),
     message: message.slice(0, 160),
     sender_id: config.senderId,
     otp_type: "numeric",
@@ -144,7 +166,11 @@ export async function sendOtp(phone: string, storeName: string): Promise<SmsResu
 export async function verifyOtp(phone: string, code: string): Promise<SmsResult> {
   const number = normalisePhone(phone);
   if (!number) {
-    return { ok: false, code: "INVALID_PHONE", message: "Enter a valid Ghanaian mobile number." };
+    return {
+      ok: false,
+      code: "INVALID_PHONE",
+      message: "Enter your number with its country code, e.g. +233 24 000 0000.",
+    };
   }
 
   const config = await credentials();
@@ -157,7 +183,7 @@ export async function verifyOtp(phone: string, code: string): Promise<SmsResult>
   }
 
   const { status, data } = await call("/otp/verify", config.apiKey, {
-    number,
+    number: forGateway(number),
     code: code.trim(),
   });
 
@@ -183,7 +209,7 @@ export async function verifyOtp(phone: string, code: string): Promise<SmsResult>
 export async function sendSms(phone: string, message: string): Promise<SmsResult> {
   const number = normalisePhone(phone);
   if (!number) {
-    return { ok: false, code: "INVALID_PHONE", message: "Not a valid Ghanaian mobile number." };
+    return { ok: false, code: "INVALID_PHONE", message: "Not a usable phone number." };
   }
 
   const config = await credentials();
@@ -193,7 +219,7 @@ export async function sendSms(phone: string, message: string): Promise<SmsResult
 
   const { status, data } = await call("/api/v1/send", config.apiKey, {
     sender: config.senderId,
-    recipients: [number],
+    recipients: [forGateway(number)],
     message: message.slice(0, 650),
   });
 

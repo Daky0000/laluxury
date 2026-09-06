@@ -11,7 +11,7 @@ import {
   type AuthState,
 } from "@/app/actions/auth";
 import { Field, Alert } from "@/components/ui";
-import { networkOf } from "@/lib/phone";
+import { isValidPhone, networkOf, normalisePhone, isGhanaian } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 
 const submitClass =
@@ -164,7 +164,7 @@ export function LoginForm() {
         htmlFor="identifier"
         required
         error={errors.identifier}
-        hint="The number you signed up with, e.g. 024 000 0000."
+        hint="The number you signed up with — 024 000 0000, or with its country code."
       >
         <input
           id="identifier"
@@ -198,6 +198,23 @@ export function LoginForm() {
 
 // --- Create an account ------------------------------------------------------
 
+/**
+ * What to say back about the number as it is typed.
+ *
+ * Naming the network, or the country code we resolved it to, tells someone they
+ * got their own number right before they sit waiting on a text that was never
+ * going to arrive. Silent until there is enough typed to say anything useful.
+ */
+function readBack(phone: string): string | null {
+  if (phone.replace(/[^0-9]/g, "").length < 6) return null;
+
+  const canonical = normalisePhone(phone);
+  if (!canonical) return null;
+  if (!isGhanaian(canonical)) return `+${canonical}`;
+
+  return networkOf(canonical);
+}
+
 export function RegisterForm() {
   const [state, action, pending] = useActionState<AuthState | null, FormData>(registerAction, null);
   const [phone, setPhone] = useState("");
@@ -205,9 +222,8 @@ export function RegisterForm() {
   const [confirm, setConfirm] = useState("");
   const errors = state?.fieldErrors ?? {};
 
-  // Naming the network back tells someone they typed their own number
-  // correctly before they wait on a text that was never going to arrive.
-  const network = useMemo(() => (phone.length >= 4 ? networkOf(phone) : null), [phone]);
+  const read = readBack(phone);
+  const unreadable = phone.trim().length > 0 && !isValidPhone(phone);
   const mismatch = confirm.length > 0 && confirm !== password;
 
   return (
@@ -230,11 +246,16 @@ export function RegisterForm() {
         label="Phone number"
         htmlFor="phone"
         required
-        error={errors.phone}
+        error={
+          errors.phone ??
+          (unreadable
+            ? "Add the country code if you are outside Ghana, e.g. +44 7700 900123."
+            : undefined)
+        }
         hint={
-          network
-            ? `${network} number. We will text you a code to confirm it.`
-            : "We text a code to this number to confirm it is yours."
+          read
+            ? `${read} — we will text a code to confirm it.`
+            : "A Ghanaian number, or any other with its country code. We text a code to confirm it."
         }
       >
         <input
@@ -244,7 +265,7 @@ export function RegisterForm() {
           inputMode="tel"
           required
           autoComplete="tel"
-          placeholder="024 000 0000"
+          placeholder="024 000 0000 or +44 7700 900123"
           value={phone}
           onChange={(event) => setPhone(event.target.value)}
           className="lx-field"
