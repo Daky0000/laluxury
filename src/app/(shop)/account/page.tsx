@@ -14,6 +14,7 @@ import { getSettings } from "@/lib/settings";
 import { Card, Badge, EmptyState, LinkButton } from "@/components/ui";
 import { Thumb } from "@/components/shop/photo";
 import { MarketingToggle } from "@/components/shop/marketing-toggle";
+import { AccountDetailsForm, ChangePasswordForm } from "@/components/shop/account-forms";
 
 export const metadata: Metadata = { title: "Your account" };
 export const dynamic = "force-dynamic";
@@ -206,9 +207,9 @@ export default async function AccountPage() {
           </Card>
 
           <Card className="p-5 text-sm">
-            <h2 className="lx-eyebrow mb-2">Details</h2>
+            <h2 className="lx-eyebrow mb-3">Your details</h2>
             {user.phone ? (
-              <p className="flex flex-wrap items-center gap-x-2 text-[var(--text-secondary)]">
+              <p className="mb-4 flex flex-wrap items-center gap-x-2 text-[var(--text-secondary)]">
                 {formatPhone(user.phone)}
                 {user.phoneVerified ? (
                   <span className="inline-flex items-center gap-1 text-sm text-sage-600">
@@ -218,10 +219,21 @@ export default async function AccountPage() {
                 ) : null}
               </p>
             ) : null}
-            {user.email ? <p className="text-[var(--text-secondary)]">{user.email}</p> : null}
-            <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Member since {formatDate(user.createdAt)}
+            <AccountDetailsForm
+              firstName={user.firstName ?? ""}
+              lastName={user.lastName ?? ""}
+              email={user.email ?? ""}
+              emailRequired={isStaff(user.role)}
+            />
+            <p className="mt-4 text-sm text-[var(--text-muted)]">
+              Member since {formatDate(user.createdAt)}.
+              {user.phone ? " To change your phone number, contact us." : ""}
             </p>
+          </Card>
+
+          <Card className="p-5 text-sm">
+            <h2 className="lx-eyebrow mb-3">Password</h2>
+            <ChangePasswordForm />
           </Card>
 
           {/* The GDPR rights, where someone would actually look for them: on

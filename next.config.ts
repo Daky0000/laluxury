@@ -25,6 +25,28 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: "12mb" },
   },
 
+  // The response headers every page carries. None of them changes what the
+  // shop does; each closes a door a browser would otherwise leave open — being
+  // framed by another site, sniffing a download into a script, sending the
+  // full referring URL to third parties, or a page asking for the camera.
+  // No Content-Security-Policy yet: Paystack and the image hosts the owner
+  // pastes make a correct one a project of its own.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          // Two years, honoured only over HTTPS, so localhost is unaffected.
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+        ],
+      },
+    ];
+  },
+
   images: {
     // The owner pastes picture addresses into the admin, and they come from
     // wherever their photographer put them, so any https host is fair game —

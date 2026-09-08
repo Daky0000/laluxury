@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission, hashPassword, passwordProblems } from "@/lib/auth";
 import { outranks, ROLE_LABELS } from "@/lib/auth/rbac";
 import { recordAudit } from "@/lib/audit";
+import { normalisePhone } from "@/lib/phone";
 import type { Role, InteractionType } from "@/generated/prisma";
 import type { AdminState } from "./products";
 
@@ -77,6 +78,29 @@ export async function createTagAction(
   return { ok: true, message: "Tag created." };
 }
 
+/**
+ * A phone number as the console typed it, made canonical - or refused.
+ *
+ * `phone` is unique on an account and stored as 233XXXXXXXXX, so a number
+ * saved as typed would either fail the index or sit beside the same number in
+ * another spelling and never match a sign-in. Blank is allowed and means none.
+ */
+function customerPhone(
+  raw: FormDataEntryValue | null,
+): { ok: true; phone: string | null } | { ok: false; message: string } {
+  const typed = String(raw ?? "").trim();
+  if (!typed) return { ok: true, phone: null };
+
+  const phone = normalisePhone(typed);
+  if (!phone) {
+    return {
+      ok: false,
+      message: "That phone number could not be read. Use 024 000 0000, or add the country code.",
+    };
+  }
+  return { ok: true, phone };
+}
+
 export async function updateCustomerAction(
   userId: string,
   _prev: AdminState | null,
@@ -84,12 +108,25 @@ export async function updateCustomerAction(
 ): Promise<AdminState> {
   const actor = await requirePermission("customers:write");
 
+  const parsedPhone = customerPhone(formData.get("phone"));
+  if (!parsedPhone.ok) return { ok: false, message: parsedPhone.message };
+
+  if (parsedPhone.phone) {
+    const taken = await db.user.findUnique({
+      where: { phone: parsedPhone.phone },
+      select: { id: true },
+    });
+    if (taken && taken.id !== userId) {
+      return { ok: false, message: "Another account already has that phone number." };
+    }
+  }
+
   await db.user.update({
     where: { id: userId },
     data: {
       firstName: String(formData.get("firstName") || "").trim() || null,
       lastName: String(formData.get("lastName") || "").trim() || null,
-      phone: String(formData.get("phone") || "").trim() || null,
+      phone: parsedPhone.phone,
       notes: String(formData.get("notes") || "").trim() || null,
       acceptsMarketing: formData.get("acceptsMarketing") === "on",
     },
@@ -130,12 +167,23 @@ export async function createCustomerAction(
     return { ok: false, message: "Someone already has that email address." };
   }
 
+  const parsedPhone = customerPhone(formData.get("phone"));
+  if (!parsedPhone.ok) return { ok: false, message: parsedPhone.message };
+
+  if (parsedPhone.phone) {
+    const taken = await db.user.findUnique({
+      where: { phone: parsedPhone.phone },
+      select: { id: true },
+    });
+    if (taken) return { ok: false, message: "Someone already has that phone number." };
+  }
+
   const customer = await db.user.create({
     data: {
       email,
       firstName,
       lastName: String(formData.get("lastName") || "").trim() || null,
-      phone: String(formData.get("phone") || "").trim() || null,
+      phone: parsedPhone.phone,
       notes: String(formData.get("notes") || "").trim() || null,
       acceptsMarketing: formData.get("acceptsMarketing") === "on",
       role: "CUSTOMER",

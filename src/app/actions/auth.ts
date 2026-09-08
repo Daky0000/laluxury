@@ -20,6 +20,7 @@ import { isStaff } from "@/lib/auth/rbac";
 import { getOrCreateCart } from "@/lib/cart";
 import { normalisePhone } from "@/lib/phone";
 import { OTP_LENGTH } from "@/lib/constants";
+import { rateLimit, requestAddress, retryMessage } from "@/lib/rate-limit";
 import { sendOtp, verifyOtp } from "@/lib/sms";
 import { getSettings } from "@/lib/settings";
 
@@ -81,6 +82,18 @@ export async function loginAction(
   // an address with enough digits in the local part could be read as a phone
   // number and looked up against the wrong column.
   const phone = identifier.includes("@") ? null : normalisePhone(identifier);
+
+  // Ten tries a quarter-hour against one account, and a hundred from one
+  // address, so a password cannot be guessed at speed - by anyone, or at
+  // everyone. Counted before the lookup, so a locked key costs no query.
+  const address = await requestAddress();
+  const perAccount = rateLimit(`login:${phone ?? identifier.toLowerCase()}`, {
+    limit: 10,
+    windowMs: 15 * 60 * 1000,
+  });
+  const perAddress = rateLimit(`login-ip:${address}`, { limit: 100, windowMs: 15 * 60 * 1000 });
+  if (!perAccount.ok) return { ok: false, message: retryMessage(perAccount.retryAfterSeconds) };
+  if (!perAddress.ok) return { ok: false, message: retryMessage(perAddress.retryAfterSeconds) };
 
   const user = phone
     ? await db.user.findUnique({ where: { phone } })
@@ -157,6 +170,14 @@ export async function registerAction(
 
   const problems = passwordProblems(parsed.data.password);
   if (problems.length) return { ok: false, fieldErrors: { password: problems[0] } };
+
+  // Every sign-up sends a text we pay for, so one address gets a handful an
+  // hour - plenty for a household, not enough to drain the SMS balance.
+  const signups = rateLimit(`register-ip:${await requestAddress()}`, {
+    limit: 8,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!signups.ok) return { ok: false, message: retryMessage(signups.retryAfterSeconds) };
 
   const { firstName, lastName } = splitName(parsed.data.name);
   const acceptsMarketing = Boolean(parsed.data.acceptsMarketing);

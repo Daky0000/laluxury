@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/auth";
 import { updateOrderStatus, cancelOrder, recordRefund, logOrderEvent } from "@/lib/orders";
 import { refundTransaction, PaystackError } from "@/lib/paystack";
 import { toMinorUnits } from "@/lib/money";
+import { normalisePhone } from "@/lib/phone";
 import { recordAudit } from "@/lib/audit";
 import type { OrderStatus } from "@/generated/prisma";
 import type { AdminState } from "./products";
@@ -59,7 +60,18 @@ export async function assignOrderCustomerAction(
   const email = String(formData.get("email") || order.email).trim().toLowerCase();
   if (!email.includes("@")) return { ok: false, message: "Enter a valid email address." };
 
+  // Customers register by phone and may have no email at all, so an order
+  // placed as a guest with an email is matched on its phone number as well -
+  // that is usually the same person, checking out without signing in.
+  const phone = order.phone ? normalisePhone(order.phone) : null;
+
   let customer = await db.user.findUnique({ where: { email }, select: { id: true, role: true } });
+  if (!customer && phone) {
+    customer = await db.user.findUnique({
+      where: { phone },
+      select: { id: true, role: true },
+    });
+  }
 
   if (!customer) {
     if (formData.get("create") !== "1") {
@@ -74,7 +86,8 @@ export async function assignOrderCustomerAction(
         email,
         firstName: order.shippingAddress?.firstName ?? null,
         lastName: order.shippingAddress?.lastName ?? null,
-        phone: order.phone,
+        // Canonical, and only when the lookup above proved nobody else has it.
+        phone,
         role: "CUSTOMER",
       },
       select: { id: true, role: true },

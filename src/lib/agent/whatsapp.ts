@@ -118,11 +118,3 @@ export function extractMessages(body: unknown): WhatsAppInbound[] {
   }
   return out;
 }
-
-/** Normalises a Ghanaian number to E.164 without the plus, as Meta returns it. */
-export function normalisePhone(input: string): string {
-  const digits = input.replace(/[^0-9]/g, "");
-  if (digits.startsWith("233")) return digits;
-  if (digits.startsWith("0")) return `233${digits.slice(1)}`;
-  return digits;
-}

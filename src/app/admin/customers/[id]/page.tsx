@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Mail, Phone } from "lucide-react";
 import { db } from "@/lib/db";
 import { displayName, requirePermission } from "@/lib/auth";
-import { formatPhone } from "@/lib/phone";
+import { formatPhone, telHref } from "@/lib/phone";
 import { can } from "@/lib/auth/rbac";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
@@ -118,7 +118,7 @@ export default async function AdminCustomerPage({ params }: PageProps<"/admin/cu
           ) : null}
           {customer.phone ? (
             <a
-              href={`tel:+${customer.phone}`}
+              href={telHref(customer.phone)}
               className="flex items-center gap-1.5 hover:underline"
             >
               <Phone className="h-3.5 w-3.5" aria-hidden />

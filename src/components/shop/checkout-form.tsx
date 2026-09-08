@@ -40,6 +40,19 @@ const field =
 
 const sectionHeading = "mb-4 mt-10 text-[clamp(1.5rem,3vw,1.875rem)]";
 
+/** What the form opens with. Blank for a guest; the last order for a customer. */
+export type CheckoutDefaults = {
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  line1: string;
+  line2: string;
+  city: string;
+  region: string;
+  postalCode: string;
+};
+
 /**
  * Checkout, laid out as the cart & checkout artboard has it: the bag you are
  * buying, then who it goes to, how it travels and how it is paid, with a
@@ -51,7 +64,7 @@ export function CheckoutForm({
   subtotal,
   discountTotal,
   goodsTotal,
-  defaultEmail,
+  defaults,
   isSignedIn,
   freeShippingThreshold,
   lines,
@@ -60,7 +73,7 @@ export function CheckoutForm({
   subtotal: number;
   discountTotal: number;
   goodsTotal: number;
-  defaultEmail: string;
+  defaults: CheckoutDefaults;
   isSignedIn: boolean;
   /** Minor units; null when the owner has not set one. */
   freeShippingThreshold: number | null;
@@ -74,7 +87,7 @@ export function CheckoutForm({
     null,
   );
 
-  const [region, setRegion] = useState("");
+  const [region, setRegion] = useState(defaults.region);
   const [rates, setRates] = useState<Rate[]>([]);
   const [rateId, setRateId] = useState<string>("");
   const [loadingRates, setLoadingRates] = useState(false);
@@ -180,6 +193,7 @@ export function CheckoutForm({
                 id="firstName"
                 name="firstName"
                 required
+                defaultValue={defaults.firstName}
                 autoComplete="given-name"
                 placeholder="First name"
                 className={field}
@@ -191,6 +205,7 @@ export function CheckoutForm({
                 id="lastName"
                 name="lastName"
                 required
+                defaultValue={defaults.lastName}
                 autoComplete="family-name"
                 placeholder="Last name"
                 className={field}
@@ -210,6 +225,7 @@ export function CheckoutForm({
               name="phone"
               type="tel"
               required
+              defaultValue={defaults.phone}
               autoComplete="tel"
               placeholder="Phone number"
               className={field}
@@ -226,7 +242,7 @@ export function CheckoutForm({
               name="email"
               type="email"
               required
-              defaultValue={defaultEmail}
+              defaultValue={defaults.email}
               autoComplete="email"
               placeholder="Email address"
               className={field}
@@ -242,6 +258,7 @@ export function CheckoutForm({
               id="line1"
               name="line1"
               required
+              defaultValue={defaults.line1}
               autoComplete="address-line1"
               placeholder="Delivery address"
               className={field}
@@ -256,6 +273,7 @@ export function CheckoutForm({
             <input
               id="line2"
               name="line2"
+              defaultValue={defaults.line2}
               autoComplete="address-line2"
               placeholder="Apartment, landmark (optional)"
               className={field}
@@ -292,6 +310,7 @@ export function CheckoutForm({
               id="city"
               name="city"
               required
+              defaultValue={defaults.city}
               autoComplete="address-level2"
               placeholder="City / town"
               className={field}
@@ -306,6 +325,7 @@ export function CheckoutForm({
             <input
               id="postalCode"
               name="postalCode"
+              defaultValue={defaults.postalCode}
               autoComplete="postal-code"
               placeholder="Digital address, e.g. GA-123-4567 (optional)"
               className={field}
@@ -441,7 +461,7 @@ export function CheckoutForm({
                     type="password"
                     minLength={8}
                     autoComplete="new-password"
-                    placeholder="Choose a password (8+ characters)"
+                    placeholder="Choose a password (8+ characters, a capital and a number)"
                     className={field}
                   />
                 </div>

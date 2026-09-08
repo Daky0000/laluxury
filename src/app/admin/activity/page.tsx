@@ -3,7 +3,9 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { formatDate, buildQuery } from "@/lib/utils";
+import { formatPhone, telHref } from "@/lib/phone";
 import { Card, Badge, SectionHeading, EmptyState } from "@/components/ui";
+import { ContactHandledButton } from "@/components/admin/contact-handled";
 
 export const metadata: Metadata = { title: "Activity" };
 
@@ -15,6 +17,7 @@ export default async function AdminActivityPage({ searchParams }: PageProps<"/ad
 
   const source = typeof params.source === "string" ? params.source : "";
   const page = Math.max(1, Number(params.page) || 1);
+  const showHandled = params.messages === "handled";
 
   const where = source ? { source } : {};
 
@@ -30,9 +33,9 @@ export default async function AdminActivityPage({ searchParams }: PageProps<"/ad
     }),
     db.auditLog.count({ where }),
     db.contactMessage.findMany({
-      where: { isHandled: false },
+      where: { isHandled: showHandled },
       orderBy: { createdAt: "desc" },
-      take: 10,
+      take: showHandled ? 20 : 10,
     }),
   ]);
 
@@ -45,34 +48,60 @@ export default async function AdminActivityPage({ searchParams }: PageProps<"/ad
         description="Every change to the catalog, pricing, discounts and staff, whoever made it — including the AI agent."
       />
 
-      {contactMessages.length > 0 ? (
+      {contactMessages.length > 0 || showHandled ? (
         <Card className="p-5">
-          <h2 className="lx-eyebrow mb-3">
-            {contactMessages.length} unread contact message
-            {contactMessages.length === 1 ? "" : "s"}
-          </h2>
-          <ul className="divide-y divide-[var(--border-subtle)]">
-            {contactMessages.map((message) => (
-              <li key={message.id} className="py-3">
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="text-sm font-medium">{message.name}</span>
-                  <a
-                    href={`mailto:${message.email}`}
-                    className="text-xs text-[var(--text-secondary)] hover:underline"
-                  >
-                    {message.email}
-                  </a>
-                  <span className="ml-auto text-xs text-[var(--text-muted)]">
-                    {formatDate(message.createdAt, true)}
-                  </span>
-                </div>
-                {message.subject ? (
-                  <p className="mt-0.5 text-sm">{message.subject}</p>
-                ) : null}
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">{message.message}</p>
-              </li>
-            ))}
-          </ul>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="lx-eyebrow">
+              {showHandled
+                ? "Handled contact messages"
+                : `${contactMessages.length} unread contact message${contactMessages.length === 1 ? "" : "s"}`}
+            </h2>
+            <Link
+              href={showHandled ? "/admin/activity" : "/admin/activity?messages=handled"}
+              className="text-xs text-[var(--accent)] underline-offset-4 hover:underline"
+            >
+              {showHandled ? "Show unread" : "Show handled"}
+            </Link>
+          </div>
+          {contactMessages.length === 0 ? (
+            <p className="text-sm text-[var(--text-muted)]">Nothing handled yet.</p>
+          ) : (
+            <ul className="divide-y divide-[var(--border-subtle)]">
+              {contactMessages.map((message) => (
+                <li key={message.id} className="py-3">
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="text-sm font-medium">{message.name}</span>
+                    <a
+                      href={`mailto:${message.email}${message.subject ? `?subject=${encodeURIComponent(`Re: ${message.subject}`)}` : ""}`}
+                      className="text-xs text-[var(--text-secondary)] hover:underline"
+                    >
+                      {message.email}
+                    </a>
+                    {message.phone ? (
+                      <a
+                        href={telHref(message.phone)}
+                        className="text-xs text-[var(--text-secondary)] hover:underline"
+                      >
+                        {formatPhone(message.phone)}
+                      </a>
+                    ) : null}
+                    <span className="ml-auto text-xs text-[var(--text-muted)]">
+                      {formatDate(message.createdAt, true)}
+                    </span>
+                  </div>
+                  {message.subject ? (
+                    <p className="mt-0.5 text-sm">{message.subject}</p>
+                  ) : null}
+                  <p className="mt-1 whitespace-pre-line text-sm text-[var(--text-secondary)]">
+                    {message.message}
+                  </p>
+                  <div className="mt-2">
+                    <ContactHandledButton messageId={message.id} isHandled={message.isHandled} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       ) : null}
 

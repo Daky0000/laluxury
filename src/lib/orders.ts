@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { generateOrderNumber } from "./slug";
-import { allocateProportionally } from "./money";
+import { allocateProportionally, formatMoney } from "./money";
 import {
   clearCart,
   computeCartTotals,
@@ -17,6 +17,8 @@ import {
 } from "./inventory";
 import { notifyOrder } from "./notify";
 import { quoteShipping } from "./shipping";
+import { describeChannel } from "./paystack";
+import { postAlert } from "./agent/slack";
 import type { OrderNotice } from "./notify";
 import type { OrderStatus, Prisma } from "@/generated/prisma";
 
@@ -256,8 +258,20 @@ export async function uniqueOrderNumber(): Promise<string> {
 }
 
 /**
- * Marks an order paid. Safe to call repeatedly: Paystack retries webhooks, and
- * the callback page verifies too, so this runs more than once in practice.
+ * Marks an order paid. Safe to call repeatedly, and safe to call twice at once.
+ *
+ * Paystack retries webhooks, and the confirmation page verifies too, so this
+ * runs more than once for every real payment — and the webhook and the page
+ * regularly arrive within the same second. The flip from unpaid to paid is
+ * therefore one conditional update rather than a read followed by a write:
+ * exactly one caller sees the row change, and that caller does the work that
+ * must only happen once. Stock is claimed the same way, so two callers cannot
+ * both take the goods off the shelf.
+ *
+ * Money arriving for an order that has since been cancelled is recorded and
+ * flagged rather than reversed. The stock was released when it was cancelled,
+ * so it is not taken again, the order stays cancelled, and the team is told —
+ * that is a refund for a person to make, not a state machine to guess at.
  */
 export async function markOrderPaid(args: {
   orderId: string;
@@ -281,6 +295,9 @@ export async function markOrderPaid(args: {
     return { alreadyPaid: true };
   }
 
+  const now = new Date();
+
+  // The payment row first, so the money is on file whatever happens below.
   await db.payment.upsert({
     where: { reference: args.reference },
     create: {
@@ -296,34 +313,64 @@ export async function markOrderPaid(args: {
       authCode: args.authCode ?? null,
       mobileMoneyNumber: args.mobileMoneyNumber ?? null,
       rawResponse: args.raw,
-      paidAt: new Date(),
+      paidAt: now,
     },
     update: {
       status: "SUCCESS",
       channel: args.channel ?? null,
       providerTransactionId: args.providerTransactionId ?? null,
       rawResponse: args.raw,
-      paidAt: new Date(),
+      paidAt: now,
     },
   });
 
-  await db.order.update({
-    where: { id: order.id },
+  const wasCancelled = order.status === "CANCELLED";
+
+  // The one write that decides who is first. A caller that finds the row
+  // already flipped is the second arrival and has nothing left to do.
+  const claimed = await db.order.updateMany({
+    where: { id: order.id, paymentStatus: { not: "SUCCESS" } },
     data: {
-      status: "PAID",
       paymentStatus: "SUCCESS",
-      paidAt: new Date(),
+      paidAt: now,
+      ...(wasCancelled ? {} : { status: "PAID" }),
     },
   });
+  if (claimed.count === 0) return { alreadyPaid: true };
 
-  // Turn reservations into sales exactly once.
-  if (!order.inventoryAppliedAt) {
-    const lines = await stockLinesForOrder(order.id);
-    await commitStock(lines, order.orderNumber);
-    await db.order.update({
-      where: { id: order.id },
-      data: { inventoryAppliedAt: new Date() },
+  if (wasCancelled) {
+    const message =
+      `Payment of ${formatMoney(args.amount, order.currency)} arrived after this order was cancelled. ` +
+      "The stock was not taken again. Refund the customer, or reinstate the order by hand.";
+    await logOrderEvent({
+      orderId: order.id,
+      type: "payment.after_cancel",
+      message,
+      meta: { reference: args.reference, amount: args.amount },
     });
+    await postAlert(
+      `:rotating_light: ${order.orderNumber} was paid (${formatMoney(args.amount, order.currency)}) *after* being cancelled. It needs a refund or reinstating.`,
+    );
+    return { alreadyPaid: false };
+  }
+
+  // Turn reservations into sales exactly once: claim the flag, then move the
+  // stock, and give the flag back if the move fails so a retry can try again.
+  const stockClaim = await db.order.updateMany({
+    where: { id: order.id, inventoryAppliedAt: null },
+    data: { inventoryAppliedAt: now },
+  });
+  if (stockClaim.count === 1) {
+    try {
+      const lines = await stockLinesForOrder(order.id);
+      await commitStock(lines, order.orderNumber);
+    } catch (error) {
+      await db.order.update({
+        where: { id: order.id },
+        data: { inventoryAppliedAt: null },
+      });
+      throw error;
+    }
   }
 
   // Count the discount only on a real sale.
@@ -354,7 +401,7 @@ export async function markOrderPaid(args: {
   await logOrderEvent({
     orderId: order.id,
     type: "payment.success",
-    message: `Payment received via ${args.channel ?? "Paystack"}.`,
+    message: `Payment received via ${describeChannel(args.channel ?? null)}.`,
     meta: { reference: args.reference, amount: args.amount },
   });
 
@@ -365,17 +412,24 @@ export async function markOrderPaid(args: {
         userId: order.userId,
         type: "ORDER_PLACED",
         subject: `Order ${order.orderNumber}`,
-        body: `Paid ${order.currency} ${(order.total / 100).toFixed(2)}.`,
+        body: `Paid ${formatMoney(order.total, order.currency)}.`,
         meta: { orderId: order.id, orderNumber: order.orderNumber },
       },
     });
   }
 
+  // The team hears about it from here rather than from the webhook, so the
+  // alert goes out whichever path — webhook or confirmation page — got here
+  // first, and never twice.
+  await postAlert(
+    `:tada: New order ${order.orderNumber} - ${formatMoney(args.amount, order.currency)} via ${describeChannel(args.channel ?? null)}.`,
+  );
+
   // Told last, so nothing about the sale depends on a gateway answering.
   await notifyOrder(order.id, {
     kind: "payment.received",
     reference: args.reference,
-    channel: args.channel,
+    channel: describeChannel(args.channel ?? null),
   });
 
   return { alreadyPaid: false };

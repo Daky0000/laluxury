@@ -5,10 +5,12 @@ import {
   useCallback,
   useEffect,
   useId,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
   useTransition,
+  type Ref,
 } from "react";
 import Link from "next/link";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
@@ -19,6 +21,12 @@ import {
   verifySignupAction,
   type AuthState,
 } from "@/app/actions/auth";
+import {
+  requestPasswordResetAction,
+  resendResetOtpAction,
+  resetPasswordWithCodeAction,
+  resetPasswordWithTokenAction,
+} from "@/app/actions/password-reset";
 import { Field, Alert } from "@/components/ui";
 import { isValidPhone, networkOf, normalisePhone, isGhanaian } from "@/lib/phone";
 import { OTP_LENGTH } from "@/lib/constants";
@@ -198,6 +206,15 @@ export function LoginForm() {
         onChange={setPassword}
       />
 
+      <p className="-mt-2 text-right text-sm">
+        <Link
+          href="/forgot-password"
+          className="text-[var(--text-secondary)] underline underline-offset-4 hover:text-[var(--accent)]"
+        >
+          Forgotten your password?
+        </Link>
+      </p>
+
       <button type="submit" disabled={pending} className={submitClass}>
         {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
         Sign in
@@ -331,6 +348,129 @@ export function RegisterForm() {
 
 // --- The code ---------------------------------------------------------------
 
+export type OtpBoxesHandle = { focusFirst: () => void };
+
+/**
+ * The six boxes themselves, shared by the sign-up screen and the password
+ * reset. Controlled: the parent owns the digits and decides what a full code
+ * does — verify itself on sign-up, wait for the new password on a reset.
+ *
+ * The awkward parts of a split code field are all handled explicitly, because
+ * left alone every one of them behaves differently per browser: pasting a whole
+ * code spreads across the boxes instead of landing in the first, autofill from
+ * the SMS notification does the same, backspace in an empty box steps back and
+ * clears the one before it, and the arrow keys move between boxes.
+ */
+export function OtpBoxes({
+  ref,
+  id,
+  digits,
+  onChange,
+  disabled = false,
+  invalid = false,
+}: {
+  ref?: Ref<OtpBoxesHandle>;
+  id: string;
+  digits: string[];
+  onChange: (next: string[]) => void;
+  disabled?: boolean;
+  invalid?: boolean;
+}) {
+  const boxes = useRef<Array<HTMLInputElement | null>>([]);
+
+  useImperativeHandle(ref, () => ({
+    focusFirst: () => boxes.current[0]?.focus(),
+  }));
+
+  function focusBox(index: number) {
+    boxes.current[Math.min(Math.max(index, 0), OTP_LENGTH - 1)]?.focus();
+  }
+
+  function clearDigit(index: number) {
+    onChange(digits.map((digit, i) => (i === index ? "" : digit)));
+  }
+
+  /** Writes `value` across the boxes from `start`, and returns where to go next. */
+  function fill(start: number, value: string) {
+    const incoming = value.replace(/[^0-9]/g, "");
+    const next = [...digits];
+    for (let offset = 0; offset < incoming.length && start + offset < OTP_LENGTH; offset += 1) {
+      next[start + offset] = incoming[offset];
+    }
+    onChange(next);
+    return Math.min(start + incoming.length, OTP_LENGTH - 1);
+  }
+
+  return (
+    <div
+      role="group"
+      aria-label={`${OTP_LENGTH}-digit verification code`}
+      className="flex justify-between gap-2"
+    >
+      {digits.map((digit, index) => (
+        <input
+          key={index}
+          ref={(element) => {
+            boxes.current[index] = element;
+          }}
+          id={`${id}-${index}`}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          // iOS and Android offer the code from the SMS notification to a
+          // run of one-character boxes only when every one of them asks.
+          autoComplete="one-time-code"
+          autoFocus={index === 0}
+          disabled={disabled}
+          aria-label={`Digit ${index + 1} of ${OTP_LENGTH}`}
+          aria-invalid={invalid || undefined}
+          value={digit}
+          // Typing into a box that already holds a digit should replace it
+          // rather than push a second character in beside it.
+          onFocus={(event) => event.currentTarget.select()}
+          onChange={(event) => {
+            const value = event.target.value.replace(/[^0-9]/g, "");
+            if (!value) {
+              clearDigit(index);
+              return;
+            }
+            focusBox(fill(index, value));
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Backspace") {
+              event.preventDefault();
+              if (digit) {
+                clearDigit(index);
+              } else if (index > 0) {
+                clearDigit(index - 1);
+                focusBox(index - 1);
+              }
+            } else if (event.key === "ArrowLeft") {
+              event.preventDefault();
+              focusBox(index - 1);
+            } else if (event.key === "ArrowRight") {
+              event.preventDefault();
+              focusBox(index + 1);
+            }
+          }}
+          onPaste={(event) => {
+            const pasted = event.clipboardData.getData("text").replace(/[^0-9]/g, "");
+            if (!pasted) return;
+            event.preventDefault();
+            // A whole code fills from the start wherever it was dropped; a
+            // fragment carries on from the box that took it.
+            focusBox(fill(pasted.length >= OTP_LENGTH ? 0 : index, pasted));
+          }}
+          className={cn(
+            "lx-field h-14 flex-1 px-0 text-center font-sans text-[1.5rem] tabular-nums",
+            invalid ? "border-danger" : undefined,
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
 /**
  * Six boxes, one per digit, that verify themselves.
  *
@@ -339,12 +479,6 @@ export function RegisterForm() {
  * for a button after typing the last digit they were already reading off a
  * text. The check is a direct call to the Server Action rather than a form
  * post, so the page never reloads.
- *
- * The awkward parts of a split code field are all handled explicitly, because
- * left alone every one of them behaves differently per browser: pasting a whole
- * code spreads across the boxes instead of landing in the first, autofill from
- * the SMS notification does the same, backspace in an empty box steps back and
- * clears the one before it, and the arrow keys move between boxes.
  */
 export function OtpForm({ maskedPhone, cooldown }: { maskedPhone: string; cooldown: number }) {
   const [digits, setDigits] = useState<string[]>(() => Array(OTP_LENGTH).fill(""));
@@ -354,7 +488,7 @@ export function OtpForm({ maskedPhone, cooldown }: { maskedPhone: string; cooldo
   const [resend, setResend] = useState<AuthState | null>(null);
   const [resending, setResending] = useState(false);
 
-  const boxes = useRef<Array<HTMLInputElement | null>>([]);
+  const otp = useRef<OtpBoxesHandle>(null);
   /** The last code sent to the server, so the same one is not tried twice over. */
   const attempted = useRef<string | null>(null);
   const id = useId();
@@ -363,31 +497,10 @@ export function OtpForm({ maskedPhone, cooldown }: { maskedPhone: string; cooldo
   const complete = code.length === OTP_LENGTH;
   const busy = verifying || resending;
 
-  function focusBox(index: number) {
-    boxes.current[Math.min(Math.max(index, 0), OTP_LENGTH - 1)]?.focus();
-  }
-
-  function clearDigit(index: number) {
-    setDigits((current) => current.map((digit, i) => (i === index ? "" : digit)));
-  }
-
-  /** Writes `value` across the boxes from `start`, and returns where to go next. */
-  function fill(start: number, value: string) {
-    const incoming = value.replace(/[^0-9]/g, "");
-    setDigits((current) => {
-      const next = [...current];
-      for (let offset = 0; offset < incoming.length && start + offset < OTP_LENGTH; offset += 1) {
-        next[start + offset] = incoming[offset];
-      }
-      return next;
-    });
-    return Math.min(start + incoming.length, OTP_LENGTH - 1);
-  }
-
   function reset() {
     setDigits(Array(OTP_LENGTH).fill(""));
     attempted.current = null;
-    focusBox(0);
+    otp.current?.focusFirst();
   }
 
   const verify = useCallback((value: string) => {
@@ -417,7 +530,7 @@ export function OtpForm({ maskedPhone, cooldown }: { maskedPhone: string; cooldo
   // are disabled while a code is in flight, and a disabled input cannot take
   // focus, so doing it in the handler above would silently do nothing.
   useEffect(() => {
-    if (state && !state.ok && !verifying) boxes.current[0]?.focus();
+    if (state && !state.ok && !verifying) otp.current?.focusFirst();
   }, [state, verifying]);
 
   // The whole point of six boxes: the last digit is the submit.
@@ -445,7 +558,7 @@ export function OtpForm({ maskedPhone, cooldown }: { maskedPhone: string; cooldo
     if (result.ok) {
       setDigits(Array(OTP_LENGTH).fill(""));
       attempted.current = null;
-      focusBox(0);
+      otp.current?.focusFirst();
       setWait(60);
     }
   }
@@ -463,72 +576,14 @@ export function OtpForm({ maskedPhone, cooldown }: { maskedPhone: string; cooldo
         error={state?.fieldErrors?.code}
         hint={`Sent by text to ${maskedPhone}. It expires in 5 minutes.`}
       >
-        <div
-          role="group"
-          aria-label={`${OTP_LENGTH}-digit verification code`}
-          className="flex justify-between gap-2"
-        >
-          {digits.map((digit, index) => (
-            <input
-              key={index}
-              ref={(element) => {
-                boxes.current[index] = element;
-              }}
-              id={`${id}-${index}`}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              // iOS and Android offer the code from the SMS notification to a
-              // run of one-character boxes only when every one of them asks.
-              autoComplete="one-time-code"
-              autoFocus={index === 0}
-              disabled={verifying}
-              aria-label={`Digit ${index + 1} of ${OTP_LENGTH}`}
-              aria-invalid={wrong || undefined}
-              value={digit}
-              // Typing into a box that already holds a digit should replace it
-              // rather than push a second character in beside it.
-              onFocus={(event) => event.currentTarget.select()}
-              onChange={(event) => {
-                const value = event.target.value.replace(/[^0-9]/g, "");
-                if (!value) {
-                  clearDigit(index);
-                  return;
-                }
-                focusBox(fill(index, value));
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Backspace") {
-                  event.preventDefault();
-                  if (digit) {
-                    clearDigit(index);
-                  } else if (index > 0) {
-                    clearDigit(index - 1);
-                    focusBox(index - 1);
-                  }
-                } else if (event.key === "ArrowLeft") {
-                  event.preventDefault();
-                  focusBox(index - 1);
-                } else if (event.key === "ArrowRight") {
-                  event.preventDefault();
-                  focusBox(index + 1);
-                }
-              }}
-              onPaste={(event) => {
-                const pasted = event.clipboardData.getData("text").replace(/[^0-9]/g, "");
-                if (!pasted) return;
-                event.preventDefault();
-                // A whole code fills from the start wherever it was dropped; a
-                // fragment carries on from the box that took it.
-                focusBox(fill(pasted.length >= OTP_LENGTH ? 0 : index, pasted));
-              }}
-              className={cn(
-                "lx-field h-14 flex-1 px-0 text-center font-sans text-[1.5rem] tabular-nums",
-                wrong ? "border-danger" : undefined,
-              )}
-            />
-          ))}
-        </div>
+        <OtpBoxes
+          ref={otp}
+          id={id}
+          digits={digits}
+          onChange={setDigits}
+          disabled={verifying}
+          invalid={wrong}
+        />
       </Field>
 
       <p aria-live="polite" className="min-h-5 text-xs text-[var(--text-muted)]">
@@ -572,5 +627,231 @@ export function OtpForm({ maskedPhone, cooldown }: { maskedPhone: string; cooldo
         </button>
       </div>
     </div>
+  );
+}
+
+// --- Forgotten password -----------------------------------------------------
+
+/** Step one: the number or email, in the same one field sign-in uses. */
+export function ForgotPasswordForm() {
+  const [state, action, pending] = useActionState<AuthState | null, FormData>(
+    requestPasswordResetAction,
+    null,
+  );
+  const errors = state?.fieldErrors ?? {};
+
+  if (state?.ok) {
+    return <Alert tone="success">{state.message}</Alert>;
+  }
+
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      {state?.message ? <Alert tone="danger">{state.message}</Alert> : null}
+
+      <Field
+        label="Phone number or email"
+        htmlFor="identifier"
+        required
+        error={errors.identifier}
+        hint="We text a code to a phone number, or email a link to a staff address."
+      >
+        <input
+          id="identifier"
+          name="identifier"
+          type="text"
+          inputMode="tel"
+          required
+          autoComplete="username"
+          autoFocus
+          className="lx-field"
+        />
+      </Field>
+
+      <button type="submit" disabled={pending} className={submitClass}>
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+        Send me a code
+      </button>
+    </form>
+  );
+}
+
+/** The two password boxes every reset ends with. */
+function NewPasswordFields({
+  errors,
+  password,
+  onPassword,
+  confirm,
+  onConfirm,
+}: {
+  errors: Record<string, string>;
+  password: string;
+  onPassword: (next: string) => void;
+  confirm: string;
+  onConfirm: (next: string) => void;
+}) {
+  const mismatch = confirm.length > 0 && confirm !== password;
+
+  return (
+    <>
+      <PasswordField
+        id="password"
+        name="password"
+        label="New password"
+        autoComplete="new-password"
+        error={errors.password}
+        value={password}
+        onChange={onPassword}
+      >
+        <StrengthMeter password={password} />
+      </PasswordField>
+
+      <PasswordField
+        id="confirmPassword"
+        name="confirmPassword"
+        label="Confirm new password"
+        autoComplete="new-password"
+        error={errors.confirmPassword ?? (mismatch ? "Those two passwords do not match." : undefined)}
+        value={confirm}
+        onChange={onConfirm}
+      />
+    </>
+  );
+}
+
+/**
+ * Step two by text: the code and the new password on one screen.
+ *
+ * Unlike sign-up the boxes do not submit themselves — there is a password still
+ * to type — so the code travels as a hidden field with the rest of the form.
+ */
+export function ResetWithCodeForm({
+  maskedPhone,
+  cooldown,
+}: {
+  maskedPhone: string;
+  cooldown: number;
+}) {
+  const [state, action, pending] = useActionState<AuthState | null, FormData>(
+    resetPasswordWithCodeAction,
+    null,
+  );
+  const [digits, setDigits] = useState<string[]>(() => Array(OTP_LENGTH).fill(""));
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [wait, setWait] = useState(cooldown);
+  const [resend, setResend] = useState<AuthState | null>(null);
+  const [resending, setResending] = useState(false);
+  const otp = useRef<OtpBoxesHandle>(null);
+  const id = useId();
+
+  const code = digits.join("");
+  const errors = state?.fieldErrors ?? {};
+
+  useEffect(() => {
+    if (wait <= 0) return;
+    const timer = setTimeout(() => setWait((seconds) => seconds - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [wait]);
+
+  async function askAgain() {
+    setResending(true);
+    setResend(null);
+    const result = await resendResetOtpAction();
+    setResend(result);
+    setResending(false);
+    if (result.ok) {
+      setDigits(Array(OTP_LENGTH).fill(""));
+      otp.current?.focusFirst();
+      setWait(60);
+    }
+  }
+
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      {state?.message ? <Alert tone="danger">{state.message}</Alert> : null}
+
+      <Field
+        label="Verification code"
+        htmlFor={`${id}-0`}
+        required
+        error={errors.code}
+        hint={`Sent by text to ${maskedPhone}. It expires in 5 minutes.`}
+      >
+        <OtpBoxes
+          ref={otp}
+          id={id}
+          digits={digits}
+          onChange={setDigits}
+          disabled={pending}
+          invalid={Boolean(errors.code)}
+        />
+      </Field>
+      <input type="hidden" name="code" value={code} />
+
+      <NewPasswordFields
+        errors={errors}
+        password={password}
+        onPassword={setPassword}
+        confirm={confirm}
+        onConfirm={setConfirm}
+      />
+
+      <button
+        type="submit"
+        disabled={pending || code.length !== OTP_LENGTH || !password || !confirm}
+        className={submitClass}
+      >
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+        Set new password
+      </button>
+
+      {resend?.message ? (
+        <Alert tone={resend.ok ? "success" : "danger"}>{resend.message}</Alert>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={askAgain}
+        disabled={pending || resending || wait > 0}
+        className="min-h-11 self-start text-sm text-[var(--text-secondary)] underline underline-offset-4 transition-colors hover:text-[var(--accent)] disabled:no-underline disabled:opacity-60"
+      >
+        {wait > 0 ? `Send another code in ${wait}s` : resending ? "Sending…" : "Send another code"}
+      </button>
+    </form>
+  );
+}
+
+/** Step two by email: the token from the link rides along hidden. */
+export function ResetWithTokenForm({ token }: { token: string }) {
+  const [state, action, pending] = useActionState<AuthState | null, FormData>(
+    resetPasswordWithTokenAction,
+    null,
+  );
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const errors = state?.fieldErrors ?? {};
+
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      {state?.message ? <Alert tone="danger">{state.message}</Alert> : null}
+      <input type="hidden" name="token" value={token} />
+
+      <NewPasswordFields
+        errors={errors}
+        password={password}
+        onPassword={setPassword}
+        confirm={confirm}
+        onConfirm={setConfirm}
+      />
+
+      <button
+        type="submit"
+        disabled={pending || !password || !confirm}
+        className={submitClass}
+      >
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+        Set new password
+      </button>
+    </form>
   );
 }

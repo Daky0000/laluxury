@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyWebhookSignature, describeChannel, type PaystackWebhookEvent } from "@/lib/paystack";
+import { verifyWebhookSignature, type PaystackWebhookEvent } from "@/lib/paystack";
 import { markOrderPaid, markPaymentFailed, logOrderEvent } from "@/lib/orders";
 import { postAlert } from "@/lib/agent/slack";
 import { formatMoney } from "@/lib/money";
@@ -71,7 +71,9 @@ async function handleEvent(event: PaystackWebhookEvent): Promise<void> {
         return;
       }
 
-      const { alreadyPaid } = await markOrderPaid({
+      // `markOrderPaid` posts the new-order alert itself, so it goes out once
+      // whichever of this and the confirmation page lands first.
+      await markOrderPaid({
         orderId: payment.orderId,
         reference,
         amount: event.data.amount,
@@ -83,12 +85,6 @@ async function handleEvent(event: PaystackWebhookEvent): Promise<void> {
         mobileMoneyNumber: event.data.authorization?.mobile_money_number ?? null,
         raw: event.data as never,
       });
-
-      if (!alreadyPaid) {
-        await postAlert(
-          `:tada: New order ${payment.order.orderNumber} - ${formatMoney(event.data.amount)} via ${describeChannel(event.data.channel)}.`,
-        );
-      }
       break;
     }
 

@@ -8,10 +8,11 @@ import { getIntegrations, isReady } from "@/lib/integrations";
 import { getOrCreateCart } from "@/lib/cart";
 import { createOrderFromCart } from "@/lib/orders";
 import { getSession } from "@/lib/auth/session";
-import { hashPassword } from "@/lib/auth/password";
+import { hashPassword, passwordProblems } from "@/lib/auth/password";
 import { initializeTransaction } from "@/lib/paystack";
 import { InsufficientStockError } from "@/lib/inventory";
 import { GHANA_REGIONS } from "@/lib/constants";
+import { normalisePhone } from "@/lib/phone";
 
 /** Everything Paystack supports for GHS; see lib/paystack. */
 const PAYSTACK_CHANNELS = ["card", "mobile_money", "bank_transfer", "ussd", "bank", "qr"];
@@ -26,7 +27,15 @@ const schema = z.object({
   email: z.string().email("Enter a valid email address."),
   firstName: z.string().min(1, "Enter a first name."),
   lastName: z.string().min(1, "Enter a last name."),
-  phone: z.string().min(9, "Enter a phone number we can reach you on."),
+  // Checked against the same parser the rest of the shop uses, so the number
+  // the rider calls and the number the order notices go to is one we can dial.
+  phone: z
+    .string()
+    .min(1, "Enter a phone number we can reach you on.")
+    .refine((value) => normalisePhone(value) !== null, {
+      message:
+        "Enter a Ghanaian number like 024 000 0000, or one from elsewhere with its country code.",
+    }),
   line1: z.string().min(1, "Enter a street address."),
   line2: z.string().optional(),
   city: z.string().min(1, "Enter a city or town."),
@@ -82,6 +91,9 @@ export async function placeOrderAction(
 
   const data = parsed.data;
   const email = data.email.toLowerCase().trim();
+  // Stored canonically — 233XXXXXXXXX — the way accounts hold it, so the order
+  // can be matched to a customer later and the texts go to a number Vynfy takes.
+  const phone = normalisePhone(data.phone)!;
 
   // The payment choice only narrows what Paystack offers; anything we do not
   // recognise falls back to its full set rather than failing the order.
@@ -93,20 +105,37 @@ export async function placeOrderAction(
   let userId = session?.userId ?? null;
 
   // Optional account creation at checkout.
-  if (!userId && data.createAccount && data.password && data.password.length >= 8) {
-    const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
-    if (!existing) {
-      const created = await db.user.create({
-        data: {
-          email,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          phone: data.phone,
-          passwordHash: await hashPassword(data.password),
-        },
-      });
-      userId = created.id;
+  //
+  // Both the email and the phone are unique on an account, so either already
+  // being taken has to stop here with a sentence rather than fall through to
+  // the database and come back as a constraint error - or, worse, quietly
+  // place the order with no account behind it when one was asked for.
+  if (!userId && data.createAccount) {
+    const problems = passwordProblems(data.password ?? "");
+    if (problems.length) return { ok: false, fieldErrors: { password: problems[0] } };
+
+    const existing = await db.user.findFirst({
+      where: { OR: [{ email }, { phone }] },
+      select: { id: true },
+    });
+    if (existing) {
+      return {
+        ok: false,
+        message:
+          "There is already an account with that email or phone number. Sign in first, or untick 'Save my details' to check out as a guest.",
+      };
     }
+
+    const created = await db.user.create({
+      data: {
+        email,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone,
+        passwordHash: await hashPassword(data.password ?? ""),
+      },
+    });
+    userId = created.id;
   }
 
   const cart = await getOrCreateCart();
@@ -120,12 +149,12 @@ export async function placeOrderAction(
     const order = await createOrderFromCart({
       cart,
       email,
-      phone: data.phone,
+      phone,
       userId,
       shippingAddress: {
         firstName: data.firstName,
         lastName: data.lastName,
-        phone: data.phone,
+        phone,
         line1: data.line1,
         line2: data.line2 ?? null,
         city: data.city,

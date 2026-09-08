@@ -8,6 +8,7 @@ import { uniqueOrderNumber, logOrderEvent } from "@/lib/orders";
 import { notifyOrder } from "@/lib/notify";
 import { commitStock } from "@/lib/inventory";
 import { GHANA_REGIONS } from "@/lib/constants";
+import { normalisePhone } from "@/lib/phone";
 import type { AdminState } from "./products";
 
 /**
@@ -81,10 +82,9 @@ async function writeOrder(args: {
 
   // Attach to the customer record when one already has this email, so the
   // order shows up in their history rather than sitting as a guest order.
-  const customer = await db.user.findUnique({
-    where: { email: args.email },
-    select: { id: true },
-  });
+  const customer =
+    (await db.user.findUnique({ where: { email: args.email }, select: { id: true } })) ??
+    (await db.user.findUnique({ where: { phone: args.phone }, select: { id: true } }));
 
   const order = await db.$transaction(async (tx) => {
     const address = await tx.address.create({
@@ -200,7 +200,13 @@ export async function createManualOrderAction(
   const region = String(formData.get("region") ?? "").trim();
 
   if (!email || !email.includes("@")) return { ok: false, message: "Enter the customer's email." };
-  if (!phone) return { ok: false, message: "Enter a phone number." };
+  const canonicalPhone = normalisePhone(phone);
+  if (!canonicalPhone) {
+    return {
+      ok: false,
+      message: "Enter a phone number we can text - 024 000 0000, or one with its country code.",
+    };
+  }
   if (!firstName) return { ok: false, message: "Enter a first name." };
   if (!line1 || !city) return { ok: false, message: "Enter the delivery address." };
   if (!GHANA_REGIONS.includes(region as (typeof GHANA_REGIONS)[number])) {
@@ -213,7 +219,7 @@ export async function createManualOrderAction(
     const order = await writeOrder({
       lines,
       email,
-      phone,
+      phone: canonicalPhone,
       firstName,
       lastName: lastName || "—",
       line1,

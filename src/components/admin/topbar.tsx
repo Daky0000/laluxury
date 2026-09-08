@@ -17,6 +17,7 @@ const TITLES: { prefix: string; title: string; subtitle: string; search?: string
   { prefix: "/admin/inventory", title: "Inventory", subtitle: "Stock levels and reorder points" },
   { prefix: "/admin/customers", title: "Customers", subtitle: "Your shoppers and their history", search: "/admin/customers" },
   { prefix: "/admin/discounts", title: "Discounts", subtitle: "Promo codes and offers" },
+  { prefix: "/admin/reviews", title: "Reviews", subtitle: "What customers wrote, before it shows" },
   { prefix: "/admin/agent", title: "AI agent", subtitle: "Ask it to run the shop with you" },
   { prefix: "/admin/users", title: "Staff", subtitle: "Who can get in, and how far" },
   { prefix: "/admin/activity", title: "Activity", subtitle: "Every change, and who made it" },

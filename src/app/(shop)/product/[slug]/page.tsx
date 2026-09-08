@@ -9,8 +9,10 @@ import { availableOf } from "@/lib/inventory";
 import { getSettings } from "@/lib/settings";
 import { currentUser } from "@/lib/auth";
 import { formatPrice } from "@/lib/money";
+import { formatDate } from "@/lib/utils";
 import { ProductView } from "@/components/shop/product-view";
 import { ProductTile } from "@/components/shop/product-tile";
+import { ReviewForm } from "@/components/shop/review-form";
 import { Divider } from "@/components/ui";
 
 export const revalidate = 120;
@@ -54,15 +56,21 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
     currentUser(),
   ]);
 
-  // Only ask about the wishlist once we know who is asking.
-  const saved = user
-    ? Boolean(
-        await db.wishlistItem.findUnique({
-          where: { userId_productId: { userId: user.id, productId: product.id } },
-          select: { id: true },
+  // Only ask about the wishlist, and their own review, once we know who is asking.
+  const [saved, ownReview] = user
+    ? await Promise.all([
+        db.wishlistItem
+          .findUnique({
+            where: { userId_productId: { userId: user.id, productId: product.id } },
+            select: { id: true },
+          })
+          .then(Boolean),
+        db.review.findFirst({
+          where: { productId: product.id, userId: user.id },
+          select: { rating: true, title: true, body: true, isApproved: true },
         }),
-      )
-    : false;
+      ])
+    : [false, null];
 
   const options = product.options.map((option) => ({
     id: option.id,
@@ -250,13 +258,25 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
         }
       />
 
-      {/* Reviews */}
-      {product.reviews.length > 0 ? (
-        <section className="mt-20">
-          <h2 className="mb-8 border-b border-[var(--border-subtle)] pb-6 text-[clamp(1.75rem,4vw,2.5rem)]">
-            What people say
-          </h2>
-          <ul className="grid gap-6 md:grid-cols-2">
+      {/* Reviews. The section is always there: the form is how the first one
+          arrives, and a product with none says so rather than skipping it. */}
+      <section className="mt-20" id="reviews">
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border-subtle)] pb-6">
+          <h2 className="text-[clamp(1.75rem,4vw,2.5rem)]">What people say</h2>
+          {rating.count > 0 ? (
+            <p className="text-sm text-[var(--text-muted)]">
+              {rating.average.toFixed(1)} out of 5 · {rating.count}{" "}
+              {rating.count === 1 ? "review" : "reviews"}
+            </p>
+          ) : null}
+        </div>
+
+        {product.reviews.length === 0 ? (
+          <p className="mb-8 text-base font-light text-[var(--text-muted)]">
+            No reviews yet. Be the first to say how it wears.
+          </p>
+        ) : (
+          <ul className="mb-10 grid gap-6 md:grid-cols-2">
             {product.reviews.map((review) => (
               <li key={review.id} className="border border-[var(--border-subtle)] p-5">
                 <div className="flex items-center gap-2">
@@ -279,12 +299,18 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
                 </div>
                 {review.title ? <p className="mt-2 font-medium">{review.title}</p> : null}
                 <p className="mt-1.5 text-sm text-[var(--text-secondary)]">{review.body}</p>
-                <p className="mt-3 text-sm text-[var(--text-muted)]">{review.authorName}</p>
+                <p className="mt-3 text-sm text-[var(--text-muted)]">
+                  {review.authorName} · {formatDate(review.createdAt)}
+                </p>
               </li>
             ))}
           </ul>
-        </section>
-      ) : null}
+        )}
+
+        <div className="max-w-[640px]">
+          <ReviewForm productId={product.id} signedIn={Boolean(user)} existing={ownReview} />
+        </div>
+      </section>
 
       {/* Related */}
       {related.length > 0 ? (

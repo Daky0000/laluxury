@@ -73,7 +73,7 @@ readiness on the admin dashboard, so the store boots and runs with just a databa
 | `AUTH_SECRET` | ✅ | Sessions |
 | `NEXT_PUBLIC_SITE_URL` | — | Correct Paystack callbacks and webhook URLs |
 | `PAYSTACK_SECRET_KEY`, `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY` | — | Checkout |
-| `OPENROUTER_API_KEY` | — | The AI agent |
+| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` | — | The AI agent |
 | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET` | — | Agent in Slack |
 | `WHATSAPP_*` | — | Agent on WhatsApp |
 | `SMTP_*` | — | Transactional email |
@@ -82,6 +82,11 @@ readiness on the admin dashboard, so the store boots and runs with just a databa
 | `CLOUDINARY_*` | — | Optional image CDN; without it uploads are stored in Postgres |
 
 See `.env.example` for the full list with setup notes.
+
+Every integration key can also be pasted into `/admin/settings` → Integrations, which wins over
+the environment and takes effect on the next request — no redeploy. Each group has a **Test**
+button that makes the cheapest real call the provider offers, so a wrong key is found there
+rather than at the first checkout.
 
 ---
 
@@ -107,8 +112,10 @@ delivery must never charge, ship or discount twice.
 One agent answers in three places — the admin console, Slack, and WhatsApp — and acts with
 the permissions of whoever is talking to it.
 
-**To switch it on, add `OPENROUTER_API_KEY`.** That is genuinely all it needs for the web
-console. Slack and WhatsApp need their own keys plus a webhook URL.
+**To switch it on, add one key** — `ANTHROPIC_API_KEY` to talk to Claude directly, or
+`OPENROUTER_API_KEY` for any model on OpenRouter — in the environment or under Settings →
+Integrations. That is genuinely all it needs for the web console. Slack and WhatsApp need
+their own keys plus a webhook URL.
 
 The model is env-driven:
 
@@ -168,14 +175,17 @@ time — so a Staff-level account cannot talk the agent into a price change.
 src/
   app/
     (shop)/          storefront: home, shop, product, cart, checkout, account, tracking
-    (auth)/          sign in, register
+    (auth)/          sign in, register, forgotten password
     admin/           dashboard, products, orders, inventory, customers, discounts,
-                     staff, agent, activity, settings
-    actions/         server actions (cart, auth, checkout, admin/*)
+                     reviews, staff, agent, activity, settings
+    actions/         server actions (cart, auth, password-reset, account, reviews,
+                     checkout, admin/*)
+    sitemap.ts, robots.ts
     api/webhooks/    paystack, slack, whatsapp
   lib/
     db, env, money, slug, utils, constants
-    auth/            sessions (JWT cookie), bcrypt, RBAC
+    auth/            sessions (JWT cookie), bcrypt, RBAC, sign-up and reset cookies
+    rate-limit       in-memory brake on sign-in, sign-up and resets
     catalog          search, filters, facets
     cart             read/write split — see note below
     discounts        validation + proportional allocation
@@ -277,12 +287,47 @@ ranges match their variants, and that no password is stored in plain text.
 
 ---
 
+## Accounts, reviews and notices
+
+**Customers register by phone.** The number is verified by a six-digit code from Vynfy, stored
+canonically as `233XXXXXXXXX`, and is the account's identity; email is optional and is where
+receipts go. Staff accounts are keyed on email. Sign-in takes either in one field.
+
+**Forgotten passwords** go through `/forgot-password`. A phone number gets a code by text and
+sets the new password on the next screen; an email address gets a single-use link, valid for an
+hour, when SMTP is configured. Neither step reveals whether an account exists. Sign-in, sign-up,
+resets and code checks are rate-limited in process memory, so a password cannot be guessed at
+speed.
+
+**Reviews wait for a manager.** A signed-in customer can review any product from its page; the
+review is marked *verified purchase* when a paid order on that account contains the product.
+Nothing shows on the storefront until it is approved under Admin → Reviews, where it can also
+be hidden again or deleted. One review per customer per product — writing again replaces the
+first and sends it back to the queue.
+
+**Every order change tells the customer.** Payment received, a failed attempt, processing,
+packed, shipped, delivered, cancelled and refunded each go out by text, and by email as well
+where SMTP is set. Sends are best-effort and their outcome is written to the order timeline.
+Placing an unpaid order deliberately sends nothing.
+
+**Payment is settled exactly once.** The Paystack webhook and the confirmation page both verify
+the same reference and regularly arrive within the same second. The flip from unpaid to paid is
+a single conditional update, so only one of them commits stock, counts the discount and sends
+the confirmation. Money that lands after an order was cancelled is recorded, left cancelled,
+and flagged to the team for a refund rather than taking the stock again.
+
+---
+
 ## Known gaps
 
 - **One artboard is built.** The home page, header, footer and bag drawer follow
   "Efie Home Storefront v2 Light". The other artboards (admin, archive, thank-you) are
   still on the earlier visual layer, which shares the same tokens in
   `src/app/globals.css`.
-- **Transactional email is wired but not sent.** SMTP config is read and reported; the
-  send calls are not yet hooked into order confirmation.
-- **Reviews are collected and moderated but have no submission form** on the product page yet.
+- **No Content-Security-Policy header yet.** The other hardening headers are set in
+  `next.config.ts`; a CSP needs an allowlist for Paystack and every image host the owner
+  pastes, and is worth doing once those are settled.
+- **Abandoned-cart recovery is modelled but not sent.** `Cart.recoveryEmailSentAt` exists and
+  the dashboard counts abandoned bags; nothing yet writes to those customers.
+- **Customers cannot change their own phone number.** It is the account's identity and was
+  proved by a code, so changing it needs the same proof — a flow of its own.

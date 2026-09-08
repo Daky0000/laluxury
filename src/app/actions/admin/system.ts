@@ -302,3 +302,27 @@ export async function resolveAgentActionAction(
     ? { ok: false, message: `Failed: ${(result as { error: string }).error}` }
     : { ok: true, message: "Applied." };
 }
+
+// ---------------------------------------------------------------------------
+// Contact messages
+// ---------------------------------------------------------------------------
+
+/**
+ * Takes a message off the unread list once somebody has replied to it. The
+ * row stays, so the conversation can still be found; only the flag moves.
+ */
+export async function setContactHandledAction(
+  messageId: string,
+  isHandled: boolean,
+): Promise<AdminState> {
+  await requirePermission("settings:manage");
+
+  const { count } = await db.contactMessage.updateMany({
+    where: { id: messageId },
+    data: { isHandled },
+  });
+  if (count === 0) return { ok: false, message: "That message no longer exists." };
+
+  revalidatePath("/admin/activity");
+  return { ok: true, message: isHandled ? "Marked as handled." : "Back on the unread list." };
+}

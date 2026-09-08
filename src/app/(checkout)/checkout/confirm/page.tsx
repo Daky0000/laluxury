@@ -3,10 +3,12 @@ import Link from "next/link";
 import { Clock, XCircle } from "lucide-react";
 import { db } from "@/lib/db";
 import { verifyTransaction, describeChannel } from "@/lib/paystack";
-import { markOrderPaid, markPaymentFailed } from "@/lib/orders";
+import { markOrderPaid, markPaymentFailed, logOrderEvent } from "@/lib/orders";
+import { postAlert } from "@/lib/agent/slack";
 import { productCardSelect } from "@/lib/catalog";
 import { toTile } from "@/lib/product-view";
-import { formatPrice } from "@/lib/money";
+import { formatMoney, formatPrice } from "@/lib/money";
+import { formatPhone } from "@/lib/phone";
 import { getSettings } from "@/lib/settings";
 import { ProductTile } from "@/components/shop/product-tile";
 import { Footer } from "@/components/shop/footer";
@@ -62,7 +64,26 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
     try {
       const transaction = await verifyTransaction(reference);
 
-      if (transaction.status === "success" && transaction.amount === order.total) {
+      if (transaction.status === "success" && transaction.amount !== order.total) {
+        // Paid, but not the right amount. The webhook holds these for review
+        // rather than crediting them; so does this, or the shopper would sit on
+        // "still processing" with nothing written down anywhere.
+        const held = await db.orderEvent.findFirst({
+          where: { orderId: order.id, type: "payment.mismatch" },
+          select: { id: true },
+        });
+        if (!held) {
+          await logOrderEvent({
+            orderId: order.id,
+            type: "payment.mismatch",
+            message: `Paystack reported ${formatMoney(transaction.amount)} but the order total is ${formatMoney(order.total)}. Held for review.`,
+            meta: { reference, reported: transaction.amount, expected: order.total },
+          });
+          await postAlert(
+            `:warning: Payment amount mismatch on ${order.orderNumber}. Paystack says ${formatMoney(transaction.amount)}, order total is ${formatMoney(order.total)}.`,
+          );
+        }
+      } else if (transaction.status === "success") {
         await markOrderPaid({
           orderId: order.id,
           reference,
@@ -239,7 +260,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
                   {fresh.shippingAddress.line2 ? `, ${fresh.shippingAddress.line2}` : ""}
                   <br />
                   {fresh.shippingAddress.city}, {fresh.shippingAddress.region} ·{" "}
-                  {fresh.shippingAddress.phone}
+                  {formatPhone(fresh.shippingAddress.phone)}
                 </address>
               </div>
             ) : null}

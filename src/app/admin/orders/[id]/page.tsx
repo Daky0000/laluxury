@@ -8,6 +8,7 @@ import { can } from "@/lib/auth/rbac";
 import { orderInclude } from "@/lib/orders";
 import { describeChannel } from "@/lib/paystack";
 import { formatMoney } from "@/lib/money";
+import { formatPhone, telHref } from "@/lib/phone";
 import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { Card, Badge, Divider } from "@/components/ui";
@@ -186,11 +187,11 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
 
               {order.phone ? (
                 <a
-                  href={`tel:${order.phone}`}
+                  href={telHref(order.phone)}
                   className="flex items-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 >
                   <Phone className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  {order.phone}
+                  {formatPhone(order.phone)}
                 </a>
               ) : null}
             </div>

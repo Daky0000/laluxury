@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { dashboardMetrics, revenueSeries, topProducts } from "@/lib/analytics";
 import { lowStockItems } from "@/lib/inventory";
-import { integrationStatus } from "@/lib/env";
+import { integrationStatus } from "@/lib/integrations";
 import { formatMoney } from "@/lib/money";
 import { formatDate, relativeTime } from "@/lib/utils";
 import { Card, Stat, Badge, EmptyState } from "@/components/ui";
@@ -39,7 +39,7 @@ export default async function AdminDashboard() {
         shippingAddress: { select: { firstName: true, lastName: true, city: true } },
       },
     }),
-    Promise.resolve(integrationStatus()),
+    integrationStatus(),
   ]);
 
   const unready = integrations.filter((i) => !i.ready);
@@ -56,8 +56,8 @@ export default async function AdminDashboard() {
                 {unready.length} integration{unready.length === 1 ? "" : "s"} still to configure
               </p>
               <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                {unready.map((i) => i.label).join(", ")}. Add the keys in your environment, then
-                restart.
+                {unready.map((i) => i.label).join(", ")}. Paste the keys under Settings →
+                Integrations and they take effect straight away.
               </p>
               <Link
                 href="/admin/settings"

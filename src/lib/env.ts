@@ -85,15 +85,3 @@ export const env = {
   isProduction: () => process.env.NODE_ENV === "production",
 } as const;
 
-/** Surfaced on the admin dashboard so the owner can see what is still unwired. */
-export function integrationStatus() {
-  return [
-    { key: "paystack", label: "Paystack payments", ready: env.paystack.isConfigured() },
-    { key: "openrouter", label: "AI agent (OpenRouter)", ready: env.openrouter.isConfigured() },
-    { key: "slack", label: "Slack channel", ready: env.slack.isConfigured() },
-    { key: "whatsapp", label: "WhatsApp channel", ready: env.whatsapp.isConfigured() },
-    { key: "smtp", label: "Transactional email", ready: env.smtp.isConfigured() },
-    { key: "sms", label: "SMS & OTP (Vynfy)", ready: env.vynfy.isConfigured() },
-    { key: "cloudinary", label: "Cloudinary image CDN", ready: env.cloudinary.isConfigured() },
-  ];
-}

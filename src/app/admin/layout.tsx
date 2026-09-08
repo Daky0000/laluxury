@@ -18,6 +18,7 @@ const NAV: { href: string; label: string; icon: string; permission: Permission }
   { href: "/admin/inventory", label: "Inventory", icon: "inventory", permission: "inventory:read" },
   { href: "/admin/customers", label: "Customers", icon: "customers", permission: "customers:read" },
   { href: "/admin/discounts", label: "Discounts", icon: "discounts", permission: "discounts:read" },
+  { href: "/admin/reviews", label: "Reviews", icon: "reviews", permission: "reviews:moderate" },
   { href: "/admin/agent", label: "AI agent", icon: "agent", permission: "agent:use" },
   { href: "/admin/users", label: "Staff", icon: "users", permission: "users:manage" },
   { href: "/admin/activity", label: "Activity", icon: "activity", permission: "settings:manage" },
@@ -30,16 +31,22 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   if (!user) redirect("/login");
   if (!isStaff(user.role)) redirect("/account");
 
-  // The count beside Orders is what is actually waiting on someone, so the rail
-  // says whether there is work without opening anything.
-  const openOrders = await db.order.count({
-    where: { status: { in: ["PAID", "PROCESSING"] } },
-  });
+  // The counts beside Orders and Reviews are what is actually waiting on
+  // someone, so the rail says whether there is work without opening anything.
+  const [openOrders, pendingReviews] = await Promise.all([
+    db.order.count({ where: { status: { in: ["PAID", "PROCESSING"] } } }),
+    db.review.count({ where: { isApproved: false } }),
+  ]);
+
+  const badges: Record<string, number> = {
+    "/admin/orders": openOrders,
+    "/admin/reviews": pendingReviews,
+  };
 
   const permissions = permissionsFor(user.role);
   const items = NAV.filter((item) => can(user.role, item.permission)).map((item) => ({
     ...item,
-    badge: item.href === "/admin/orders" && openOrders > 0 ? openOrders : undefined,
+    badge: badges[item.href] || undefined,
   }));
   const name = displayName(user);
 

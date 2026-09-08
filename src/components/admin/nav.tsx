@@ -15,6 +15,7 @@ import {
   Bot,
   UserCog,
   ScrollText,
+  Star,
   Menu,
   X,
 } from "lucide-react";
@@ -29,6 +30,7 @@ const ICONS = {
   inventory: Boxes,
   customers: Users,
   discounts: Ticket,
+  reviews: Star,
   agent: Bot,
   users: UserCog,
   activity: ScrollText,

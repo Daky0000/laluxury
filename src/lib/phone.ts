@@ -130,3 +130,17 @@ export function maskPhone(phone: string): string {
 
   return `+${canonical.slice(0, -4)}••••`;
 }
+
+/**
+ * A `tel:` link for whatever spelling of a number is stored.
+ *
+ * Orders placed before numbers were canonicalised hold them as typed — spaces,
+ * a leading plus, a national zero — and `tel:` needs one of them: the digits,
+ * with a plus in front. A number that cannot be read is linked as its own
+ * digits, which is still a better guess than nothing.
+ */
+export function telHref(phone: string): string {
+  const canonical = normalisePhone(phone);
+  if (canonical) return `tel:+${canonical}`;
+  return `tel:${phone.replace(/[^0-9+]/g, "")}`;
+}
