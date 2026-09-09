@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { updateOrderStatus, cancelOrder, recordRefund, logOrderEvent } from "@/lib/orders";
+import { notifyOrder, type OrderNotice } from "@/lib/notify";
 import { refundTransaction, PaystackError } from "@/lib/paystack";
 import { toMinorUnits } from "@/lib/money";
 import { normalisePhone } from "@/lib/phone";
+import { GHANA_REGIONS } from "@/lib/constants";
 import { recordAudit } from "@/lib/audit";
 import type { OrderStatus } from "@/generated/prisma";
 import type { AdminState } from "./products";
@@ -236,4 +238,138 @@ export async function refundOrderAction(
 
   revalidateOrder(orderId);
   return { ok: true, message: `Refund of ${(amount / 100).toFixed(2)} recorded. ${providerMessage}` };
+}
+
+/**
+ * Sends the customer the notice for where the order is now, again.
+ *
+ * Texts go astray - a phone off for a day, a full inbox - and "did you get our
+ * message?" is a question the console should be able to answer with a button
+ * rather than a shrug. The notice matches the order's current state, so
+ * nothing stale goes out.
+ */
+export async function resendOrderNoticeAction(orderId: string): Promise<AdminState> {
+  const actor = await requirePermission("orders:write");
+
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    select: {
+      status: true,
+      paymentStatus: true,
+      refundedTotal: true,
+      payments: { where: { status: "SUCCESS" }, orderBy: { createdAt: "desc" }, take: 1 },
+    },
+  });
+  if (!order) return { ok: false, message: "That order no longer exists." };
+
+  const notice: OrderNotice | null =
+    order.status === "CANCELLED"
+      ? { kind: "order.cancelled" }
+      : order.status === "REFUNDED"
+        ? { kind: "order.refunded", amount: order.refundedTotal }
+        : order.status === "DELIVERED"
+          ? { kind: "order.delivered" }
+          : order.status === "SHIPPED"
+            ? { kind: "order.shipped" }
+            : order.status === "FULFILLED"
+              ? { kind: "order.fulfilled" }
+              : order.status === "PROCESSING"
+                ? { kind: "order.processing" }
+                : order.paymentStatus === "SUCCESS"
+                  ? { kind: "payment.received", reference: order.payments[0]?.reference ?? null }
+                  : order.status === "PENDING"
+                    ? { kind: "order.placed" }
+                    : null;
+
+  if (!notice) return { ok: false, message: "There is nothing to tell the customer about yet." };
+
+  await notifyOrder(orderId, notice);
+  await logOrderEvent({
+    orderId,
+    type: "notify.resent",
+    message: `Notice (${notice.kind}) re-sent by staff.`,
+    actorId: actor.id,
+  });
+
+  revalidateOrder(orderId);
+  return { ok: true, message: "Sent again. The timeline shows whether it went out." };
+}
+
+/**
+ * Corrects the delivery address before the parcel leaves.
+ *
+ * "I put the wrong house number" is the commonest call a shop gets, and the
+ * fix belongs on the order rather than in a note the rider may not read. Once
+ * it has shipped the address is history and stays as it was.
+ */
+export async function updateOrderAddressAction(
+  orderId: string,
+  _prev: AdminState | null,
+  formData: FormData,
+): Promise<AdminState> {
+  const actor = await requirePermission("orders:write");
+
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    select: { status: true, shippingAddressId: true, shippingAddress: true },
+  });
+  if (!order) return { ok: false, message: "That order no longer exists." };
+  if (["SHIPPED", "DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status)) {
+    return { ok: false, message: "This order has already left, so its address is fixed." };
+  }
+
+  const text = (key: string) => String(formData.get(key) ?? "").trim();
+  const firstName = text("firstName");
+  const lastName = text("lastName");
+  const line1 = text("line1");
+  const city = text("city");
+  const region = text("region");
+  const phoneRaw = text("phone");
+  const phone = normalisePhone(phoneRaw);
+
+  if (!firstName || !line1 || !city) return { ok: false, message: "Name, address and city are needed." };
+  if (!GHANA_REGIONS.includes(region as (typeof GHANA_REGIONS)[number])) {
+    return { ok: false, message: "Choose a region." };
+  }
+  if (!phone) return { ok: false, message: "Enter a phone number the rider can call." };
+
+  const data = {
+    firstName,
+    lastName: lastName || "-",
+    phone,
+    line1,
+    line2: text("line2") || null,
+    city,
+    region,
+    postalCode: text("postalCode") || null,
+  };
+
+  if (order.shippingAddressId) {
+    await db.address.update({ where: { id: order.shippingAddressId }, data });
+  } else {
+    const created = await db.address.create({ data: { ...data, country: "GH" } });
+    await db.order.update({ where: { id: orderId }, data: { shippingAddressId: created.id } });
+  }
+  // The order's own contact number follows the delivery one.
+  await db.order.update({ where: { id: orderId }, data: { phone } });
+
+  await logOrderEvent({
+    orderId,
+    type: "address.updated",
+    message: `Delivery address changed to ${line1}, ${city}, ${region}.`,
+    actorId: actor.id,
+  });
+  await recordAudit({
+    actorId: actor.id,
+    action: "order.address.update",
+    entity: "Order",
+    entityId: orderId,
+    before: order.shippingAddress
+      ? { line1: order.shippingAddress.line1, city: order.shippingAddress.city, region: order.shippingAddress.region }
+      : undefined,
+    after: { line1, city, region },
+  });
+
+  revalidateOrder(orderId);
+  return { ok: true, message: "Address updated." };
 }

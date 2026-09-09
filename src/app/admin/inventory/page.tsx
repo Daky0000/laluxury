@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Search, AlertTriangle } from "lucide-react";
+import { ExportLink } from "@/components/admin/export-link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/auth/rbac";
@@ -74,6 +75,9 @@ export default async function AdminInventoryPage({ searchParams }: PageProps<"/a
       <SectionHeading
         title="Inventory"
         description="Type a count straight into On hand — it saves itself. Tick rows to set or receive stock for many at once. Available is on-hand minus units held for unshipped orders, and every change is written to the stock ledger."
+        action={
+          <ExportLink href="/api/admin/export/inventory" />
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-3">

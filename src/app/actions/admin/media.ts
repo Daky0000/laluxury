@@ -12,6 +12,7 @@ import {
   storeUpload,
   type MediaListItem,
 } from "@/lib/media";
+import { MEDIA_FOLDERS } from "@/lib/media-format";
 import type { AdminState } from "./products";
 
 /**
@@ -273,20 +274,29 @@ export async function attachMediaAction(
 // Settings
 // ---------------------------------------------------------------------------
 
-/** Same upload path, used for the store's own imagery in settings. */
+/**
+ * Same upload path, used for the store's own imagery: settings pictures, and
+ * the cards for categories and collections. Putting a file in the library is
+ * the same act whoever does it, so it takes the library's permission.
+ */
 export async function uploadSettingImageAction(
   _prev: AdminState | null,
   formData: FormData,
 ): Promise<AdminState & { url?: string }> {
-  const user = await requirePermission("settings:manage");
+  const user = await requirePermission("products:write");
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, message: "Choose an image." };
   }
 
+  // Category and collection pictures file themselves under their own folder so
+  // the library can be browsed by what a picture is for.
+  const requested = String(formData.get("folder") || "store");
+  const folder = (MEDIA_FOLDERS as readonly string[]).includes(requested) ? requested : "store";
+
   try {
-    const asset = await storeUpload(file, { folder: "store", uploadedById: user.id });
+    const asset = await storeUpload(file, { folder, uploadedById: user.id });
     revalidateMedia();
     return { ok: true, message: "Uploaded.", url: asset.url };
   } catch (error) {

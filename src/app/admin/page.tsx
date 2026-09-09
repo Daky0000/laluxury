@@ -7,7 +7,7 @@ import { dashboardMetrics, revenueSeries, topProducts } from "@/lib/analytics";
 import { lowStockItems } from "@/lib/inventory";
 import { integrationStatus } from "@/lib/integrations";
 import { formatMoney } from "@/lib/money";
-import { formatDate, relativeTime } from "@/lib/utils";
+import { daysAgo, formatDate, relativeTime } from "@/lib/utils";
 import { Card, Stat, Badge, EmptyState } from "@/components/ui";
 import { RevenueChart } from "@/components/admin/revenue-chart";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
@@ -21,7 +21,7 @@ const tableHead =
 export default async function AdminDashboard() {
   await requirePermission("dashboard:view");
 
-  const [metrics, series, top, lowStock, recentOrders, integrations] = await Promise.all([
+  const [metrics, series, top, lowStock, recentOrders, integrations, attention] = await Promise.all([
     dashboardMetrics(30),
     revenueSeries(30),
     topProducts(30, 5),
@@ -40,9 +40,65 @@ export default async function AdminDashboard() {
       },
     }),
     integrationStatus(),
+    // The things somebody has to act on today, in one glance.
+    Promise.all([
+      db.order.count({ where: { status: "PENDING", paymentStatus: "PENDING" } }),
+      db.review.count({ where: { isApproved: false } }),
+      db.contactMessage.count({ where: { isHandled: false } }),
+      db.orderEvent.count({
+        where: {
+          type: { in: ["payment.after_cancel", "payment.mismatch"] },
+          createdAt: { gte: daysAgo(30) },
+        },
+      }),
+    ]).then(([awaitingPayment, pendingReviews, unreadMessages, paymentFlags]) => ({
+      awaitingPayment,
+      pendingReviews,
+      unreadMessages,
+      paymentFlags,
+    })),
   ]);
 
   const unready = integrations.filter((i) => !i.ready);
+
+  const todo = [
+    {
+      label: "To fulfil",
+      count: metrics.pendingFulfilment,
+      href: "/admin/orders?status=PAID",
+      hint: "paid, not yet packed",
+    },
+    {
+      label: "Awaiting payment",
+      count: attention.awaitingPayment,
+      href: "/admin/orders?status=PENDING",
+      hint: "reserved, unpaid",
+    },
+    {
+      label: "Reviews to check",
+      count: attention.pendingReviews,
+      href: "/admin/reviews",
+      hint: "not yet on the storefront",
+    },
+    {
+      label: "Unread messages",
+      count: attention.unreadMessages,
+      href: "/admin/activity",
+      hint: "from the contact form",
+    },
+    {
+      label: "Payments to review",
+      count: attention.paymentFlags,
+      href: "/admin/orders",
+      hint: "mismatched or after cancel, 30d",
+    },
+    {
+      label: "Abandoned bags",
+      count: metrics.abandonedCarts,
+      href: "/admin/carts",
+      hint: "this week",
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-4.5">
@@ -69,6 +125,35 @@ export default async function AdminDashboard() {
           </div>
         </Card>
       ) : null}
+
+      {/* What needs doing */}
+      <Card className="px-6 py-5">
+        <h2 className={cardTitle}>Needs attention</h2>
+        <ul className="mt-3 grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          {todo.map((item) => (
+            <li key={item.label}>
+              <Link
+                href={item.href}
+                className={`block rounded-lg border px-3.5 py-3 transition-colors hover:bg-[var(--surface-sunken)] ${
+                  item.count > 0 ? "border-[var(--border-strong)]" : "border-[var(--border-subtle)]"
+                }`}
+              >
+                <span className="block text-sm uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                  {item.label}
+                </span>
+                <span
+                  className={`mt-1 block font-display text-[28px] leading-none tabular-nums ${
+                    item.count > 0 ? "text-[var(--accent)]" : "text-[var(--text-muted)]"
+                  }`}
+                >
+                  {item.count}
+                </span>
+                <span className="mt-1 block text-xs text-[var(--text-muted)]">{item.hint}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
 
       {/* Headline numbers */}
       <div className="grid gap-4.5 sm:grid-cols-2 xl:grid-cols-4">

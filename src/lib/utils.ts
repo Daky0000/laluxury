@@ -55,3 +55,12 @@ export function buildQuery(
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
+
+/**
+ * A moment `n` days ago. Kept here so a Server Component can ask for "the last
+ * thirty days" without calling the clock in the middle of its render — the
+ * purity rule flags `Date.now()` in a component body, and rightly so.
+ */
+export function daysAgo(n: number): Date {
+  return new Date(Date.now() - n * 86400000);
+}

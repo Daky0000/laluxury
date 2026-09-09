@@ -77,6 +77,24 @@ export function ProductCreateForm({
             <input id="sku" name="sku" placeholder="ADCETALA-01" className="lx-field" />
           </Field>
         </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Was price (GHS)"
+            htmlFor="compareAtPrice"
+            hint="Optional. Struck through beside the price to show a saving."
+          >
+            <input
+              id="compareAtPrice"
+              name="compareAtPrice"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="1200.00"
+              className="lx-field"
+            />
+          </Field>
+        </div>
       </Card>
 
       <Card className="flex flex-col gap-4 p-5">

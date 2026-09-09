@@ -10,6 +10,7 @@ import {
 import { applyDiscount, recordRedemption } from "./discounts";
 import {
   commitStock,
+  lowStockAfterSale,
   releaseStock,
   reserveStock,
   restockUnits,
@@ -364,6 +365,21 @@ export async function markOrderPaid(args: {
     try {
       const lines = await stockLinesForOrder(order.id);
       await commitStock(lines, order.orderNumber);
+
+      // The sale that empties a shelf is the moment to say so.
+      const low = await lowStockAfterSale(lines);
+      if (low.length > 0) {
+        await postAlert(
+          `:package: Low stock after ${order.orderNumber}:\n` +
+            low
+              .map(
+                (item) =>
+                  `- ${item.label} (${item.sku}): ${item.available} left` +
+                  (item.reorderQuantity ? `, reorder ${item.reorderQuantity}` : ""),
+              )
+              .join("\n"),
+        );
+      }
     } catch (error) {
       await db.order.update({
         where: { id: order.id },

@@ -14,6 +14,8 @@ import { Search, Store } from "lucide-react";
 const TITLES: { prefix: string; title: string; subtitle: string; search?: string }[] = [
   { prefix: "/admin/orders", title: "Orders", subtitle: "Manage and fulfil customer orders", search: "/admin/orders" },
   { prefix: "/admin/products", title: "Products", subtitle: "Inventory, images and variations", search: "/admin/products" },
+  { prefix: "/admin/categories", title: "Categories", subtitle: "Rooms and collections the shop is arranged by" },
+  { prefix: "/admin/carts", title: "Abandoned bags", subtitle: "Filled and left — a message away from a sale" },
   { prefix: "/admin/inventory", title: "Inventory", subtitle: "Stock levels and reorder points" },
   { prefix: "/admin/customers", title: "Customers", subtitle: "Your shoppers and their history", search: "/admin/customers" },
   { prefix: "/admin/discounts", title: "Discounts", subtitle: "Promo codes and offers" },

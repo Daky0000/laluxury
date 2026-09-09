@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
+import { daysAgo } from "@/lib/utils";
 import { ProductEditor, type EditorProduct } from "@/components/admin/product-editor";
 import { Badge } from "@/components/ui";
 
@@ -22,7 +23,7 @@ export default async function EditProductPage({ params }: PageProps<"/admin/prod
           include: { values: { orderBy: { position: "asc" } } },
         },
         variants: {
-          orderBy: { position: "asc" },
+          orderBy: [{ position: "asc" }, { createdAt: "asc" }],
           include: { inventory: true },
         },
         images: { orderBy: { position: "asc" } },
@@ -36,10 +37,48 @@ export default async function EditProductPage({ params }: PageProps<"/admin/prod
 
   if (!product) notFound();
 
+  // How it has sold, from paid orders only, so an abandoned checkout never
+  // counts as a sale.
+  const since = daysAgo(30);
+  const [sold, wishlisted] = await Promise.all([
+    db.orderItem.findMany({
+      where: { productId: id, order: { paymentStatus: "SUCCESS" } },
+      select: { quantity: true, total: true, order: { select: { paidAt: true, placedAt: true } } },
+    }),
+    db.wishlistItem.count({ where: { productId: id } }),
+  ]);
+
+  const performance = sold.reduce(
+    (acc, item) => {
+      const when = item.order.paidAt ?? item.order.placedAt;
+      acc.unitsAllTime += item.quantity;
+      acc.revenueAllTime += item.total;
+      if (when >= since) {
+        acc.units30d += item.quantity;
+        acc.revenue30d += item.total;
+      }
+      if (!acc.lastSoldAt || when > acc.lastSoldAt) acc.lastSoldAt = when;
+      return acc;
+    },
+    {
+      unitsAllTime: 0,
+      revenueAllTime: 0,
+      units30d: 0,
+      revenue30d: 0,
+      lastSoldAt: null as Date | null,
+    },
+  );
+
   const editorProduct: EditorProduct = {
     id: product.id,
     title: product.title,
     slug: product.slug,
+    compareAtPrice: product.compareAtPrice,
+    performance: {
+      ...performance,
+      lastSoldAt: performance.lastSoldAt?.toISOString() ?? null,
+      wishlisted,
+    },
     shortDescription: product.shortDescription,
     description: product.description,
     status: product.status,

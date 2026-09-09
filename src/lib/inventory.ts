@@ -350,3 +350,29 @@ export async function stockLinesForOrder(orderId: string): Promise<StockLine[]> 
     .filter((i): i is { variantId: string; quantity: number } => i.variantId !== null)
     .map((i) => ({ variantId: i.variantId, quantity: i.quantity }));
 }
+
+/**
+ * Names the variants among `lines` that a sale has just taken to or below
+ * their reorder point, so the team hears before the shelf is bare rather than
+ * from a customer who could not buy.
+ */
+export async function lowStockAfterSale(lines: StockLine[]) {
+  if (lines.length === 0) return [];
+
+  const items = await db.inventoryItem.findMany({
+    where: { variantId: { in: lines.map((l) => l.variantId) }, trackInventory: true },
+    include: { variant: { select: { sku: true, title: true, product: { select: { title: true } } } } },
+  });
+
+  return items
+    .filter((item) => availableOf(item) <= item.reorderPoint)
+    .map((item) => ({
+      sku: item.variant.sku,
+      label:
+        item.variant.title === "Default"
+          ? item.variant.product.title
+          : `${item.variant.product.title} - ${item.variant.title}`,
+      available: Math.max(0, availableOf(item)),
+      reorderQuantity: item.reorderQuantity,
+    }));
+}

@@ -13,7 +13,9 @@ export const dynamic = "force-dynamic";
 const NAV: { href: string; label: string; icon: string; permission: Permission }[] = [
   { href: "/admin", label: "Dashboard", icon: "dashboard", permission: "dashboard:view" },
   { href: "/admin/orders", label: "Orders", icon: "orders", permission: "orders:read" },
+  { href: "/admin/carts", label: "Abandoned bags", icon: "carts", permission: "orders:read" },
   { href: "/admin/products", label: "Products", icon: "products", permission: "products:read" },
+  { href: "/admin/categories", label: "Categories", icon: "categories", permission: "products:read" },
   { href: "/admin/media", label: "Media", icon: "media", permission: "products:read" },
   { href: "/admin/inventory", label: "Inventory", icon: "inventory", permission: "inventory:read" },
   { href: "/admin/customers", label: "Customers", icon: "customers", permission: "customers:read" },

@@ -9,6 +9,7 @@ import {
   ArrowUp,
   ArrowDown,
   Check,
+  Copy,
   ExternalLink,
   Plus,
   Upload,
@@ -25,6 +26,8 @@ import {
   deleteImageAction,
   moveImageAction,
   deleteProductAction,
+  duplicateProductAction,
+  moveVariantAction,
   type AdminState,
 } from "@/app/actions/admin/products";
 import { uploadProductImagesAction } from "@/app/actions/admin/media";
@@ -32,7 +35,8 @@ import { bulkAdjustStockAction } from "@/app/actions/admin/catalog-ops";
 import { UPLOAD_ACCEPT } from "@/lib/media-format";
 import { MediaPicker } from "@/components/admin/media-picker";
 import { Card, Field, Alert, Badge } from "@/components/ui";
-import { toMajorUnits } from "@/lib/money";
+import { formatMoney, toMajorUnits } from "@/lib/money";
+import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Photo } from "@/components/shop/photo";
 
@@ -50,8 +54,19 @@ export type EditorProduct = {
   isFeatured: boolean;
   metaTitle: string | null;
   metaDescription: string | null;
+  /** The product-wide "was" price, for variants without one of their own. */
+  compareAtPrice: number | null;
   categoryIds: string[];
   collectionIds: string[];
+  /** How the piece has sold, from paid orders. */
+  performance: {
+    unitsAllTime: number;
+    revenueAllTime: number;
+    units30d: number;
+    revenue30d: number;
+    lastSoldAt: string | null;
+    wishlisted: number;
+  };
   options: {
     id: string;
     name: string;
@@ -154,9 +169,38 @@ function DetailsTab({
   );
   const [deleting, startDelete] = useTransition();
   const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
+  const [duplicating, startDuplicate] = useTransition();
+
+  const perf = product.performance;
 
   return (
     <div className="flex flex-col gap-6">
+      {/* How it sells. Read-only, and first: the question behind most edits
+          to a product is whether it is earning its place. */}
+      <Card className="grid gap-4 p-5 sm:grid-cols-4">
+        <div>
+          <p className="lx-eyebrow">Sold, 30 days</p>
+          <p className="mt-1.5 font-display text-2xl tabular-nums">{perf.units30d}</p>
+          <p className="text-xs text-[var(--text-muted)]">{formatMoney(perf.revenue30d)}</p>
+        </div>
+        <div>
+          <p className="lx-eyebrow">Sold, all time</p>
+          <p className="mt-1.5 font-display text-2xl tabular-nums">{perf.unitsAllTime}</p>
+          <p className="text-xs text-[var(--text-muted)]">{formatMoney(perf.revenueAllTime)}</p>
+        </div>
+        <div>
+          <p className="lx-eyebrow">Last sold</p>
+          <p className="mt-1.5 text-sm">
+            {perf.lastSoldAt ? formatDate(perf.lastSoldAt) : "Never"}
+          </p>
+        </div>
+        <div>
+          <p className="lx-eyebrow">Wishlisted</p>
+          <p className="mt-1.5 font-display text-2xl tabular-nums">{perf.wishlisted}</p>
+          <p className="text-xs text-[var(--text-muted)]">saved by customers</p>
+        </div>
+      </Card>
+
       <form action={action} className="flex flex-col gap-6">
         {state?.message ? (
           <Alert tone={state.ok ? "success" : "danger"}>{state.message}</Alert>
@@ -272,6 +316,62 @@ function DetailsTab({
               className="lx-field resize-y"
             />
           </Field>
+          <Field
+            label="Handle"
+            htmlFor="slug"
+            hint="The address of the page: /product/handle. Leave it alone once the link has been shared."
+          >
+            <div className="flex items-center gap-1">
+              <span className="shrink-0 text-sm text-[var(--text-muted)]">/product/</span>
+              <input
+                id="slug"
+                name="slug"
+                defaultValue={product.slug}
+                spellCheck={false}
+                className="lx-field font-mono text-sm"
+              />
+            </div>
+          </Field>
+        </Card>
+
+        <Card className="flex flex-col gap-4 p-5">
+          <h3 className="lx-eyebrow">Pricing</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Was price (GHS)"
+              htmlFor="compareAtPrice"
+              hint="Struck through beside the price on every variant that has no was-price of its own. Blank for none."
+            >
+              <input
+                id="compareAtPrice"
+                name="compareAtPrice"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={product.compareAtPrice ? toMajorUnits(product.compareAtPrice) : ""}
+                className="lx-field"
+              />
+            </Field>
+            <div className="text-sm text-[var(--text-secondary)]">
+              <p className="lx-eyebrow mb-1.5">Selling at</p>
+              <p>
+                {product.variants.length === 0
+                  ? "No variants yet."
+                  : (() => {
+                      const prices = product.variants.filter((v) => v.isActive).map((v) => v.price);
+                      if (prices.length === 0) return "No active variants.";
+                      const min = Math.min(...prices);
+                      const max = Math.max(...prices);
+                      return min === max
+                        ? formatMoney(min)
+                        : `${formatMoney(min)} – ${formatMoney(max)}`;
+                    })()}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                Per-variant prices are on the Variants tab.
+              </p>
+            </div>
+          </div>
         </Card>
 
         <Card className="flex flex-wrap items-end justify-between gap-4 p-5">
@@ -308,6 +408,31 @@ function DetailsTab({
           </button>
         </Card>
       </form>
+
+      <Card className="p-5">
+        <h3 className="text-sm font-medium">Duplicate this product</h3>
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">
+          Makes a draft copy with the same options, variants, prices and pictures, and no stock.
+          The quickest way to list a new colourway or a second size of the same piece.
+        </p>
+        <button
+          type="button"
+          disabled={duplicating}
+          onClick={() =>
+            startDuplicate(async () => {
+              await duplicateProductAction(product.id);
+            })
+          }
+          className="mt-3 flex items-center gap-2 rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-2 text-sm disabled:opacity-50"
+        >
+          {duplicating ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <Copy className="h-4 w-4" aria-hidden />
+          )}
+          Duplicate as a draft
+        </button>
+      </Card>
 
       <Card className="border-danger/30 p-5">
         <h3 className="text-sm font-medium">Delete this product</h3>
@@ -656,6 +781,13 @@ function VariantsTab({ product }: { product: EditorProduct }) {
     null,
   );
   const [removing, startRemove] = useTransition();
+  const [moving, startMove] = useTransition();
+
+  /** Gross margin as the console shows it: what is left of the price after cost. */
+  function margin(price: number, cost: number | null): string {
+    if (!cost || price <= 0) return "—";
+    return `${Math.round(((price - cost) / price) * 100)}%`;
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -726,22 +858,56 @@ function VariantsTab({ product }: { product: EditorProduct }) {
       <form action={action}>
         <Card className="overflow-hidden">
           <div className="overflow-x-auto overscroll-x-contain" tabIndex={0} role="region" aria-label="Scrollable table">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[900px] text-sm">
               <thead className="border-b border-[var(--border-subtle)] bg-[var(--surface-sunken)] text-left">
                 <tr>
+                  <th className="w-10 px-2 py-2.5">
+                    <span className="sr-only">Order</span>
+                  </th>
                   <th className="px-4 py-2.5 font-medium">Variant</th>
                   <th className="px-3 py-2.5 font-medium">SKU</th>
                   <th className="px-3 py-2.5 font-medium">Price</th>
                   <th className="px-3 py-2.5 font-medium">Was</th>
                   <th className="px-3 py-2.5 font-medium">Cost</th>
+                  <th className="px-3 py-2.5 font-medium">Margin</th>
                   <th className="px-3 py-2.5 font-medium">Weight (g)</th>
                   <th className="px-3 py-2.5 font-medium">Stock</th>
                   <th className="px-3 py-2.5 font-medium">Active</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
-                {product.variants.map((variant) => (
+                {product.variants.map((variant, index) => (
                   <tr key={variant.id}>
+                    <td className="px-2 py-2.5">
+                      <span className="flex flex-col">
+                        <button
+                          type="button"
+                          disabled={moving || index === 0}
+                          onClick={() =>
+                            startMove(async () => {
+                              await moveVariantAction(product.id, variant.id, "up");
+                            })
+                          }
+                          className="rounded px-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-25"
+                          aria-label={`Move ${variant.title} up`}
+                        >
+                          <ArrowUp className="h-3 w-3" aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={moving || index === product.variants.length - 1}
+                          onClick={() =>
+                            startMove(async () => {
+                              await moveVariantAction(product.id, variant.id, "down");
+                            })
+                          }
+                          className="rounded px-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-25"
+                          aria-label={`Move ${variant.title} down`}
+                        >
+                          <ArrowDown className="h-3 w-3" aria-hidden />
+                        </button>
+                      </span>
+                    </td>
                     <td className="px-4 py-2.5">{variant.title}</td>
                     <td className="px-3 py-2.5">
                       <input
@@ -786,6 +952,9 @@ function VariantsTab({ product }: { product: EditorProduct }) {
                         className="lx-field w-24 py-1.5"
                       />
                     </td>
+                    <td className="px-3 py-2.5 text-[var(--text-secondary)] tabular-nums">
+                      {margin(variant.price, variant.costPrice)}
+                    </td>
                     <td className="px-3 py-2.5">
                       <input
                         name={`weight_${variant.id}`}
@@ -821,7 +990,8 @@ function VariantsTab({ product }: { product: EditorProduct }) {
 
           <div className="flex items-center justify-between gap-4 border-t border-[var(--border-subtle)] px-4 py-3">
             <p className="text-xs text-[var(--text-muted)]">
-              Stock is edited in Inventory, where every change is logged.
+              Arrows set the order the storefront lists them in. Margin is from the saved cost;
+              stock is edited in Inventory, where every change is logged.
             </p>
             <button
               type="submit"

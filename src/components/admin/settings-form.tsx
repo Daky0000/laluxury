@@ -7,6 +7,7 @@ import type { AdminState } from "@/app/actions/admin/products";
 import type { StoreSettings } from "@/lib/settings";
 import { LANDING_PAGES, type LandingPage } from "@/lib/landing";
 import { Card, Field, Alert } from "@/components/ui";
+import { ImageUrlField } from "./image-url-field";
 import { toMajorUnits } from "@/lib/money";
 
 export function SettingsForm({ settings }: { settings: StoreSettings }) {
@@ -157,14 +158,7 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
             />
           </Field>
 
-          <Field label="Hero image URL" htmlFor="heroImageUrl">
-            <input
-              id="heroImageUrl"
-              name="heroImageUrl"
-              defaultValue={settings.heroImageUrl}
-              className="lx-field"
-            />
-          </Field>
+          <ImageUrlField name="heroImageUrl" defaultValue={settings.heroImageUrl} label="Hero image" />
 
           <Field label="Hero headline" htmlFor="heroTitle" hint="First line, upright.">
             <input
@@ -252,14 +246,7 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
             />
           </Field>
 
-          <Field label="Bundle image URL" htmlFor="bundleImageUrl">
-            <input
-              id="bundleImageUrl"
-              name="bundleImageUrl"
-              defaultValue={settings.bundleImageUrl}
-              className="lx-field"
-            />
-          </Field>
+          <ImageUrlField name="bundleImageUrl" defaultValue={settings.bundleImageUrl} label="Bundle image" />
 
           <Field label="Bundle link" htmlFor="bundleHref">
             <input

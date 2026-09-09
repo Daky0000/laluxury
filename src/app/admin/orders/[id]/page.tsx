@@ -14,6 +14,7 @@ import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { Card, Badge, Divider } from "@/components/ui";
 import { AssignOrderCustomer } from "@/components/admin/order-customer";
 import { OrderControls } from "@/components/admin/order-controls";
+import { EditOrderAddress, OrderToolbar } from "@/components/admin/order-extras";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -58,6 +59,20 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
         </Badge>
         <span className="text-sm text-[var(--text-secondary)]">
           Placed {formatDate(order.placedAt, true)}
+        </span>
+        <span className="ml-auto">
+          {canWrite ? (
+            <OrderToolbar orderId={order.id} orderNumber={order.orderNumber} />
+          ) : (
+            <a
+              href={`/print/orders/${order.id}`}
+              target="_blank"
+              rel="noopener"
+              className="text-sm text-[var(--accent)] underline-offset-4 hover:underline"
+            >
+              Print invoice
+            </a>
+          )}
         </span>
       </div>
 
@@ -228,8 +243,23 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                       {order.shippingAddress.postalCode}
                     </>
                   ) : null}
+                  <br />
+                  {formatPhone(order.shippingAddress.phone)}
                 </span>
               </address>
+              {canWrite ? (
+                <EditOrderAddress
+                  orderId={order.id}
+                  address={order.shippingAddress}
+                  locked={["SHIPPED", "DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status)}
+                />
+              ) : null}
+            </Card>
+          ) : canWrite ? (
+            <Card className="p-5">
+              <h2 className="lx-eyebrow mb-3">Delivery address</h2>
+              <p className="text-sm text-[var(--text-muted)]">None on this order.</p>
+              <EditOrderAddress orderId={order.id} address={null} locked={false} />
             </Card>
           ) : null}
 

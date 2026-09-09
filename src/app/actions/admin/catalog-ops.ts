@@ -331,6 +331,12 @@ export async function saveCategoryAction(
   const imageUrl = String(formData.get("imageUrl") || "").trim() || null;
   const isActive = formData.get("isActive") === "on";
   const position = Number(formData.get("position")) || 0;
+  // A room can sit inside another - "Duvets" under "Bedding" - and the
+  // storefront lists only the top level in its header and footer.
+  const parentId = String(formData.get("parentId") || "").trim() || null;
+  if (parentId && parentId === categoryId) {
+    return { ok: false, message: "A category cannot be its own parent." };
+  }
 
   if (categoryId) {
     const existing = await db.category.findUnique({ where: { id: categoryId } });
@@ -341,7 +347,7 @@ export async function saveCategoryAction(
 
     await db.category.update({
       where: { id: categoryId },
-      data: { name, slug, description, imageUrl, isActive, position },
+      data: { name, slug, description, imageUrl, isActive, position, parentId },
     });
   } else {
     await db.category.create({
@@ -352,10 +358,12 @@ export async function saveCategoryAction(
         imageUrl,
         isActive,
         position,
+        parentId,
       },
     });
   }
 
+  revalidatePath("/admin/categories");
   revalidatePath("/admin/products");
   revalidatePath("/shop");
   revalidatePath("/", "layout");
@@ -368,8 +376,78 @@ export async function deleteCategoryAction(categoryId: string): Promise<AdminSta
   // Products keep existing; only the association goes.
   await db.category.delete({ where: { id: categoryId } });
 
+  revalidatePath("/admin/categories");
   revalidatePath("/admin/products");
   revalidatePath("/shop");
   revalidatePath("/", "layout");
   return { ok: true, message: "Category deleted." };
+}
+
+// ---------------------------------------------------------------------------
+// Collections
+// ---------------------------------------------------------------------------
+
+export async function saveCollectionAction(
+  collectionId: string | null,
+  _prev: AdminState | null,
+  formData: FormData,
+): Promise<AdminState> {
+  const actor = await requirePermission("products:write");
+
+  const name = String(formData.get("name") || "").trim();
+  if (!name) return { ok: false, message: "Name the collection." };
+
+  const data = {
+    description: String(formData.get("description") || "").trim() || null,
+    imageUrl: String(formData.get("imageUrl") || "").trim() || null,
+    isActive: formData.get("isActive") === "on",
+    isFeatured: formData.get("isFeatured") === "on",
+    position: Number(formData.get("position")) || 0,
+  };
+
+  if (collectionId) {
+    const existing = await db.collection.findUnique({ where: { id: collectionId } });
+    if (!existing) return { ok: false, message: "That collection no longer exists." };
+
+    const slug =
+      name !== existing.name ? await uniqueSlug("collection", name, collectionId) : existing.slug;
+    await db.collection.update({ where: { id: collectionId }, data: { ...data, name, slug } });
+  } else {
+    await db.collection.create({
+      data: { ...data, name, slug: await uniqueSlug("collection", name) },
+    });
+  }
+
+  await recordAudit({
+    actorId: actor.id,
+    action: collectionId ? "collection.update" : "collection.create",
+    entity: "Collection",
+    entityId: collectionId,
+    after: { name, isActive: data.isActive, isFeatured: data.isFeatured },
+  });
+
+  revalidatePath("/admin/categories");
+  revalidatePath("/admin/products");
+  revalidatePath("/shop");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Collection saved." };
+}
+
+export async function deleteCollectionAction(collectionId: string): Promise<AdminState> {
+  const actor = await requirePermission("products:write");
+
+  // Products keep existing; only the grouping goes.
+  await db.collection.delete({ where: { id: collectionId } });
+  await recordAudit({
+    actorId: actor.id,
+    action: "collection.delete",
+    entity: "Collection",
+    entityId: collectionId,
+  });
+
+  revalidatePath("/admin/categories");
+  revalidatePath("/admin/products");
+  revalidatePath("/shop");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Collection deleted." };
 }

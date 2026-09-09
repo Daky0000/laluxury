@@ -176,8 +176,11 @@ src/
   app/
     (shop)/          storefront: home, shop, product, cart, checkout, account, tracking
     (auth)/          sign in, register, forgotten password
-    admin/           dashboard, products, orders, inventory, customers, discounts,
-                     reviews, staff, agent, activity, settings
+    admin/           dashboard, products, categories, orders, carts, inventory,
+                     customers, discounts, reviews, media, staff, agent, activity,
+                     settings
+    print/           invoice and packing slip, outside the console chrome
+    api/admin/export CSV downloads: products, inventory, orders, customers
     actions/         server actions (cart, auth, password-reset, account, reviews,
                      checkout, admin/*)
     sitemap.ts, robots.ts
@@ -287,6 +290,38 @@ ranges match their variants, and that no password is stored in plain text.
 
 ---
 
+## The back office
+
+The console at `/admin` is where the shop is actually run. What each screen is for:
+
+| Screen | What it does |
+| --- | --- |
+| Dashboard | Revenue, orders and a **Needs attention** strip: unfulfilled orders, unpaid orders, reviews waiting, unread messages, payments held for review, abandoned bags. Each is a link to the list it counts. |
+| Orders | Filter by status, payment state and date range; export exactly what is filtered as CSV. An order opens with a printable invoice and packing slip, a resend button for its customer notice, and an editable delivery address until it ships. |
+| Abandoned bags | Bags filled and left in the last 30 days, with a WhatsApp or email message ready to send to whoever can be reached. |
+| Products | Search, filter by status, category and stock state, sort five ways, and see units sold per product. Bulk publish, draft, archive, feature and delete. |
+| Categories | The rooms and collections the shop is arranged by, with pictures, order, nesting and visibility — no deploy needed to add a room. |
+| Inventory | Type a count straight into a cell; bulk set or receive across selected rows; full stock ledger. |
+| Reviews | The moderation queue — nothing reaches a product page until it is approved here. |
+| Customers | Lifetime value, tags, notes, and a CSV export of the whole list. |
+| Discounts, Staff, Activity, Settings, Media, AI agent | As before. |
+
+**Every product editor tab earns its place.** Details carries the copy, the categories, the search
+listing, the URL handle and the product-wide was-price, over a strip showing what the piece has
+actually sold — 30 days, all time, when it last sold, and how many people have it wishlisted.
+Variants sets prices, cost, margin, weight and the order the storefront lists them in. Images
+uploads, reorders and pins a photograph to a colour. A **Duplicate** button copies the whole
+thing as a draft with no stock, which is how a new colourway gets listed in a minute.
+
+**Money and stock stay honest.** Prices are typed in cedis and stored in pesewas; margin is
+computed from the saved cost; stock edits are a ledger, never a silent overwrite. A sale that
+takes a variant to its reorder point posts a low-stock alert to Slack.
+
+**Four CSV exports** — products, inventory, orders, customers — sit behind the same permission
+as the screen they came from, so a link handed to somebody without access downloads nothing.
+
+---
+
 ## Accounts, reviews and notices
 
 **Customers register by phone.** The number is verified by a six-digit code from Vynfy, stored
@@ -327,7 +362,8 @@ and flagged to the team for a refund rather than taking the stock again.
 - **No Content-Security-Policy header yet.** The other hardening headers are set in
   `next.config.ts`; a CSP needs an allowlist for Paystack and every image host the owner
   pastes, and is worth doing once those are settled.
-- **Abandoned-cart recovery is modelled but not sent.** `Cart.recoveryEmailSentAt` exists and
-  the dashboard counts abandoned bags; nothing yet writes to those customers.
+- **Abandoned-cart recovery is by hand.** `/admin/carts` lists the bags and hands you a
+  WhatsApp or email message to send; nothing goes out automatically, and
+  `Cart.recoveryEmailSentAt` is still unused.
 - **Customers cannot change their own phone number.** It is the account's identity and was
   proved by a code, so changing it needs the same proof — a flow of its own.

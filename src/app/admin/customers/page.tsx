@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Search, Mail, Phone } from "lucide-react";
+import { ExportLink } from "@/components/admin/export-link";
 import { db } from "@/lib/db";
 import { displayName, requirePermission } from "@/lib/auth";
 import { formatPhone } from "@/lib/phone";
@@ -35,6 +36,9 @@ export default async function AdminCustomersPage({ searchParams }: PageProps<"/a
       <SectionHeading
         title="Customers"
         description="Lifetime value counts paid orders only."
+        action={
+          <ExportLink href="/api/admin/export/customers" />
+        }
       />
 
       <AddCustomerPanel />

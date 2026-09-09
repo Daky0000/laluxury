@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { FolderTree, Plus, Search } from "lucide-react";
+import { ExportLink } from "@/components/admin/export-link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/auth/rbac";
@@ -16,6 +17,40 @@ export const metadata: Metadata = { title: "Products" };
 
 const PER_PAGE = 20;
 
+/** How the list can be ordered. The default is what was touched last. */
+const SORTS = {
+  updated: { label: "Recently edited", orderBy: { updatedAt: "desc" } },
+  title: { label: "Name A–Z", orderBy: { title: "asc" } },
+  "price-asc": { label: "Price: low to high", orderBy: { minPrice: "asc" } },
+  "price-desc": { label: "Price: high to low", orderBy: { minPrice: "desc" } },
+  newest: { label: "Newest first", orderBy: { createdAt: "desc" } },
+} satisfies Record<string, { label: string; orderBy: Prisma.ProductOrderByWithRelationInput }>;
+
+type SortKey = keyof typeof SORTS;
+
+/** Stock views: filtered in the database, so the count and the pages agree. */
+const STOCK_FILTERS: Record<string, { label: string; where: Prisma.ProductWhereInput }> = {
+  out: {
+    label: "Out of stock",
+    where: {
+      variants: {
+        every: {
+          OR: [
+            { isActive: false },
+            { inventory: { trackInventory: true, allowBackorder: false, onHand: { lte: 0 } } },
+          ],
+        },
+      },
+    },
+  },
+  untracked: {
+    label: "Untracked",
+    where: {
+      variants: { none: { inventory: { trackInventory: true } } },
+    },
+  },
+};
+
 export default async function AdminProductsPage({ searchParams }: PageProps<"/admin/products">) {
   const user = await requirePermission("products:read");
   const params = await searchParams;
@@ -23,11 +58,14 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
   const q = typeof params.q === "string" ? params.q : "";
   const status = typeof params.status === "string" ? params.status : "";
   const categoryId = typeof params.category === "string" ? params.category : "";
+  const stock = typeof params.stock === "string" && params.stock in STOCK_FILTERS ? params.stock : "";
+  const sort: SortKey = typeof params.sort === "string" && params.sort in SORTS ? (params.sort as SortKey) : "updated";
   const page = Math.max(1, Number(params.page) || 1);
 
   const where: Prisma.ProductWhereInput = {
     ...(status ? { status: status as ProductStatus } : {}),
     ...(categoryId ? { categories: { some: { categoryId } } } : {}),
+    ...(stock ? STOCK_FILTERS[stock].where : {}),
     ...(q
       ? {
           OR: [
@@ -47,7 +85,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
         variants: { include: { inventory: true } },
         categories: { include: { category: { select: { name: true } } } },
       },
-      orderBy: { updatedAt: "desc" },
+      orderBy: SORTS[sort].orderBy,
       take: PER_PAGE,
       skip: (page - 1) * PER_PAGE,
     }),
@@ -56,9 +94,25 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
     db.product.groupBy({ by: ["status"], _count: true }),
   ]);
 
+  // Units sold, for the products on this page only, from paid orders.
+  const soldRows =
+    products.length > 0
+      ? await db.orderItem.groupBy({
+          by: ["productId"],
+          where: {
+            productId: { in: products.map((p) => p.id) },
+            order: { paymentStatus: "SUCCESS" },
+          },
+          _sum: { quantity: true },
+        })
+      : [];
+  const soldByProduct = new Map(soldRows.map((row) => [row.productId, row._sum.quantity ?? 0]));
+
   const pageCount = Math.max(1, Math.ceil(total / PER_PAGE));
   const countFor = (s: string) => statusCounts.find((c) => c.status === s)?._count ?? 0;
   const canWrite = can(user.role, "products:write");
+  const filters = { q, status, category: categoryId, stock, sort: sort === "updated" ? "" : sort };
+  const filtered = Boolean(q || status || categoryId || stock || sort !== "updated");
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,12 +120,19 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
         title="Products"
         description={`${total} matching ${total === 1 ? "product" : "products"}.`}
         action={
-          canWrite ? (
-            <LinkButton href="/admin/products/new" size="sm">
-              <Plus className="h-4 w-4" aria-hidden />
-              New product
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <LinkButton href="/admin/categories" variant="secondary" size="sm">
+              <FolderTree className="h-4 w-4" aria-hidden />
+              Categories
             </LinkButton>
-          ) : undefined
+            <ExportLink href="/api/admin/export/products" />
+            {canWrite ? (
+              <LinkButton href="/admin/products/new" size="sm">
+                <Plus className="h-4 w-4" aria-hidden />
+                New product
+              </LinkButton>
+            ) : null}
+          </div>
         }
       />
 
@@ -87,13 +148,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
                 aria-hidden
               />
-              <input
-                id="q"
-                name="q"
-                defaultValue={q}
-                placeholder="Name or SKU"
-                className="lx-field pl-9"
-              />
+              <input id="q" name="q" defaultValue={q} placeholder="Name or SKU" className="lx-field pl-9" />
             </div>
           </div>
 
@@ -123,6 +178,33 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
             </select>
           </div>
 
+          <div>
+            <label htmlFor="stock" className="lx-eyebrow mb-1.5 block">
+              Stock
+            </label>
+            <select id="stock" name="stock" defaultValue={stock} className="lx-field w-40">
+              <option value="">Any</option>
+              {Object.entries(STOCK_FILTERS).map(([key, filter]) => (
+                <option key={key} value={key}>
+                  {filter.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="sort" className="lx-eyebrow mb-1.5 block">
+              Sort
+            </label>
+            <select id="sort" name="sort" defaultValue={sort} className="lx-field w-44">
+              {Object.entries(SORTS).map(([key, entry]) => (
+                <option key={key} value={key}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             type="submit"
             className="rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
@@ -130,7 +212,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
             Filter
           </button>
 
-          {q || status || categoryId ? (
+          {filtered ? (
             <Link
               href="/admin/products"
               className="px-2 py-2.5 text-sm text-[var(--text-secondary)] underline-offset-4 hover:underline"
@@ -144,7 +226,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
       {products.length === 0 ? (
         <EmptyState
           title="No products match"
-          description={q || status ? "Try widening the filters." : "Add your first product to get started."}
+          description={filtered ? "Try widening the filters." : "Add your first product to get started."}
           action={
             canWrite ? <LinkButton href="/admin/products/new" size="sm">Add a product</LinkButton> : undefined
           }
@@ -153,7 +235,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
         <ProductBulkBar canWrite={canWrite}>
           <Card className="overflow-hidden">
             <div className="overflow-x-auto overscroll-x-contain" tabIndex={0} role="region" aria-label="Scrollable table">
-              <table className="w-full min-w-[880px] text-sm">
+              <table className="w-full min-w-[960px] text-sm">
                 <thead className="border-b border-[var(--border-subtle)] bg-[var(--surface-sunken)] text-left">
                   <tr>
                     {canWrite ? <th className="w-10 px-4 py-2.5" /> : null}
@@ -161,19 +243,23 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
                     <th className="px-4 py-2.5 font-medium">Status</th>
                     <th className="px-4 py-2.5 font-medium">Price</th>
                     <th className="px-4 py-2.5 font-medium">Stock</th>
+                    <th className="px-4 py-2.5 font-medium">Sold</th>
                     <th className="px-4 py-2.5 font-medium">Variants</th>
                     <th className="px-4 py-2.5 font-medium">Category</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border-subtle)]">
                   {products.map((product) => {
-                    const stock = product.variants.reduce(
+                    const active = product.variants.filter((v) => v.isActive);
+                    const stockCount = active.reduce(
                       (sum, v) => sum + (v.inventory ? availableOf(v.inventory) : 0),
                       0,
                     );
-                    const tracked = product.variants.some(
+                    const tracked = active.some(
                       (v) => v.inventory?.trackInventory && !v.inventory.allowBackorder,
                     );
+                    const onSale =
+                      product.compareAtPrice !== null && product.compareAtPrice > product.minPrice;
 
                     return (
                       <tr key={product.id} className="hover:bg-[var(--surface-sunken)]">
@@ -203,6 +289,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
                               <span className="block truncate text-xs text-[var(--text-muted)]">
                                 {product.variants[0]?.sku}
                                 {product.isFeatured ? " · Featured" : ""}
+                                {onSale ? " · On sale" : ""}
                               </span>
                             </span>
                           </Link>
@@ -231,13 +318,17 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
                         <td className="px-4 py-3 tabular-nums">
                           {!tracked ? (
                             <span className="text-[var(--text-muted)]">Untracked</span>
-                          ) : stock <= 0 ? (
+                          ) : stockCount <= 0 ? (
                             <span className="text-danger">Out</span>
-                          ) : stock <= 5 ? (
-                            <span className="text-warning">{stock}</span>
+                          ) : stockCount <= 5 ? (
+                            <span className="text-warning">{stockCount}</span>
                           ) : (
-                            stock
+                            stockCount
                           )}
+                        </td>
+
+                        <td className="px-4 py-3 tabular-nums text-[var(--text-secondary)]">
+                          {soldByProduct.get(product.id) ?? 0}
                         </td>
 
                         <td className="px-4 py-3 text-[var(--text-secondary)]">
@@ -261,7 +352,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
         <nav aria-label="Pagination" className="flex items-center justify-center gap-3 text-sm">
           {page > 1 ? (
             <Link
-              href={`/admin/products${buildQuery({ q, status, category: categoryId, page: page - 1 })}`}
+              href={`/admin/products${buildQuery({ ...filters, page: page - 1 })}`}
               className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
             >
               Previous
@@ -272,7 +363,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
           </span>
           {page < pageCount ? (
             <Link
-              href={`/admin/products${buildQuery({ q, status, category: categoryId, page: page + 1 })}`}
+              href={`/admin/products${buildQuery({ ...filters, page: page + 1 })}`}
               className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
             >
               Next

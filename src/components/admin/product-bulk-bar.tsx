@@ -3,7 +3,7 @@
 import { useState, useTransition, type ReactNode } from "react";
 import { bulkProductAction } from "@/app/actions/admin/products";
 
-type Operation = "publish" | "draft" | "archive" | "feature" | "unfeature";
+type Operation = "publish" | "draft" | "archive" | "feature" | "unfeature" | "delete";
 
 const OPERATIONS: { value: Operation; label: string }[] = [
   { value: "publish", label: "Publish" },
@@ -11,6 +11,7 @@ const OPERATIONS: { value: Operation; label: string }[] = [
   { value: "archive", label: "Archive" },
   { value: "feature", label: "Feature" },
   { value: "unfeature", label: "Unfeature" },
+  { value: "delete", label: "Delete" },
 ];
 
 /**
@@ -36,6 +37,14 @@ export function ProductBulkBar({
   }
 
   function apply() {
+    if (
+      operation === "delete" &&
+      !confirm(
+        `Delete ${selected.length} product${selected.length === 1 ? "" : "s"}? Any with sales history are archived instead. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
     setMessage(null);
     startTransition(async () => {
       const result = await bulkProductAction(selected, operation);

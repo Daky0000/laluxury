@@ -16,6 +16,8 @@ import {
   UserCog,
   ScrollText,
   Star,
+  FolderTree,
+  ShoppingBag,
   Menu,
   X,
 } from "lucide-react";
@@ -26,6 +28,8 @@ const ICONS = {
   dashboard: LayoutDashboard,
   orders: ShoppingCart,
   products: Package,
+  categories: FolderTree,
+  carts: ShoppingBag,
   media: Images,
   inventory: Boxes,
   customers: Users,

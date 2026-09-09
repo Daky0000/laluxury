@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
-import { uniqueSlug, skuFromTitle } from "@/lib/slug";
+import { uniqueSlug, skuFromTitle, slugify } from "@/lib/slug";
 import { buildSearchText, refreshPriceRange } from "@/lib/catalog";
 import { toMinorUnits } from "@/lib/money";
 import { ensureInventoryItem } from "@/lib/inventory";
@@ -49,10 +49,16 @@ const productSchema = z.object({
   metaDescription: z.string().optional(),
   categoryIds: z.array(z.string()).optional(),
   collectionIds: z.array(z.string()).optional(),
+  /** The URL handle. Blank keeps the current one; a new title never changes an edited one. */
+  slug: z.string().optional(),
+  /** A "was" price for every variant that has none of its own, in cedis. */
+  compareAtPrice: z.string().optional(),
 });
 
 function parseProductForm(formData: FormData) {
   return productSchema.safeParse({
+    slug: formData.get("slug") || undefined,
+    compareAtPrice: formData.get("compareAtPrice") || undefined,
     title: formData.get("title"),
     shortDescription: formData.get("shortDescription") || undefined,
     description: formData.get("description") || undefined,
@@ -93,6 +99,19 @@ export async function createProductAction(
   const tags = splitTags(data.tags);
   const slug = await uniqueSlug("product", data.title);
 
+  // A "was" price is optional, and only means anything above the real one.
+  let compareAtPrice: number | null = null;
+  if (data.compareAtPrice) {
+    try {
+      compareAtPrice = toMinorUnits(data.compareAtPrice);
+    } catch {
+      return fail("The was-price is not a number.");
+    }
+    if (compareAtPrice <= price) {
+      return fail("The was-price has to be higher than the price you are selling at.");
+    }
+  }
+
   let sku = String(formData.get("sku") || "").trim() || `${skuFromTitle(data.title)}-01`;
   if (await db.variant.findUnique({ where: { sku }, select: { id: true } })) {
     sku = `${sku}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
@@ -115,6 +134,7 @@ export async function createProductAction(
       publishedAt: data.status === "ACTIVE" ? new Date() : null,
       minPrice: price,
       maxPrice: price,
+      compareAtPrice,
       searchText: buildSearchText({
         title: data.title,
         tags,
@@ -166,11 +186,25 @@ export async function updateProductAction(
   const data = parsed.data;
   const tags = splitTags(data.tags);
 
-  // Renaming regenerates the slug only when the title actually changed.
-  const slug =
-    data.title !== existing.title
+  // The handle follows the title until somebody types one by hand, at which
+  // point it is theirs: a link already shared on WhatsApp must keep working
+  // through a retitle. A typed handle is cleaned and made unique like any other.
+  const typedSlug = data.slug?.trim() ? slugify(data.slug) : "";
+  const slug = typedSlug
+    ? typedSlug === existing.slug
+      ? existing.slug
+      : await uniqueSlug("product", typedSlug, productId)
+    : data.title !== existing.title
       ? await uniqueSlug("product", data.title, productId)
       : existing.slug;
+
+  let compareAtPrice: number | null;
+  try {
+    compareAtPrice = data.compareAtPrice ? toMinorUnits(data.compareAtPrice) : null;
+  } catch {
+    return fail("The was-price is not a number.");
+  }
+  if (compareAtPrice !== null && compareAtPrice < 0) return fail("The was-price cannot be negative.");
 
   await db.$transaction(async (tx) => {
     await tx.product.update({
@@ -178,6 +212,7 @@ export async function updateProductAction(
       data: {
         title: data.title,
         slug,
+        compareAtPrice,
         shortDescription: data.shortDescription ?? null,
         description: data.description ?? null,
         status: data.status,
@@ -744,10 +779,43 @@ export async function moveImageAction(
 
 export async function bulkProductAction(
   productIds: string[],
-  operation: "publish" | "draft" | "archive" | "feature" | "unfeature",
+  operation: "publish" | "draft" | "archive" | "feature" | "unfeature" | "delete",
 ): Promise<AdminState> {
   const actor = await requirePermission("products:write");
   if (productIds.length === 0) return fail("Select at least one product.");
+
+  // Deleting follows the single-product rule: anything with sales history is
+  // archived instead, so an order line never points at nothing.
+  if (operation === "delete") {
+    const sold = await db.orderItem.findMany({
+      where: { productId: { in: productIds } },
+      select: { productId: true },
+      distinct: ["productId"],
+    });
+    const keep = new Set(sold.map((row) => row.productId).filter((id): id is string => id !== null));
+    const removable = productIds.filter((id) => !keep.has(id));
+
+    const [archived, deleted] = await db.$transaction([
+      db.product.updateMany({
+        where: { id: { in: [...keep] } },
+        data: { status: "ARCHIVED" },
+      }),
+      db.product.deleteMany({ where: { id: { in: removable } } }),
+    ]);
+
+    await recordAudit({
+      actorId: actor.id,
+      action: "product.bulk_delete",
+      entity: "Product",
+      after: { deleted: deleted.count, archived: archived.count, productIds },
+    });
+
+    revalidateProduct();
+    const parts = [];
+    if (deleted.count) parts.push(`${deleted.count} deleted`);
+    if (archived.count) parts.push(`${archived.count} archived because they have sales history`);
+    return { ok: true, message: parts.join(", ") + "." };
+  }
 
   const data =
     operation === "publish"
@@ -774,4 +842,170 @@ export async function bulkProductAction(
 
   revalidateProduct();
   return { ok: true, message: `${count} product${count === 1 ? "" : "s"} updated.` };
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate & reorder
+// ---------------------------------------------------------------------------
+
+/**
+ * Copies a product as a draft: copy, options, variants and pictures.
+ *
+ * A new colourway or a second size of the same piece is almost always the last
+ * one with three fields changed, and rebuilding the option matrix by hand is
+ * how those come out inconsistent. Stock starts at zero on the copy, because
+ * the shelf did not get fuller when the record did.
+ */
+export async function duplicateProductAction(productId: string): Promise<AdminState> {
+  const actor = await requirePermission("products:write");
+
+  const source = await db.product.findUnique({
+    where: { id: productId },
+    include: {
+      options: { orderBy: { position: "asc" }, include: { values: { orderBy: { position: "asc" } } } },
+      variants: { orderBy: { position: "asc" }, include: { optionValues: true } },
+      images: { orderBy: { position: "asc" } },
+      categories: true,
+      collections: true,
+    },
+  });
+  if (!source) return fail("That product no longer exists.");
+
+  const title = `${source.title} (copy)`;
+  const slug = await uniqueSlug("product", title);
+  const stem = skuFromTitle(title);
+  const suffix = Date.now().toString(36).slice(-3).toUpperCase();
+
+  const copy = await db.$transaction(async (tx) => {
+    const created = await tx.product.create({
+      data: {
+        title,
+        slug,
+        description: source.description,
+        shortDescription: source.shortDescription,
+        status: "DRAFT",
+        minPrice: source.minPrice,
+        maxPrice: source.maxPrice,
+        compareAtPrice: source.compareAtPrice,
+        brand: source.brand,
+        material: source.material,
+        care: source.care,
+        isFeatured: false,
+        tags: source.tags,
+        metaTitle: source.metaTitle,
+        metaDescription: source.metaDescription,
+        searchText: buildSearchText({
+          title,
+          tags: source.tags,
+          brand: source.brand,
+          material: source.material,
+          shortDescription: source.shortDescription,
+        }),
+        categories: { create: source.categories.map((c) => ({ categoryId: c.categoryId })) },
+        collections: { create: source.collections.map((c) => ({ collectionId: c.collectionId })) },
+      },
+    });
+
+    // Old value id -> new value id, so variants and pinned pictures follow.
+    const valueMap = new Map<string, string>();
+    for (const option of source.options) {
+      const newOption = await tx.productOption.create({
+        data: { productId: created.id, name: option.name, position: option.position },
+      });
+      for (const value of option.values) {
+        const newValue = await tx.productOptionValue.create({
+          data: {
+            optionId: newOption.id,
+            value: value.value,
+            hexColor: value.hexColor,
+            position: value.position,
+          },
+        });
+        valueMap.set(value.id, newValue.id);
+      }
+    }
+
+    for (const [index, variant] of source.variants.entries()) {
+      const created2 = await tx.variant.create({
+        data: {
+          productId: created.id,
+          title: variant.title,
+          sku: `${stem}-${suffix}-${String(index + 1).padStart(2, "0")}`,
+          barcode: null,
+          price: variant.price,
+          compareAtPrice: variant.compareAtPrice,
+          costPrice: variant.costPrice,
+          weightGrams: variant.weightGrams,
+          isActive: variant.isActive,
+          position: variant.position,
+          optionValues: {
+            create: variant.optionValues
+              .map((ov) => valueMap.get(ov.optionValueId))
+              .filter((id): id is string => Boolean(id))
+              .map((optionValueId) => ({ optionValueId })),
+          },
+        },
+      });
+      await tx.inventoryItem.create({ data: { variantId: created2.id, onHand: 0 } });
+    }
+
+    for (const image of source.images) {
+      await tx.productImage.create({
+        data: {
+          productId: created.id,
+          url: image.url,
+          alt: image.alt,
+          position: image.position,
+          mediaId: image.mediaId,
+          optionValueId: image.optionValueId ? (valueMap.get(image.optionValueId) ?? null) : null,
+        },
+      });
+    }
+
+    return created;
+  });
+
+  await recordAudit({
+    actorId: actor.id,
+    action: "product.duplicate",
+    entity: "Product",
+    entityId: copy.id,
+    after: { from: productId, title, slug },
+  });
+
+  revalidateProduct(copy.id);
+  redirect(`/admin/products/${copy.id}`);
+}
+
+/** Swaps a variant with its neighbour, so the picker lists sizes in the order they are sold. */
+export async function moveVariantAction(
+  productId: string,
+  variantId: string,
+  direction: "up" | "down",
+): Promise<AdminState> {
+  await requirePermission("products:write");
+
+  const variants = await db.variant.findMany({
+    where: { productId },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    select: { id: true },
+  });
+
+  const index = variants.findIndex((v) => v.id === variantId);
+  const swapWith = direction === "up" ? index - 1 : index + 1;
+  if (index < 0 || swapWith < 0 || swapWith >= variants.length) return { ok: true };
+
+  // Positions are rewritten from the resulting order rather than swapped, so
+  // rows that were seeded with the same position sort deterministically after.
+  const order = [...variants];
+  [order[index], order[swapWith]] = [order[swapWith], order[index]];
+
+  await db.$transaction(
+    order.map((variant, position) =>
+      db.variant.update({ where: { id: variant.id }, data: { position } }),
+    ),
+  );
+
+  revalidateProduct(productId);
+  return { ok: true };
 }

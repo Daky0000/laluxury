@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { ExportLink } from "@/components/admin/export-link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { formatMoney } from "@/lib/money";
@@ -8,7 +9,7 @@ import { formatDate, buildQuery } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { Card, Badge, EmptyState, SectionHeading } from "@/components/ui";
 import { ManualOrderPanel } from "@/components/admin/manual-order-form";
-import type { OrderStatus, Prisma } from "@/generated/prisma";
+import type { OrderStatus, PaymentStatus, Prisma } from "@/generated/prisma";
 
 export const metadata: Metadata = { title: "Orders" };
 
@@ -20,10 +21,22 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
 
   const q = typeof params.q === "string" ? params.q : "";
   const status = typeof params.status === "string" ? params.status : "";
+  const payment = typeof params.payment === "string" ? params.payment : "";
+  const from = typeof params.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(params.from) ? params.from : "";
+  const to = typeof params.to === "string" && /^\d{4}-\d{2}-\d{2}$/.test(params.to) ? params.to : "";
   const page = Math.max(1, Number(params.page) || 1);
 
   const where: Prisma.OrderWhereInput = {
     ...(status ? { status: status as OrderStatus } : {}),
+    ...(payment ? { paymentStatus: payment as PaymentStatus } : {}),
+    ...(from || to
+      ? {
+          placedAt: {
+            ...(from ? { gte: new Date(`${from}T00:00:00`) } : {}),
+            ...(to ? { lte: new Date(`${to}T23:59:59.999`) } : {}),
+          },
+        }
+      : {}),
     ...(q
       ? {
           OR: [
@@ -63,10 +76,21 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
   });
 
   const pageCount = Math.max(1, Math.ceil(total / PER_PAGE));
+  const filters = { q, status, payment, from, to };
+  const filtered = Boolean(q || status || payment || from || to);
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeading title="Orders" description={`${total} matching.`} />
+      <SectionHeading
+        title="Orders"
+        description={`${total} matching.`}
+        action={
+          <ExportLink
+            href={`/api/admin/export/orders${buildQuery({ status, payment, from, to })}`}
+            label={filtered ? "Export these as CSV" : "Export all as CSV"}
+          />
+        }
+      />
 
       <ManualOrderPanel
         variants={sellable.map((variant) => ({
@@ -118,6 +142,33 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
             </select>
           </div>
 
+          <div>
+            <label htmlFor="payment" className="lx-eyebrow mb-1.5 block">
+              Payment
+            </label>
+            <select id="payment" name="payment" defaultValue={payment} className="lx-field w-40">
+              <option value="">All</option>
+              {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="from" className="lx-eyebrow mb-1.5 block">
+              From
+            </label>
+            <input id="from" name="from" type="date" defaultValue={from} className="lx-field w-40" />
+          </div>
+          <div>
+            <label htmlFor="to" className="lx-eyebrow mb-1.5 block">
+              To
+            </label>
+            <input id="to" name="to" type="date" defaultValue={to} className="lx-field w-40" />
+          </div>
+
           <button
             type="submit"
             className="rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)]"
@@ -125,7 +176,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
             Filter
           </button>
 
-          {q || status ? (
+          {filtered ? (
             <Link
               href="/admin/orders"
               className="px-2 py-2.5 text-sm underline-offset-4 hover:underline"
@@ -214,7 +265,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
         <nav aria-label="Pagination" className="flex items-center justify-center gap-3 text-sm">
           {page > 1 ? (
             <Link
-              href={`/admin/orders${buildQuery({ q, status, page: page - 1 })}`}
+              href={`/admin/orders${buildQuery({ ...filters, page: page - 1 })}`}
               className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
             >
               Previous
@@ -225,7 +276,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
           </span>
           {page < pageCount ? (
             <Link
-              href={`/admin/orders${buildQuery({ q, status, page: page + 1 })}`}
+              href={`/admin/orders${buildQuery({ ...filters, page: page + 1 })}`}
               className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
             >
               Next
