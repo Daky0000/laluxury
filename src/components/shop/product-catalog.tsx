@@ -96,7 +96,6 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
     ),
   };
 
-  const heading = q ? `Results for “${q}”` : collectionSlug ? "The collection" : "All products";
   const remaining = results.total - results.items.length;
 
   // Shown on the phone's filter button, so a filtered grid never looks
@@ -115,7 +114,13 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
       {/* Page head */}
       <section className="lx-container pb-2 pt-8 text-center sm:pt-11">
         <p className="lx-eyebrow tracking-[0.2em] sm:tracking-[0.32em]">Every piece</p>
-        <h1 className="mt-3 text-[clamp(2rem,7vw,3.625rem)] leading-tight">{heading}</h1>
+        {q ? (
+          <h1 className="mt-3 text-[clamp(2rem,7vw,3.625rem)] leading-tight">{`Results for “${q}”`}</h1>
+        ) : collectionSlug ? (
+          <h1 data-dw-field="catalog.collection-title" className="mt-3 text-[clamp(2rem,7vw,3.625rem)] leading-tight">The collection</h1>
+        ) : (
+          <h1 data-dw-field="catalog.title" className="mt-3 text-[clamp(2rem,7vw,3.625rem)] leading-tight">All products</h1>
+        )}
         <p className="mt-2.5 text-base font-light text-[var(--text-muted)]">
           Bedding, living, windows and student essentials — filter your way to it.
         </p>

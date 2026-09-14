@@ -24,8 +24,8 @@ export async function Footer() {
 
   const year = new Date().getFullYear();
   const whatsapp = settings.whatsappNumber.replace(/[^\d]/g, "");
-  // The tagline is owner-edited, so it may or may not end in a full stop.
-  const intro = settings.tagline.trim().replace(/[.\s]*$/, ".");
+  // Footer copy is independently editable in the visual website editor.
+  // Store branding and the homepage tagline remain controlled by settings.
 
   const columns: { head: string; links: { label: string; href: string }[] }[] = [
     {
@@ -74,8 +74,8 @@ export async function Footer() {
           <p className="font-display text-[28px] uppercase tracking-[0.16em]">
             {settings.storeName}
           </p>
-          <p className="mt-4 max-w-[320px] text-sm font-light leading-[1.7] text-[var(--text-secondary)]">
-            {intro} Order online or by WhatsApp — pay by Mobile Money (MTN, Telecel,
+          <p data-dw-field="footer.description" className="mt-4 max-w-[320px] text-sm font-light leading-[1.7] text-[var(--text-secondary)]">
+            Considered textiles and furnishings for Ghanaian homes. Order online or by WhatsApp — pay by Mobile Money (MTN, Telecel,
             AirtelTigo), card or bank transfer.
           </p>
         </div>
