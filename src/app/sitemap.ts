@@ -15,18 +15,6 @@ export const revalidate = 86400;
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = env.siteUrl();
 
-  const [products, categories] = await Promise.all([
-    db.product.findMany({
-      where: { status: "ACTIVE" },
-      select: { slug: true, updatedAt: true },
-      orderBy: { updatedAt: "desc" },
-    }),
-    db.category.findMany({
-      where: { isActive: true },
-      select: { slug: true, updatedAt: true },
-    }),
-  ]);
-
   const fixed: MetadataRoute.Sitemap = [
     { url: base, lastModified: new Date(), changeFrequency: "daily", priority: 1 },
     { url: `${base}/shop`, lastModified: new Date(), changeFrequency: "daily", priority: 0.9 },
@@ -37,19 +25,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/cookies`, changeFrequency: "yearly", priority: 0.1 },
   ];
 
-  return [
-    ...fixed,
-    ...categories.map((category) => ({
-      url: `${base}/shop?category=${encodeURIComponent(category.slug)}`,
-      lastModified: category.updatedAt,
-      changeFrequency: "weekly" as const,
-      priority: 0.7,
-    })),
-    ...products.map((product) => ({
-      url: `${base}/product/${product.slug}`,
-      lastModified: product.updatedAt,
-      changeFrequency: "weekly" as const,
-      priority: 0.8,
-    })),
-  ];
+  try {
+    const [products, categories] = await Promise.all([
+      db.product.findMany({
+        where: { status: "ACTIVE" },
+        select: { slug: true, updatedAt: true },
+        orderBy: { updatedAt: "desc" },
+      }),
+      db.category.findMany({
+        where: { isActive: true },
+        select: { slug: true, updatedAt: true },
+      }),
+    ]);
+
+    return [
+      ...fixed,
+      ...categories.map((category) => ({
+        url: `${base}/shop?category=${encodeURIComponent(category.slug)}`,
+        lastModified: category.updatedAt,
+        changeFrequency: "weekly" as const,
+        priority: 0.7,
+      })),
+      ...products.map((product) => ({
+        url: `${base}/product/${product.slug}`,
+        lastModified: product.updatedAt,
+        changeFrequency: "weekly" as const,
+        priority: 0.8,
+      })),
+    ];
+  } catch {
+    // Database is unreachable during container build phase on Railway; return fixed URLs safely
+    return fixed;
+  }
 }
