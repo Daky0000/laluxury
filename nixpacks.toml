@@ -5,9 +5,3 @@
 # shows up as a build that behaves differently for no visible reason.
 [phases.setup]
 nixPkgs = ["nodejs_24"]
-
-[variables]
-# Restricts Node.js V8 memory heap on Railway so garbage collection runs aggressively
-# around 384MB rather than letting heap float up to 1GB-2GB (which inflates Railway RAM billing).
-NODE_OPTIONS = "--max-old-space-size=384"
-
