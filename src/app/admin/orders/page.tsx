@@ -85,10 +85,18 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
         title="Orders"
         description={`${total} matching.`}
         action={
-          <ExportLink
-            href={`/api/admin/export/orders${buildQuery({ status, payment, from, to })}`}
-            label={filtered ? "Export these as CSV" : "Export all as CSV"}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <ExportLink
+              href="/api/admin/export?type=orders"
+              label="Export Accounting & Pre-Order CSV"
+            />
+            <Link
+              href="/admin/orders/new"
+              className="inline-flex items-center gap-1.5 rounded-(--radius-card) bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] hover:opacity-95"
+            >
+              + Showroom POS / Multi-Item Order
+            </Link>
+          </div>
         }
       />
 

@@ -53,16 +53,19 @@
   --font-display: var(--font-display), Georgia, "Times New Roman", serif;
   --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, sans-serif;
 
-  /* 16px is the floor for type anywhere in the app, storefront and console
-     alike: below that a price, a stock count or an order reference is a squint
-     on a phone. The two steps under `text-base` are redefined rather than
-     removed, so the smallest size the utilities can reach is still the floor,
-     whoever reaches for it — `text-xs`, `text-sm` and `text-base` all land on
-     16px with the leading that step has always carried. */
-  --text-xs: 1rem;
-  --text-xs--line-height: calc(1.5 / 1);
-  --text-sm: 1rem;
-  --text-sm--line-height: calc(1.5 / 1);
+  /* Restored luxury typography scale.
+     The old override clamped text-xs and text-sm to 1rem, collapsing the entire
+     hierarchy so captions, badges, navigation links, and eyebrows all rendered
+     at the same size as body copy. Now each step is distinct again:
+       text-xs → 0.75rem (12px)  — badges, labels, meta
+       text-sm → 0.875rem (14px) — navigation, secondary UI, captions
+       text-base → 1rem (16px)   — body copy, form fields
+     iOS zoom is prevented by explicit font-size: 1rem on input elements in
+     @layer base below rather than by flattening the whole scale. */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
 
   --radius-card: 0px;
 }
@@ -74,16 +77,16 @@
   --surface-media: #e4e3de;
   --border-subtle: rgba(43, 39, 36, 0.12);
   --border-strong: rgba(43, 39, 36, 0.22);
+  --border-default: rgba(43, 39, 36, 0.12);
   --text-primary: #1a1a18;
   --text-secondary: #56544e;
   --text-muted: #918e86;
   --accent: #7a2e3c;
   --accent-hover: #96525e;
   --accent-contrast: #ffffff;
-  /* Type scale for the editorial headings on the storefront.
-     Nothing in the app sets type below 16px — the tracked-out small caps read
-     as a label at that size just as well, and stay legible on a phone. */
-  --step-eyebrow: 1rem;
+  --gold: #b89130;
+  /* Type scale for the editorial headings on the storefront. */
+  --step-eyebrow: 0.6875rem;
 }
 
 /* The admin console runs on its own denser surface so it is never mistaken
@@ -96,12 +99,14 @@
   --surface-media: #e4e3de;
   --border-subtle: rgba(43, 39, 36, 0.1);
   --border-strong: rgba(43, 39, 36, 0.18);
+  --border-default: rgba(43, 39, 36, 0.1);
   --text-primary: var(--color-ink-900);
   --text-secondary: var(--color-ink-700);
   --text-muted: var(--color-ink-500);
   --accent: var(--color-clay-700);
   --accent-hover: var(--color-clay-600);
   --accent-contrast: #ffffff;
+  --gold: #b89130;
   /* Every shared surface and control rounds itself off in here. */
   --radius-card: 12px;
 }
@@ -150,15 +155,15 @@
     overflow-wrap: break-word;
   }
 
-  /* iOS zooms the page in when a focused field is under 16px. Every field in
-     the app is at the 16px floor already, but `select` and `textarea` inherit
-     from the UA rather than from `body`, so they are said explicitly. */
+  /* iOS zooms the page in when a focused field is under 16px. Rather than
+     collapsing the entire type scale to 16px (which destroyed hierarchy),
+     we explicitly set form controls to 16px — the only place it matters. */
   input,
   select,
   textarea,
   button {
     font-family: inherit;
-    font-size: inherit;
+    font-size: 1rem;
   }
 
   h1,
@@ -205,24 +210,65 @@
     }
   }
 
-  /* Small-caps label used above section headings and on form fields. */
+  /* Consistent section vertical spacing used across all storefront sections. */
+  .lx-section {
+    padding-top: 3.5rem;
+    padding-bottom: 3.5rem;
+  }
+
+  @media (min-width: 640px) {
+    .lx-section {
+      padding-top: 5rem;
+      padding-bottom: 5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .lx-section {
+      padding-top: 6rem;
+      padding-bottom: 6rem;
+    }
+  }
+
+  /* Unified page hero header for all inner pages. */
+  .lx-page-header {
+    padding-top: 2.5rem;
+    padding-bottom: 2rem;
+  }
+
+  @media (min-width: 640px) {
+    .lx-page-header {
+      padding-top: 3.5rem;
+      padding-bottom: 2.5rem;
+    }
+  }
+
+  /* Small-caps label used above section headings and on marketing eyebrows. */
   .lx-eyebrow {
     font-size: var(--step-eyebrow);
-    letter-spacing: 0.32em;
+    letter-spacing: 0.24em;
     text-transform: uppercase;
     color: var(--accent);
-    font-weight: 400;
+    font-weight: 500;
+  }
+
+  /* Form field label — distinct from .lx-eyebrow so field labels don't
+     scream in the accent colour. Uses the same small-caps style but in the
+     secondary text colour. */
+  .lx-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    font-weight: 500;
   }
 
   /* Merchandising labels — "Bestseller", "New" — and the room name under a
      product title. These are decoration rather than reading matter: they sit
-     over a photograph in a couple of words, so they are the one place the 16px
-     floor is stepped under deliberately, and they keep their weight and
-     tracking to stay legible at the smaller size.
+     over a photograph in a couple of words.
 
-     The label is smallest on a phone, where it sits over a tile barely 170px
-     wide and "Bestseller" tracked out at 13px took a third of the photograph's
-     width. It grows back from `sm`, where the tile has room for it. */
+     Scaled down to crisp badge proportions now that text-xs is properly
+     0.75rem again. */
   .lx-badge {
     font-size: 0.625rem;
     line-height: 1.3;
@@ -233,14 +279,14 @@
 
   @media (min-width: 640px) {
     .lx-badge {
-      font-size: 0.75rem;
+      font-size: 0.6875rem;
       letter-spacing: 0.12em;
     }
   }
 
   /* Wide-tracked uppercase used on buttons and meta rows. */
   .lx-caps {
-    font-size: 1rem;
+    font-size: 0.8125rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
   }
@@ -321,7 +367,7 @@
     width: 100%;
     min-width: 34rem;
     border-collapse: collapse;
-    font-size: 1rem;
+    font-size: 0.875rem;
   }
 
   .lx-prose th,
@@ -338,24 +384,23 @@
   }
 
   /* The solid wine call to action from the artboard.
-     Its side padding is fluid: 2.125rem is right on a desktop and is most of a
-     narrow phone's screen once the label is uppercase and tracked out, so the
-     button gives the padding back rather than pushing the label off the edge.
-     The 3rem floor on the height is the touch target, kept whatever the copy. */
+     Refined proportions: min-h-12 (48px) touch target, crisp 12–13px uppercase
+     with 0.18em tracking, and smooth transitions. */
   .lx-cta,
-  .lx-cta-ghost {
+  .lx-cta-ghost,
+  .lx-cta-outline {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     min-height: 3rem;
-    padding: 1rem clamp(1.25rem, 5vw, 2.125rem);
-    font-size: 1rem;
-    letter-spacing: 0.12em;
+    padding: 0.875rem clamp(1.25rem, 5vw, 2.125rem);
+    font-size: 0.8125rem;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
     font-weight: 500;
     text-align: center;
     text-wrap: balance;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   }
 
   .lx-cta {
@@ -377,13 +422,26 @@
     background-color: rgba(253, 250, 244, 0.14);
   }
 
+  /* Accent-outlined button for secondary actions on light backgrounds. */
+  .lx-cta-outline {
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
+    background-color: transparent;
+  }
+
+  .lx-cta-outline:hover {
+    border-color: var(--text-primary);
+    background-color: var(--surface-sunken);
+  }
+
   .lx-field {
     width: 100%;
     min-width: 0;
+    min-height: 2.75rem;
     border: 1px solid var(--border-subtle);
     background-color: var(--surface-raised);
     border-radius: var(--radius-card);
-    padding: 0.625rem 0.75rem;
+    padding: 0.625rem 0.875rem;
     font-size: 1rem;
     color: var(--text-primary);
     transition: border-color 120ms ease;

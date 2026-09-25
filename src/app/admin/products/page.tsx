@@ -127,10 +127,15 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
             </LinkButton>
             <ExportLink href="/api/admin/export/products" />
             {canWrite ? (
-              <LinkButton href="/admin/products/new" size="sm">
-                <Plus className="h-4 w-4" aria-hidden />
-                New product
-              </LinkButton>
+              <>
+                <LinkButton href="/admin/products/bulk" variant="secondary" size="sm">
+                  Bulk FX &amp; Pre-Order Matrix
+                </LinkButton>
+                <LinkButton href="/admin/products/new" size="sm">
+                  <Plus className="h-4 w-4" aria-hidden />
+                  New product
+                </LinkButton>
+              </>
             ) : null}
           </div>
         }

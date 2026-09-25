@@ -6,6 +6,7 @@ import { Check, Heart, Loader2, X } from "lucide-react";
 import { bulkAddToCartAction, buyNowAction } from "@/app/actions/cart";
 import { toggleWishlistAction } from "@/app/actions/misc";
 import { openBag } from "./bag-events";
+import { PreorderRequestForm } from "./preorder-request-form";
 import { formatPrice } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Photo } from "./photo";
@@ -78,7 +79,12 @@ export function VariantPicker({
   onSelectionChange,
   valueImages,
   productId,
+  productTitle = "",
   isSaved,
+  isPreorder = false,
+  preorderLeadTime = null,
+  preorderDepositPercent = null,
+  preorderNote = null,
   description,
 }: {
   options: PickerOption[];
@@ -88,25 +94,34 @@ export function VariantPicker({
   /** Every option value picked so far, so the gallery can follow along. */
   onSelectionChange?: (valueIds: string[]) => void;
   productId: string;
+  productTitle?: string;
   isSaved: boolean;
+  isPreorder?: boolean;
+  preorderLeadTime?: string | null;
+  preorderDepositPercent?: number | null;
+  preorderNote?: string | null;
   description?: ReactNode;
 }) {
   const router = useRouter();
   const hintId = useId();
 
-  // Empty on purpose: the shopper chooses, we do not choose for them.
-  const [selected, setSelected] = useState<Record<string, string>>({});
+  // When each option group has only 1 value (or there are 0 option groups),
+  // pre-select automatically so single-option products are ready in 1 click.
+  const [selected, setSelected] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    if (options.length === 1 && options[0].values.length === 1) {
+      init[options[0].id] = options[0].values[0].id;
+    }
+    return init;
+  });
 
-  /**
-   * How many of each variant the shopper has lined up, keyed by variant id.
-   *
-   * This is the basket-before-the-basket. Someone buying blinds for a house
-   * wants four of the 5ft in ash and two of the 7ft in wine, and having to add
-   * one, wait for the drawer, come back and add the other is how you lose the
-   * second line. Setting a quantity queues it; changing option resets the
-   * stepper to whatever that variant is on, which for an untouched one is zero.
-   */
-  const [queued, setQueued] = useState<Record<string, number>>({});
+  const [queued, setQueued] = useState<Record<string, number>>(() => {
+    if (options.length === 0 && variants[0]) {
+      return { [variants[0].id]: 1 };
+    }
+    return {};
+  });
+  const [showCustomPreorder, setShowCustomPreorder] = useState(false);
   const [pending, startTransition] = useTransition();
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +145,7 @@ export function VariantPicker({
       (v) =>
         v.optionValueIds.includes(valueId) &&
         others.every(([, id]) => v.optionValueIds.includes(id)) &&
-        (v.available === null || v.available > 0),
+        (isPreorder || v.available === null || v.available > 0),
     );
   }
 
@@ -145,12 +160,21 @@ export function VariantPicker({
     setAdded(false);
     setSelected((prev) => {
       const next = { ...prev };
-      // Tapping the chosen value again clears it, which is the only way back
-      // to the full gallery and the range price.
       if (next[optionId] === valueId) delete next[optionId];
       else next[optionId] = valueId;
 
       onSelectionChange?.(Object.values(next));
+
+      // As soon as all options are selected, default the resolved variant's quantity to 1
+      // if no quantity was queued yet, so the customer can click "Add to bag" in one tap!
+      const chosenIds = Object.values(next);
+      if (chosenIds.length === options.length) {
+        const resolved = variants.find((v) => chosenIds.every((id) => v.optionValueIds.includes(id)));
+        if (resolved && (isPreorder || resolved.available === null || resolved.available > 0)) {
+          setQueued((qPrev) => (qPrev[resolved.id] ? qPrev : { ...qPrev, [resolved.id]: 1 }));
+        }
+      }
+
       return next;
     });
   }
@@ -180,34 +204,37 @@ export function VariantPicker({
     return map;
   }, [options]);
 
-  const maxQuantity = activeVariant?.available ?? 99;
-  const soldOut = activeVariant !== null && activeVariant.available === 0;
+  const maxQuantity = isPreorder ? 99 : (activeVariant?.available ?? 99);
+  const soldOut = !isPreorder && activeVariant !== null && activeVariant.available === 0;
 
-  /** The stepper always reads the current variant's own count, zero if new. */
-  const quantity = activeVariant ? (queued[activeVariant.id] ?? 0) : 0;
+  /** The stepper defaults to 1 when an active in-stock variant is selected. */
+  const quantity = activeVariant ? (queued[activeVariant.id] ?? (soldOut ? 0 : 1)) : 0;
 
   function setQuantity(next: number) {
     if (!activeVariant) return;
     setError(null);
     setAdded(false);
-    const clamped = Math.max(0, Math.min(next, activeVariant.available ?? 99));
+    const limit = isPreorder ? 99 : (activeVariant.available ?? 99);
+    const clamped = Math.max(0, Math.min(next, limit));
     setQueued((prev) => {
       const copy = { ...prev };
-      // Zero is a removal, not a line of nothing.
       if (clamped === 0) delete copy[activeVariant.id];
       else copy[activeVariant.id] = clamped;
       return copy;
     });
   }
 
-  /** Queued lines, in the order the option values are shown. */
-  const lines = useMemo(
-    () =>
-      variants
-        .filter((v) => (queued[v.id] ?? 0) > 0)
-        .map((v) => ({ variant: v, quantity: queued[v.id] })),
-    [queued, variants],
-  );
+  /** Queued lines, or the currently selected variant at quantity 1 if none explicitly stepped yet. */
+  const lines = useMemo(() => {
+    const explicit = variants
+      .filter((v) => (queued[v.id] ?? 0) > 0)
+      .map((v) => ({ variant: v, quantity: queued[v.id] }));
+    if (explicit.length > 0) return explicit;
+    if (activeVariant && !soldOut) {
+      return [{ variant: activeVariant, quantity: 1 }];
+    }
+    return [];
+  }, [queued, variants, activeVariant, soldOut]);
 
   const totalItems = lines.reduce((sum, line) => sum + line.quantity, 0);
   const totalPrice = lines.reduce((sum, line) => sum + line.quantity * line.variant.price, 0);
@@ -217,11 +244,6 @@ export function VariantPicker({
     ? compareAt - activeVariant.price
     : 0;
 
-  /**
-   * What stands between the shopper and a purchase, in the order they meet it:
-   * the options still unchosen -- named, so it reads "Choose a size" and never
-   * "Choose an option" -- then a combination nobody stocks, then no stock.
-   */
   const blockedFromBuying =
     awaiting.length > 0
       ? `Choose ${listNames(awaiting.map((option) => option.name))} first.`
@@ -231,7 +253,6 @@ export function VariantPicker({
           ? "This one is out of stock."
           : null;
 
-  /** The bag also needs a quantity, which quick order takes as one. */
   const blockedFromBag =
     lines.length > 0
       ? null
@@ -251,8 +272,6 @@ export function VariantPicker({
         setError(result.message ?? "Could not add that to your bag.");
         return;
       }
-      // The queue has moved into the bag; leaving it on screen would invite
-      // adding the same run of blinds a second time.
       setQueued({});
       setAdded(true);
       setTimeout(() => setAdded(false), 2500);
@@ -270,7 +289,6 @@ export function VariantPicker({
     const variant = activeVariant;
     setError(null);
     startBuying(async () => {
-      // On success this redirects, so anything returned is a failure.
       const result = await buyNowAction(variant.id, Math.max(1, quantity));
       if (result && !result.ok) setError(result.message ?? "Could not start that order.");
     });
@@ -292,9 +310,6 @@ export function VariantPicker({
     <div>
       {/* Price */}
       <div className="mt-5 flex flex-wrap items-baseline gap-x-3.5 gap-y-2">
-        {/* A range reads "GHS 450.00 – GHS 1,200.00" — twenty-odd characters,
-            which at a flat 38px is wider than a phone. The size follows the
-            viewport up to the artboard's 38px and no further. */}
         <span className="text-[clamp(1.75rem,7vw,38px)] font-semibold leading-none tabular-nums">
           {activeVariant
             ? formatPrice(activeVariant.price)
@@ -316,9 +331,13 @@ export function VariantPicker({
         ) : null}
       </div>
 
-      {/* Stock line */}
+      {/* Stock / Pre-Order status line */}
       <p className="mt-2 text-sm font-medium">
-        {!activeVariant && awaiting.length > 0 ? (
+        {isPreorder ? (
+          <span className="text-[#8C6528]">
+            Pre-Order Piece · Sourced &amp; delivered in {preorderLeadTime ?? "2–3 weeks"}
+          </span>
+        ) : !activeVariant && awaiting.length > 0 ? (
           <span className="text-[var(--text-secondary)]">
             Choose {listNames(awaiting.map((option) => option.name))} to see the price and stock.
           </span>
@@ -327,13 +346,33 @@ export function VariantPicker({
             That combination is not available — try another.
           </span>
         ) : soldOut ? (
-          <span className="text-danger">Out of stock</span>
+          <span className="text-danger">Currently out of stock — available to pre-order on request below</span>
         ) : activeVariant.available !== null && activeVariant.available <= 5 ? (
           <span className="text-warning">Only {activeVariant.available} left</span>
         ) : (
           <span className="text-sage-600">In stock · ships in 1–2 days</span>
         )}
       </p>
+
+      {/* Pre-Order Concierge Banner */}
+      {isPreorder ? (
+        <div className="mt-4 border border-amber-800/30 bg-[#231B12] p-4 text-sm text-[#F4E6C8]">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#D4AF37]">
+            Pre-Order · Ordered Specially For You
+          </p>
+          <p className="mt-1.5 leading-relaxed text-[#E2D4B7]">
+            {preorderNote ??
+              `This piece is not currently kept on the shelf. Place your pre-order today and we will source and deliver it within ${
+                preorderLeadTime ?? "2–3 weeks"
+              }.`}
+          </p>
+          {preorderDepositPercent ? (
+            <p className="mt-1.5 text-xs text-[#D4AF37]">
+              Flexible payment: Pay in full or reserve with a {preorderDepositPercent}% deposit at checkout.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/*
         Wrapped rather than rendered bare. `description` is authored by the
@@ -556,12 +595,16 @@ export function VariantPicker({
               {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
               {added ? <Check className="h-4 w-4" aria-hidden /> : null}
               {added
-                ? "Added to bag"
+                ? isPreorder
+                  ? "Pre-order added"
+                  : "Added to bag"
                 : soldOut && lines.length === 0
                   ? "Out of stock"
                   : isBulk
-                    ? `Add bulk to bag · ${totalItems}`
-                    : "Add to bag"}
+                    ? `${isPreorder ? "Pre-order bulk" : "Add bulk to bag"} · ${totalItems}`
+                    : isPreorder
+                      ? "Pre-order · Add to bag"
+                      : "Add to bag"}
             </button>
             {blockedFromBag ? (
               <BlockedHint id={`${hintId}-bag`} reason={blockedFromBag} />
@@ -592,27 +635,16 @@ export function VariantPicker({
           </button>
         </div>
 
-        {/*
-          What is lined up so far. Only worth showing once there is more than
-          one line — for a single one the stepper above already says it, and a
-          list of one reads like a bug.
-        */}
         {isBulk ? (
           <div className="mt-4 border border-[var(--border-subtle)]">
             <ul className="divide-y divide-[var(--border-subtle)]">
               {lines.map((line) => {
-                // What was actually chosen, spelled out: a queue of four reads
-                // as four prices unless each line says which colour it is.
                 const details = line.variant.optionValueIds
                   .map((id) => valueById.get(id))
                   .filter((detail) => detail !== undefined);
                 const swatch = details.find((detail) => detail.hexColor)?.hexColor ?? null;
 
                 return (
-                // Name, unit price, line total and a remove control is four
-                // columns of a table, and a phone has room for two. Below `sm`
-                // the unit price moves under the name and only the line total
-                // stays on the right, where the eye is already adding them up.
                 <li
                   key={line.variant.id}
                   className="flex items-center gap-2.5 px-3 py-2 text-sm sm:gap-3 sm:px-3.5 sm:py-2.5"
@@ -690,10 +722,46 @@ export function VariantPicker({
           )}
         >
           {buying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-          Buy it now
+          {isPreorder ? "Pre-order it now" : "Buy it now"}
         </button>
         {blockedFromBuying ? (
           <BlockedHint id={`${hintId}-buy`} reason={blockedFromBuying} />
+        ) : null}
+      </div>
+
+      {/* 1-Click WhatsApp Concierge & Material Swatches */}
+      <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+        <a
+          href={`https://wa.me/233240000000?text=${encodeURIComponent(
+            `Hello LaLuxury Concierge, I am interested in "${productTitle}"${activeVariant && activeVariant.title !== "Default" ? ` (${activeVariant.title})` : ""}${activeVariant ? ` — ${formatPrice(activeVariant.price)}` : ""}. ${isPreorder ? "I would like to confirm Pre-Order availability and lead time." : "Is this available for immediate dispatch?"}`,
+          )}`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex min-h-11 items-center justify-center gap-2 border border-sage-600/40 bg-sage-600/10 px-4 py-2.5 text-center text-xs font-medium uppercase tracking-[0.12em] text-sage-600 transition-colors hover:bg-sage-600 hover:text-white"
+        >
+          Ask / Order on WhatsApp
+        </a>
+
+        <button
+          type="button"
+          onClick={() => setShowCustomPreorder((v) => !v)}
+          className="flex min-h-11 items-center justify-center gap-2 border border-amber-800/35 bg-amber-950/10 px-4 py-2.5 text-center text-xs font-medium uppercase tracking-[0.12em] text-[#8C6528] transition-colors hover:bg-amber-950/20"
+        >
+          {showCustomPreorder ? "Hide Swatch & Custom Form" : "Request Swatches / Custom Size"}
+        </button>
+      </div>
+
+      {/* Custom Pre-Order / Out-of-stock Sourcing Drawer */}
+      <div className="mt-3">
+        {showCustomPreorder || soldOut ? (
+          <div className="mt-2">
+            <PreorderRequestForm
+              compact
+              defaultProductId={productId}
+              defaultProductTitle={productTitle}
+              defaultVariantTitle={activeVariant?.title ?? ""}
+            />
+          </div>
         ) : null}
       </div>
 

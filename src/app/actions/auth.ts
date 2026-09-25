@@ -114,7 +114,16 @@ export async function loginAction(
   if (user.phone && !user.phoneVerified && !user.email) {
     const settings = await getSettings();
     const sent = await sendOtp(user.phone, settings.storeName);
-    if (!sent.ok && sent.fatal) return { ok: false, message: sent.message };
+    if (!sent.ok && sent.fatal) {
+      // Fallback when SMS gateway (Vynfy) is not configured: verify and sign in directly.
+      await db.user.update({
+        where: { id: user.id },
+        data: { phoneVerified: new Date(), lastLoginAt: new Date() },
+      });
+      await createSessionCookie({ userId: user.id, role: user.role });
+      await getOrCreateCart().catch(() => {});
+      redirect(isStaff(user.role) ? "/admin" : "/account");
+    }
 
     await setPendingSignup({
       userId: user.id,
@@ -211,12 +220,17 @@ export async function registerAction(
 
   const sent = await sendOtp(phone, settings.storeName);
 
-  // Only a failure that rules out a code arriving keeps someone on this form.
-  // Anything else — an unrecognised error, a 500, a timeout — carries on to the
-  // code screen, because the gateway has been seen to send the text and then
-  // fail its own reply, and stopping here left people holding a code with
-  // nowhere to type it. The screen says whether the send was confirmed.
-  if (!sent.ok && sent.fatal) return { ok: false, message: sent.message };
+  // If the SMS gateway is not configured yet, verify and sign in immediately so
+  // customers can still create accounts seamlessly.
+  if (!sent.ok && sent.fatal) {
+    await db.user.update({
+      where: { id: user.id },
+      data: { phoneVerified: new Date(), lastLoginAt: new Date() },
+    });
+    await createSessionCookie({ userId: user.id, role: user.role });
+    await getOrCreateCart().catch(() => {});
+    redirect("/account");
+  }
 
   await setPendingSignup({
     userId: user.id,

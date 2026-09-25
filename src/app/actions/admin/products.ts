@@ -24,8 +24,10 @@ function fail(message: string): AdminState {
  */
 function revalidateProduct(id?: string) {
   revalidatePath("/admin/products");
+  revalidatePath("/admin/preorders");
   if (id) revalidatePath(`/admin/products/${id}`);
   revalidatePath("/shop");
+  revalidatePath("/pre-order");
   revalidatePath("/");
   // Every product page at once: the slug may itself have just changed.
   revalidatePath("/product/[slug]", "page");
@@ -45,6 +47,10 @@ const productSchema = z.object({
   care: z.string().optional(),
   tags: z.string().optional(),
   isFeatured: z.boolean().optional(),
+  isPreorder: z.boolean().optional(),
+  preorderLeadTime: z.string().optional(),
+  preorderDepositPercent: z.number().int().min(10).max(100).nullable().optional(),
+  preorderNote: z.string().optional(),
   metaTitle: z.string().optional(),
   metaDescription: z.string().optional(),
   categoryIds: z.array(z.string()).optional(),
@@ -56,6 +62,7 @@ const productSchema = z.object({
 });
 
 function parseProductForm(formData: FormData) {
+  const rawDeposit = String(formData.get("preorderDepositPercent") ?? "").trim();
   return productSchema.safeParse({
     slug: formData.get("slug") || undefined,
     compareAtPrice: formData.get("compareAtPrice") || undefined,
@@ -68,6 +75,10 @@ function parseProductForm(formData: FormData) {
     care: formData.get("care") || undefined,
     tags: formData.get("tags") || undefined,
     isFeatured: formData.get("isFeatured") === "on",
+    isPreorder: formData.get("isPreorder") === "on",
+    preorderLeadTime: formData.get("preorderLeadTime") || undefined,
+    preorderDepositPercent: rawDeposit ? Number(rawDeposit) : null,
+    preorderNote: formData.get("preorderNote") || undefined,
     metaTitle: formData.get("metaTitle") || undefined,
     metaDescription: formData.get("metaDescription") || undefined,
     categoryIds: formData.getAll("categoryIds").map(String).filter(Boolean),
@@ -117,6 +128,15 @@ export async function createProductAction(
     sku = `${sku}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
   }
 
+  const categorySet = new Set(data.categoryIds ?? []);
+  if (data.isPreorder) {
+    const preorderCat = await db.category.findUnique({
+      where: { slug: "pre-order" },
+      select: { id: true },
+    });
+    if (preorderCat) categorySet.add(preorderCat.id);
+  }
+
   const product = await db.product.create({
     data: {
       title: data.title,
@@ -129,6 +149,10 @@ export async function createProductAction(
       care: data.care ?? null,
       tags,
       isFeatured: Boolean(data.isFeatured),
+      isPreorder: Boolean(data.isPreorder),
+      preorderLeadTime: data.isPreorder ? (data.preorderLeadTime ?? "4–6 weeks") : null,
+      preorderDepositPercent: data.isPreorder ? (data.preorderDepositPercent ?? 50) : null,
+      preorderNote: data.isPreorder ? (data.preorderNote ?? null) : null,
       metaTitle: data.metaTitle ?? null,
       metaDescription: data.metaDescription ?? null,
       publishedAt: data.status === "ACTIVE" ? new Date() : null,
@@ -147,11 +171,16 @@ export async function createProductAction(
           title: "Default",
           sku,
           price,
-          inventory: { create: { onHand: Number(formData.get("stock")) || 0 } },
+          inventory: {
+            create: {
+              onHand: Number(formData.get("stock")) || 0,
+              allowBackorder: Boolean(data.isPreorder),
+            },
+          },
         },
       },
       categories: {
-        create: (data.categoryIds ?? []).map((categoryId) => ({ categoryId })),
+        create: [...categorySet].map((categoryId) => ({ categoryId })),
       },
       collections: {
         create: (data.collectionIds ?? []).map((collectionId) => ({ collectionId })),
@@ -164,7 +193,7 @@ export async function createProductAction(
     action: "product.create",
     entity: "Product",
     entityId: product.id,
-    after: { title: product.title, slug, price },
+    after: { title: product.title, slug, price, isPreorder: product.isPreorder },
   });
 
   revalidateProduct(product.id);
@@ -186,9 +215,6 @@ export async function updateProductAction(
   const data = parsed.data;
   const tags = splitTags(data.tags);
 
-  // The handle follows the title until somebody types one by hand, at which
-  // point it is theirs: a link already shared on WhatsApp must keep working
-  // through a retitle. A typed handle is cleaned and made unique like any other.
   const typedSlug = data.slug?.trim() ? slugify(data.slug) : "";
   const slug = typedSlug
     ? typedSlug === existing.slug
@@ -206,6 +232,15 @@ export async function updateProductAction(
   }
   if (compareAtPrice !== null && compareAtPrice < 0) return fail("The was-price cannot be negative.");
 
+  const categorySet = new Set(data.categoryIds ?? []);
+  if (data.isPreorder) {
+    const preorderCat = await db.category.findUnique({
+      where: { slug: "pre-order" },
+      select: { id: true },
+    });
+    if (preorderCat) categorySet.add(preorderCat.id);
+  }
+
   await db.$transaction(async (tx) => {
     await tx.product.update({
       where: { id: productId },
@@ -221,6 +256,10 @@ export async function updateProductAction(
         care: data.care ?? null,
         tags,
         isFeatured: Boolean(data.isFeatured),
+        isPreorder: Boolean(data.isPreorder),
+        preorderLeadTime: data.isPreorder ? (data.preorderLeadTime ?? "4–6 weeks") : null,
+        preorderDepositPercent: data.isPreorder ? (data.preorderDepositPercent ?? 50) : null,
+        preorderNote: data.isPreorder ? (data.preorderNote ?? null) : null,
         metaTitle: data.metaTitle ?? null,
         metaDescription: data.metaDescription ?? null,
         publishedAt:
@@ -235,11 +274,20 @@ export async function updateProductAction(
       },
     });
 
+    // When a product is marked Pre-Order, allow backorders on all its variants
+    // so customers can pre-order even when onHand stock is 0.
+    if (data.isPreorder) {
+      await tx.inventoryItem.updateMany({
+        where: { variant: { productId } },
+        data: { allowBackorder: true },
+      });
+    }
+
     // Membership is small, so replace wholesale rather than diffing.
     await tx.productCategory.deleteMany({ where: { productId } });
-    if (data.categoryIds?.length) {
+    if (categorySet.size > 0) {
       await tx.productCategory.createMany({
-        data: data.categoryIds.map((categoryId) => ({ productId, categoryId })),
+        data: [...categorySet].map((categoryId) => ({ productId, categoryId })),
       });
     }
 
@@ -256,8 +304,8 @@ export async function updateProductAction(
     action: "product.update",
     entity: "Product",
     entityId: productId,
-    before: { title: existing.title, status: existing.status },
-    after: { title: data.title, status: data.status },
+    before: { title: existing.title, status: existing.status, isPreorder: existing.isPreorder },
+    after: { title: data.title, status: data.status, isPreorder: Boolean(data.isPreorder) },
   });
 
   revalidateProduct(productId);

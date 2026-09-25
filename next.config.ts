@@ -34,6 +34,12 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        source: "/catalog/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
@@ -47,15 +53,17 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  compress: true,
+  poweredByHeader: false,
+
   images: {
-    // The owner pastes picture addresses into the admin, and they come from
-    // wherever their photographer put them, so any https host is fair game —
-    // the optimiser only ever fetches images, and refuses anything else.
+    // Disables on-the-fly Sharp/WASM image re-encoding on the container CPU.
+    // Catalog images are already pre-optimized WebP assets, and media library
+    // uploads are compressed on save and served with 1-year immutable caching.
+    // Disabling on-the-fly re-encoding slashes Railway vCPU usage and eliminates
+    // out-of-memory container crashes caused by image buffer allocation.
+    unoptimized: true,
     remotePatterns: [{ protocol: "https", hostname: "**" }],
-    // Catalogue pictures never change behind their address: an edit uploads a
-    // new asset with a new id. So the optimised copies are worth keeping for a
-    // month rather than re-encoding them every hour.
-    minimumCacheTTL: 2678400,
   },
 };
 

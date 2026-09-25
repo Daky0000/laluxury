@@ -31,7 +31,7 @@ export function Hero({ settings }: { settings: StoreSettings }) {
 
       <div className="lx-container relative flex h-full flex-col justify-end pb-10 sm:pb-16">
         {settings.heroEyebrow ? (
-          <p className="mb-4 text-sm uppercase tracking-[0.2em] text-[#EDEAE3] sm:mb-5 sm:tracking-[0.34em]">
+          <p className="mb-4 text-xs uppercase tracking-[0.24em] text-[#EDEAE3] sm:mb-5 sm:tracking-[0.32em]">
             {settings.heroEyebrow}
           </p>
         ) : null}
@@ -47,7 +47,7 @@ export function Hero({ settings }: { settings: StoreSettings }) {
         </h1>
 
         {settings.heroBody ? (
-          <p className="mt-5 max-w-[440px] text-base leading-relaxed font-light text-[#E4E1D9] sm:mt-6">
+          <p className="mt-5 max-w-[440px] text-sm sm:text-base leading-relaxed font-light text-[#E4E1D9] sm:mt-6">
             {settings.heroBody}
           </p>
         ) : null}

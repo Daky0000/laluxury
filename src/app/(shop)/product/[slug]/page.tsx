@@ -99,8 +99,12 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
   }));
 
   const category = product.categories[0]?.category;
+  const isPreorder =
+    Boolean(product.isPreorder) ||
+    product.categories.some((c) => c.category.slug === "pre-order") ||
+    product.tags.some((t) => t.toLowerCase() === "pre-order" || t.toLowerCase() === "preorder");
   const badgeTag = product.tags.find((tag) => BADGES[tag.toLowerCase()]);
-  const badge = badgeTag ? BADGES[badgeTag.toLowerCase()] : null;
+  const badge = isPreorder ? "Pre-Order" : badgeTag ? BADGES[badgeTag.toLowerCase()] : null;
 
   const perks = [
     settings.freeShippingThreshold
@@ -130,9 +134,9 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
   ].filter((section) => section.body.trim().length > 0);
 
   return (
-    <div className="lx-container py-8">
+    <div className="lx-container py-8 sm:py-12">
       {/* Breadcrumb */}
-      <nav aria-label="Breadcrumb" className="mb-6 text-sm tracking-[0.04em] text-[var(--text-muted)]">
+      <nav aria-label="Breadcrumb" className="mb-6 text-xs tracking-[0.04em] text-[var(--text-muted)]">
         <ol className="flex flex-wrap items-center gap-2">
           <li>
             <Link href="/" className="hover:text-[var(--text-primary)]">
@@ -144,7 +148,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
               <li aria-hidden>/</li>
               <li>
                 <Link
-                  href={`/shop?category=${category.slug}`}
+                  href={category.slug === "pre-order" ? "/pre-order" : `/shop?category=${category.slug}`}
                   className="hover:text-[var(--text-primary)]"
                 >
                   {category.name}
@@ -165,10 +169,14 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
         badge={badge}
         productId={product.id}
         isSaved={saved}
+        isPreorder={isPreorder}
+        preorderLeadTime={product.preorderLeadTime ?? (isPreorder ? "2–3 weeks" : null)}
+        preorderDepositPercent={product.preorderDepositPercent}
+        preorderNote={product.preorderNote}
         header={
           <>
             {category ? (
-              <p className="text-sm uppercase tracking-[0.2em] text-[var(--accent)]">
+              <p className="lx-eyebrow">
                 {category.name}
               </p>
             ) : null}
@@ -201,7 +209,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
         }
         description={
           product.shortDescription ? (
-            <p className="mt-6 max-w-[460px] text-base font-light leading-relaxed text-[var(--text-secondary)]">
+            <p className="mt-6 max-w-[460px] text-sm sm:text-base font-light leading-relaxed text-[var(--text-secondary)]">
               {product.shortDescription}
             </p>
           ) : null
@@ -215,10 +223,10 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
                 return (
                   <li
                     key={perk.label}
-                    className="flex items-center gap-2.5 text-sm text-[var(--text-secondary)]"
+                    className="flex items-center gap-2.5 text-xs text-[var(--text-secondary)]"
                   >
                     <Icon
-                      className="h-[19px] w-[19px] shrink-0 text-[var(--accent)]"
+                      className="h-4 w-4 shrink-0 text-[var(--accent)]"
                       strokeWidth={1.5}
                       aria-hidden
                     />
@@ -236,7 +244,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
                   open={index === 0}
                   className="group border-b border-[var(--border-subtle)]"
                 >
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4.5 text-sm tracking-[0.04em] marker:hidden [&::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4.5 text-xs uppercase tracking-[0.12em] marker:hidden [&::-webkit-details-marker]:hidden">
                     {section.title}
                     <span aria-hidden className="text-lg leading-none text-[var(--accent-hover)]">
                       <span className="group-open:hidden">+</span>

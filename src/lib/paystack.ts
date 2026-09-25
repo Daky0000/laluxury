@@ -174,3 +174,111 @@ export function describeChannel(channel: string | null): string {
       return channel ? channel.replace(/_/g, " ") : "Unknown";
   }
 }
+
+// --- Direct Mobile Money Push-to-Phone (Ghana USSD / STK PIN Prompt) --------
+
+export type MomoProvider = "mtn" | "vod" | "tgo";
+
+export const MOMO_PROVIDER_LABELS: Record<MomoProvider, string> = {
+  mtn: "MTN Mobile Money (MoMo)",
+  vod: "Telecel Cash (Vodafone)",
+  tgo: "AT Money (AirtelTigo)",
+};
+
+/**
+ * Auto-detects the Ghanaian mobile money network from standard phone prefixes:
+ * - MTN: 024, 054, 055, 059, 025
+ * - Telecel (Vodafone): 020, 050
+ * - AT (AirtelTigo): 027, 057, 026, 056
+ */
+export function detectGhanaMomoProvider(rawPhone: string): MomoProvider {
+  const digits = rawPhone.replace(/\D/g, "");
+  // Normalise 233XXXXXXXXX -> 0XXXXXXXXX
+  const local = digits.startsWith("233") && digits.length >= 12
+    ? "0" + digits.slice(3)
+    : digits;
+
+  const prefix = local.slice(0, 3);
+  if (["020", "050"].includes(prefix)) return "vod";
+  if (["027", "057", "026", "056"].includes(prefix)) return "tgo";
+  return "mtn";
+}
+
+/** Normalises a Ghana number into 0XXXXXXXXX format expected by Paystack Charge API. */
+export function normaliseGhanaMomoPhone(rawPhone: string): string {
+  const digits = rawPhone.replace(/\D/g, "");
+  if (digits.startsWith("233") && digits.length >= 12) {
+    return "0" + digits.slice(3, 12);
+  }
+  if (digits.startsWith("0") && digits.length >= 10) {
+    return digits.slice(0, 10);
+  }
+  if (digits.length === 9) {
+    return "0" + digits;
+  }
+  return digits;
+}
+
+export type PaystackChargeStatus =
+  | "pay_offline" // USSD prompt pushed to customer's phone awaiting 4-digit MoMo PIN
+  | "send_otp"    // Telco sent SMS OTP first before triggering PIN prompt
+  | "success"     // Immediately authorised & paid
+  | "pending"
+  | "failed";
+
+export type PaystackChargeResult = {
+  reference: string;
+  status: PaystackChargeStatus;
+  display_text?: string;
+  message?: string;
+};
+
+/**
+ * Initiates a Direct Mobile Money Charge (`POST /charge`) via Paystack.
+ * This sends a live USSD / STK push prompt directly to the customer's handset
+ * asking them to enter their 4-digit MoMo PIN.
+ */
+export async function chargeMobileMoney(args: {
+  email: string;
+  amount: number; // in pesewas (minor units)
+  phone: string;
+  provider?: MomoProvider;
+  reference: string;
+  metadata?: Record<string, unknown>;
+}): Promise<PaystackChargeResult> {
+  const cleanPhone = normaliseGhanaMomoPhone(args.phone);
+  const provider = args.provider ?? detectGhanaMomoProvider(cleanPhone);
+
+  return call<PaystackChargeResult>("/charge", {
+    method: "POST",
+    body: {
+      email: args.email,
+      amount: args.amount,
+      currency: "GHS",
+      reference: args.reference,
+      mobile_money: {
+        phone: cleanPhone,
+        provider,
+      },
+      metadata: args.metadata ?? {},
+    },
+  });
+}
+
+/**
+ * Submits the OTP (`POST /charge/submit_otp`) if the telco requires an OTP
+ * before popping up the MoMo PIN prompt on the customer's handset.
+ */
+export async function submitMobileMoneyOtp(args: {
+  reference: string;
+  otp: string;
+}): Promise<PaystackChargeResult> {
+  return call<PaystackChargeResult>("/charge/submit_otp", {
+    method: "POST",
+    body: {
+      reference: args.reference,
+      otp: args.otp.trim(),
+    },
+  });
+}
+

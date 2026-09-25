@@ -18,6 +18,10 @@ import {
   Star,
   FolderTree,
   ShoppingBag,
+  Clock,
+  Ship,
+  TrendingUp,
+  Calculator,
   Menu,
   X,
 } from "lucide-react";
@@ -26,7 +30,11 @@ import { useOverlay } from "@/lib/use-overlay";
 
 const ICONS = {
   dashboard: LayoutDashboard,
+  analytics: TrendingUp,
+  pos: Calculator,
   orders: ShoppingCart,
+  preorders: Clock,
+  shipments: Ship,
   products: Package,
   categories: FolderTree,
   carts: ShoppingBag,

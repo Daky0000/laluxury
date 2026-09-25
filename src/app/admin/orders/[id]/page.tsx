@@ -15,6 +15,7 @@ import { Card, Badge, Divider } from "@/components/ui";
 import { AssignOrderCustomer } from "@/components/admin/order-customer";
 import { OrderControls } from "@/components/admin/order-controls";
 import { EditOrderAddress, OrderToolbar } from "@/components/admin/order-extras";
+import { MomoPinPushCard } from "@/components/admin/momo-pin-push-card";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -57,27 +58,49 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
         <Badge tone={order.paymentStatus === "SUCCESS" ? "success" : "neutral"}>
           {PAYMENT_STATUS_LABELS[order.paymentStatus]}
         </Badge>
+        {order.hasPreorderItems ? (
+          <Badge tone="accent">
+            PRE-ORDER ({order.preorderStage.replace(/_/g, " ")})
+          </Badge>
+        ) : null}
         <span className="text-sm text-[var(--text-secondary)]">
           Placed {formatDate(order.placedAt, true)}
         </span>
-        <span className="ml-auto">
+        <span className="ml-auto flex flex-wrap items-center gap-2">
+          <Link
+            href={`/orders/${order.orderNumber}/invoice`}
+            target="_blank"
+            className="inline-flex items-center rounded-sm border border-[var(--border-subtle)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)]"
+          >
+            Tax / Pro-Forma Invoice PDF ↗
+          </Link>
+          <Link
+            href={`/orders/${order.orderNumber}/invoice?type=waybill`}
+            target="_blank"
+            className="inline-flex items-center rounded-sm border border-[var(--border-subtle)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)]"
+          >
+            White-Glove Waybill ↗
+          </Link>
           {canWrite ? (
             <OrderToolbar orderId={order.id} orderNumber={order.orderNumber} />
-          ) : (
-            <a
-              href={`/print/orders/${order.id}`}
-              target="_blank"
-              rel="noopener"
-              className="text-sm text-[var(--accent)] underline-offset-4 hover:underline"
-            >
-              Print invoice
-            </a>
-          )}
+          ) : null}
         </span>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="flex flex-col gap-6">
+          {canWrite ? (
+            <MomoPinPushCard
+              orderId={order.id}
+              orderNumber={order.orderNumber}
+              defaultPhone={order.phone ?? order.shippingAddress?.phone ?? ""}
+              totalMinor={order.total}
+              depositMinor={order.depositAmount}
+              isPaid={order.paymentStatus === "SUCCESS"}
+              balancePaid={Boolean(order.balancePaidAt)}
+            />
+          ) : null}
+
           {/* Items */}
           <Card className="p-5">
             <h2 className="lx-eyebrow mb-4">Items</h2>

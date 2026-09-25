@@ -31,7 +31,7 @@ import type { Prisma } from "../src/generated/prisma/client";
  */
 
 /** Bump to force the catalog to re-apply without otherwise changing it. */
-const CATALOG_SCHEMA_VERSION = 2;
+const CATALOG_SCHEMA_VERSION = 3;
 
 const REVISION_KEY = "catalog.revision";
 
@@ -330,6 +330,14 @@ async function seedCatalog() {
       description: "Curtains, blinds and rods, measured for Ghanaian windows.",
       imageUrl: "/catalog/room-windows.webp",
     },
+    {
+      name: "Pre-Order",
+      slug: "pre-order",
+      position: 4,
+      description:
+        "Not on the shelf yet — reserve yours today and we will order, custom-finish or source it specially for you.",
+      imageUrl: "/catalog/room-living.webp",
+    },
   ];
 
   const categories = new Map<string, string>();
@@ -394,6 +402,10 @@ async function seedCatalog() {
     care?: string;
     compareAt?: number;
     featured?: boolean;
+    isPreorder?: boolean;
+    preorderLeadTime?: string;
+    preorderDepositPercent?: number;
+    preorderNote?: string;
     options?: OptionSeed[];
     variants: VariantSeed[];
   };
@@ -685,6 +697,159 @@ async function seedCatalog() {
         { suffix: "3M", options: { Size: "3m · 3-in-one" }, price: 90, stock: 13 },
       ],
     },
+
+    // --- Pre-Order (Made to order / Sourced on request) --------------------
+    {
+      title: "Hotel Suite 800TC Egyptian Cotton Trousseau",
+      slug: "hotel-suite-egyptian-cotton-trousseau-preorder",
+      short: "Sourced on request · Complete 8-piece luxury master bedroom suite in 800-thread-count Egyptian cotton.",
+      description:
+        "Not kept on the shelf — ordered and custom-packed specifically for your bedroom upon reservation.\n" +
+        "Includes one oversized duvet cover, one deep-pocket fitted sheet, one flat sheet, four Oxford pillowcases and one quilted bed runner. Woven from long-staple 800TC Egyptian cotton with a subtle sateen lustre.",
+      images: [photo("bedsheet-02"), photo("bedsheet-12"), photo("bedsheet-20")],
+      categories: ["pre-order", "bedding"],
+      collections: ["new-in"],
+      tags: ["pre-order", "luxe", "bedding", "egyptian-cotton", "trousseau"],
+      material: "100% long-staple Egyptian cotton, 800 thread count",
+      care: "Warm machine wash at 40°C. Line dry in shade.",
+      compareAt: 1850,
+      featured: true,
+      isPreorder: true,
+      preorderLeadTime: "10–14 days",
+      preorderDepositPercent: 50,
+      preorderNote: "Reserved & sourced specifically for you. Arrives in 10–14 days with complimentary quality inspection.",
+      options: [
+        {
+          name: "Size",
+          values: [{ value: "Queen (6×6)" }, { value: "King (7×7)" }, { value: "Super King (8×8)" }],
+        },
+        {
+          name: "Colour",
+          values: [
+            { value: "Champagne Ivory", hex: "#F4EFE6" },
+            { value: "Warm Taupe", hex: "#B5A895" },
+            { value: "Midnight Slate", hex: "#2F3640" },
+          ],
+        },
+      ],
+      variants: [
+        { suffix: "QN-IV", options: { Size: "Queen (6×6)", Colour: "Champagne Ivory" }, price: 1350, stock: 0 },
+        { suffix: "QN-TP", options: { Size: "Queen (6×6)", Colour: "Warm Taupe" }, price: 1350, stock: 0 },
+        { suffix: "QN-SL", options: { Size: "Queen (6×6)", Colour: "Midnight Slate" }, price: 1350, stock: 0 },
+        { suffix: "KG-IV", options: { Size: "King (7×7)", Colour: "Champagne Ivory" }, price: 1550, stock: 0 },
+        { suffix: "KG-TP", options: { Size: "King (7×7)", Colour: "Warm Taupe" }, price: 1550, stock: 0 },
+        { suffix: "KG-SL", options: { Size: "King (7×7)", Colour: "Midnight Slate" }, price: 1550, stock: 0 },
+        { suffix: "SK-IV", options: { Size: "Super King (8×8)", Colour: "Champagne Ivory" }, price: 1750, stock: 0 },
+        { suffix: "SK-TP", options: { Size: "Super King (8×8)", Colour: "Warm Taupe" }, price: 1750, stock: 0 },
+        { suffix: "SK-SL", options: { Size: "Super King (8×8)", Colour: "Midnight Slate" }, price: 1750, stock: 0 },
+      ],
+    },
+    {
+      title: "Hand-Tufted Moroccan Berber Wool Salon Carpet",
+      slug: "moroccan-wool-salon-carpet-preorder",
+      short: "Pre-Order · Oversized high-pile wool & silk-blend salon carpet imported to your room measurements.",
+      description:
+        "Sourced directly for grand living spaces and reception rooms. Dense underfoot with hand-carved geometric relief that anchors a sofa group and absorbs room echo.\n" +
+        "Because oversized salon dimensions are imported to order, reserve yours now and we will bring it in on the next shipment for you.",
+      images: [photo("3d-carpet-6"), photo("3d-carpet-1"), photo("3d-carpet-5")],
+      categories: ["pre-order", "living"],
+      collections: ["new-in"],
+      tags: ["pre-order", "luxe", "carpet", "rug", "living"],
+      material: "New Zealand wool & bamboo silk blend, cotton canvas backing",
+      care: "Vacuum without beater bar. Professional rug clean annually.",
+      compareAt: 2400,
+      featured: true,
+      isPreorder: true,
+      preorderLeadTime: "14–21 days",
+      preorderDepositPercent: 50,
+      preorderNote: "Imported to order for your living room. Reserve with a 50% deposit or full payment.",
+      options: [
+        {
+          name: "Size",
+          values: [{ value: "200 × 300 cm (Large)" }, { value: "250 × 350 cm (Salon)" }, { value: "300 × 400 cm (Grand)" }],
+        },
+      ],
+      variants: [
+        { suffix: "200X300", options: { Size: "200 × 300 cm (Large)" }, price: 1450, stock: 0 },
+        { suffix: "250X350", options: { Size: "250 × 350 cm (Salon)" }, price: 1850, stock: 0 },
+        { suffix: "300X400", options: { Size: "300 × 400 cm (Grand)" }, price: 2250, stock: 0 },
+      ],
+    },
+    {
+      title: "Motorised Smart Blackout Roller Blind System",
+      slug: "motorised-smart-roller-blind-preorder",
+      short: "Pre-Order · Whisper-quiet rechargeable motorised blackout blinds with multi-window remote.",
+      description:
+        "Built to order for wide picture windows, double-height stairwells and master bedrooms where you want every blind to rise at the touch of a button.\n" +
+        "Includes the thermal-backed blackout fabric, concealed aluminium cassette, USB-C rechargeable tubular motor (6 months per charge) and 6-channel remote control.",
+      images: [photo("curtain-blinds-1"), photo("already-made-curtain-2")],
+      categories: ["pre-order", "windows"],
+      collections: ["new-in"],
+      tags: ["pre-order", "blinds", "motorised", "smart-home", "windows"],
+      material: "3-pass thermal blackout weave, powder-coated aluminium cassette",
+      care: "Wipe clean with a damp microfibre cloth.",
+      compareAt: 1100,
+      featured: true,
+      isPreorder: true,
+      preorderLeadTime: "10–14 days",
+      preorderDepositPercent: 50,
+      preorderNote: "Custom-fabricated to your window drop and colour choice. Delivered ready to mount.",
+      options: [
+        {
+          name: "Size",
+          values: [{ value: "5ft drop" }, { value: "6ft drop" }, { value: "7ft drop" }],
+        },
+        {
+          name: "Colour",
+          values: [
+            { value: "Ash Grey", hex: "#9A9A96" },
+            { value: "Warm Stone", hex: "#C8BFA8" },
+            { value: "Charcoal Black", hex: "#1C1C1C" },
+          ],
+        },
+      ],
+      variants: [
+        { suffix: "5F-AS", options: { Size: "5ft drop", Colour: "Ash Grey" }, price: 680, stock: 0 },
+        { suffix: "5F-ST", options: { Size: "5ft drop", Colour: "Warm Stone" }, price: 680, stock: 0 },
+        { suffix: "5F-BK", options: { Size: "5ft drop", Colour: "Charcoal Black" }, price: 680, stock: 0 },
+        { suffix: "6F-AS", options: { Size: "6ft drop", Colour: "Ash Grey" }, price: 780, stock: 0 },
+        { suffix: "6F-ST", options: { Size: "6ft drop", Colour: "Warm Stone" }, price: 780, stock: 0 },
+        { suffix: "6F-BK", options: { Size: "6ft drop", Colour: "Charcoal Black" }, price: 780, stock: 0 },
+        { suffix: "7F-AS", options: { Size: "7ft drop", Colour: "Ash Grey" }, price: 890, stock: 0 },
+        { suffix: "7F-ST", options: { Size: "7ft drop", Colour: "Warm Stone" }, price: 890, stock: 0 },
+        { suffix: "7F-BK", options: { Size: "7ft drop", Colour: "Charcoal Black" }, price: 890, stock: 0 },
+      ],
+    },
+    {
+      title: "Custom Floor-to-Ceiling Velvet & Sheer Double Drapery Pair",
+      slug: "custom-velvet-sheer-drapery-preorder",
+      short: "Pre-Order · Tailored hotel-grade velvet blackout curtains paired with voile day sheers.",
+      description:
+        "Not currently in stock — tailored and finished on request for high ceilings and wide patio sliders.\n" +
+        "Pairs two heavy matte-velvet outer panels with twoweighted Turkish voile sheer inner panels so you have soft daylight privacy by day and total blackout at night.",
+      images: [photo("already-made-curtain-2"), photo("already-made-curtain-1")],
+      categories: ["pre-order", "windows"],
+      collections: ["new-in"],
+      tags: ["pre-order", "luxe", "curtains", "drapery", "windows"],
+      material: "380gsm matte velvet + weighted Turkish voile sheer",
+      care: "Dry clean or gentle cold wash.",
+      compareAt: 1200,
+      featured: false,
+      isPreorder: true,
+      preorderLeadTime: "10–14 days",
+      preorderDepositPercent: 50,
+      preorderNote: "Tailored on pre-order. Specify exact drop height in your order note if needed.",
+      options: [
+        {
+          name: "Width × Drop",
+          values: [{ value: "2-Window Set (300 × 270 cm)" }, { value: "Patio Wall Set (450 × 290 cm)" }],
+        },
+      ],
+      variants: [
+        { suffix: "300X270", options: { "Width × Drop": "2-Window Set (300 × 270 cm)" }, price: 790, stock: 0 },
+        { suffix: "450X290", options: { "Width × Drop": "Patio Wall Set (450 × 290 cm)" }, price: 980, stock: 0 },
+      ],
+    },
   ];
 
   for (const p of products) {
@@ -743,6 +908,10 @@ async function seedCatalog() {
         care: p.care,
         tags: p.tags,
         isFeatured: Boolean(p.featured),
+        isPreorder: Boolean(p.isPreorder),
+        preorderLeadTime: p.preorderLeadTime ?? null,
+        preorderDepositPercent: p.preorderDepositPercent ?? null,
+        preorderNote: p.preorderNote ?? null,
         searchText: searchText({ title: p.title, tags: p.tags, material: p.material, short: p.short }),
       },
       update: {
@@ -757,6 +926,10 @@ async function seedCatalog() {
         care: p.care,
         tags: p.tags,
         isFeatured: Boolean(p.featured),
+        isPreorder: Boolean(p.isPreorder),
+        preorderLeadTime: p.preorderLeadTime ?? null,
+        preorderDepositPercent: p.preorderDepositPercent ?? null,
+        preorderNote: p.preorderNote ?? null,
         searchText: searchText({ title: p.title, tags: p.tags, material: p.material, short: p.short }),
       },
     });
@@ -897,8 +1070,14 @@ async function seedCatalog() {
       // run would silently undo a stock take.
       await db.inventoryItem.upsert({
         where: { variantId: variant.id },
-        create: { variantId: variant.id, onHand: v.stock, reorderPoint: 5, reorderQuantity: 20 },
-        update: {},
+        create: {
+          variantId: variant.id,
+          onHand: v.stock,
+          reorderPoint: p.isPreorder ? 0 : 5,
+          reorderQuantity: 20,
+          allowBackorder: Boolean(p.isPreorder),
+        },
+        update: p.isPreorder ? { allowBackorder: true } : {},
       });
     }
 

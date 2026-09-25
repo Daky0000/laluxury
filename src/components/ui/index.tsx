@@ -83,7 +83,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-sm font-medium",
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium",
         badgeTones[tone],
         className,
       )}
@@ -129,10 +129,10 @@ export function SectionHeading({
   return (
     <div className={cn("flex items-end justify-between gap-6", className)}>
       <div>
-        {eyebrow ? <p className="lx-eyebrow mb-2">{eyebrow}</p> : null}
+        {eyebrow ? <p className="lx-eyebrow mb-1.5">{eyebrow}</p> : null}
         <h2 className="text-2xl md:text-3xl">{title}</h2>
         {description ? (
-          <p className="mt-2 max-w-prose text-sm text-[var(--text-secondary)]">{description}</p>
+          <p className="mt-2 max-w-prose text-sm font-light text-[var(--text-secondary)]">{description}</p>
         ) : null}
       </div>
       {action}
@@ -184,7 +184,7 @@ export function Field({
 }) {
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
-      <label htmlFor={htmlFor} className="lx-eyebrow">
+      <label htmlFor={htmlFor} className="lx-label">
         {label}
         {required ? <span className="ml-0.5 text-danger">*</span> : null}
       </label>

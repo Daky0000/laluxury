@@ -112,16 +112,16 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
   return (
     <>
       {/* Page head */}
-      <section className="lx-container pb-2 pt-8 text-center sm:pt-11">
-        <p className="lx-eyebrow tracking-[0.2em] sm:tracking-[0.32em]">Every piece</p>
+      <section className="lx-container lx-page-header text-center">
+        <p className="lx-eyebrow">Every piece</p>
         {q ? (
-          <h1 className="mt-3 text-[clamp(2rem,7vw,3.625rem)] leading-tight">{`Results for “${q}”`}</h1>
+          <h1 className="mt-3 text-[clamp(2rem,7vw,3.25rem)] leading-tight">{`Results for “${q}”`}</h1>
         ) : collectionSlug ? (
-          <h1 data-dw-field="catalog.collection-title" className="mt-3 text-[clamp(2rem,7vw,3.625rem)] leading-tight">The collection</h1>
+          <h1 data-dw-field="catalog.collection-title" className="mt-3 text-[clamp(2rem,7vw,3.25rem)] leading-tight">The collection</h1>
         ) : (
-          <h1 data-dw-field="catalog.title" className="mt-3 text-[clamp(2rem,7vw,3.625rem)] leading-tight">All products</h1>
+          <h1 data-dw-field="catalog.title" className="mt-3 text-[clamp(2rem,7vw,3.25rem)] leading-tight">All products</h1>
         )}
-        <p className="mt-2.5 text-base font-light text-[var(--text-muted)]">
+        <p className="mt-2.5 text-sm font-light text-[var(--text-muted)]">
           Bedding, living, windows and student essentials — filter your way to it.
         </p>
       </section>
@@ -226,7 +226,7 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-[34px] md:grid-cols-3">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 sm:gap-y-12 md:grid-cols-3">
                 {results.items.map((product, index) => (
                   <ProductTile key={product.id} product={toTile(product)} priority={index < 3} />
                 ))}

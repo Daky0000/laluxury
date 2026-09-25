@@ -71,6 +71,20 @@ export default async function AbandonedCartsPage() {
     })),
   }));
 
+  // Ensure the BAG5 courtesy 5% recovery code is active in the Discount table so any recovered shopper can use it immediately.
+  await db.discount.upsert({
+    where: { code: "BAG5" },
+    update: { isActive: true },
+    create: {
+      code: "BAG5",
+      description: "5% Concierge Courtesy Recovery Code",
+      type: "PERCENTAGE",
+      value: 5,
+      minSubtotal: 0,
+      isActive: true,
+    },
+  });
+
   const reachable = rows.filter((row) => row.phone || row.email);
   const anonymous = rows.length - reachable.length;
   const value = rows.reduce((sum, row) => sum + row.total, 0);
@@ -78,8 +92,8 @@ export default async function AbandonedCartsPage() {
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading
-        title="Abandoned bags"
-        description={`Bags left for more than an hour in the last ${STALE_DAYS} days. A signed-in shopper can be messaged; a guest bag is only a number until they come back.`}
+        title="Abandoned bags & Concierge Recovery"
+        description={`Bags left for more than an hour in the last ${STALE_DAYS} days. Courtesy code BAG5 (5% OFF) is active and ready to share via 1-click WhatsApp or Email recovery.`}
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -97,11 +111,15 @@ export default async function AbandonedCartsPage() {
       ) : (
         <ul className="grid gap-4 lg:grid-cols-2">
           {[...reachable, ...rows.filter((row) => !row.phone && !row.email)].map((row) => {
+            const firstName = row.customer ? ` ${row.customer.name.split(" ")[0]}` : "";
+            const pieceLabel = row.items.length === 1 ? row.items[0].title : `${row.count} curated pieces`;
             const message = encodeURIComponent(
-              `Hello${row.customer ? ` ${row.customer.name.split(" ")[0]}` : ""}, this is LaLuxury. You left ${
-                row.items.length === 1 ? row.items[0].title : `${row.count} pieces`
-              } in your bag — can we help you finish the order?`,
+              `Hello${firstName}, this is the LaLuxury Concierge. We noticed you left ${pieceLabel} (${formatMoney(row.total)}) in your bag. May we assist with delivery scheduling or fabric details?`,
             );
+            const vipMessage = encodeURIComponent(
+              `Hello${firstName}, this is the LaLuxury Concierge. Your selection (${pieceLabel}) is reserved in your bag. Use private courtesy code BAG5 at checkout for 5% off your order today.`,
+            );
+            const cleanPhone = row.phone ? row.phone.replace(/[^0-9]/g, "") : "";
             return (
               <li key={row.id}>
                 <Card className="flex h-full flex-col gap-3 p-5">
@@ -139,26 +157,40 @@ export default async function AbandonedCartsPage() {
                     ))}
                   </ul>
 
-                  <div className="mt-auto flex flex-wrap items-center gap-3 border-t border-[var(--border-subtle)] pt-3">
+                  <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[var(--border-subtle)] pt-3">
                     <span className="text-sm font-medium tabular-nums">{formatMoney(row.total)}</span>
-                    {row.phone ? (
-                      <a
-                        href={`https://wa.me/${row.phone}?text=${message}`}
-                        target="_blank"
-                        rel="noopener"
-                        className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-3 py-1.5 text-xs hover:bg-[var(--surface-sunken)]"
-                      >
-                        <MessageCircle className="h-3.5 w-3.5" aria-hidden />
-                        WhatsApp them
-                      </a>
-                    ) : row.email ? (
-                      <a
-                        href={`mailto:${row.email}?subject=${encodeURIComponent("Your LaLuxury bag")}&body=${message}`}
-                        className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-3 py-1.5 text-xs hover:bg-[var(--surface-sunken)]"
-                      >
-                        Email them
-                      </a>
-                    ) : null}
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                      {row.phone ? (
+                        <>
+                          <a
+                            href={`https://wa.me/${cleanPhone}?text=${message}`}
+                            target="_blank"
+                            rel="noopener"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2.5 py-1.5 text-xs hover:bg-[var(--surface-sunken)]"
+                          >
+                            <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+                            WhatsApp Check-In
+                          </a>
+                          <a
+                            href={`https://wa.me/${cleanPhone}?text=${vipMessage}`}
+                            target="_blank"
+                            rel="noopener"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-[#25D366]/15 text-[#128C7E] border border-[#25D366]/30 px-2.5 py-1.5 text-xs font-medium hover:bg-[#25D366]/25"
+                          >
+                            <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+                            Send 5% VIP Code (BAG5)
+                          </a>
+                        </>
+                      ) : null}
+                      {row.email ? (
+                        <a
+                          href={`mailto:${row.email}?subject=${encodeURIComponent("Your reserved LaLuxury selection + 5% Courtesy Code (BAG5)")}&body=${vipMessage}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2.5 py-1.5 text-xs hover:bg-[var(--surface-sunken)]"
+                        >
+                          Email 5% Offer
+                        </a>
+                      ) : null}
+                    </div>
                   </div>
                 </Card>
               </li>

@@ -77,12 +77,12 @@ function bandQuery(carried: Carried, band: Band, active: boolean): string {
   })}`;
 }
 
-const heading = "mb-3 text-sm uppercase tracking-[0.18em] text-[var(--text-primary)]";
+const heading = "mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-primary)]";
 
 /** The pill used for price bands and non-colour option values. */
 const chipClass = (active: boolean) =>
   cn(
-    "inline-flex min-h-11 items-center border px-3.5 py-2 text-sm transition-colors",
+    "inline-flex min-h-11 items-center border px-3.5 py-2 text-xs transition-colors",
     active
       ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--surface-raised)]"
       : "border-[var(--border-subtle)] bg-[var(--surface-raised)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]",

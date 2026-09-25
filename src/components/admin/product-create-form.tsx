@@ -159,6 +159,54 @@ export function ProductCreateForm({
         </div>
       </Card>
 
+      <Card className="flex flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="lx-eyebrow">Pre-Order &amp; Bespoke Sourcing</h3>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              Tick if this piece is not yet in stock and will be ordered or handcrafted for customers upon request.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" name="isPreorder" className="h-4 w-4 accent-[var(--accent)]" />
+            Available on Pre-Order
+          </label>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Estimated lead time" htmlFor="preorderLeadTime">
+            <input
+              id="preorderLeadTime"
+              name="preorderLeadTime"
+              defaultValue="4–6 weeks"
+              placeholder="4–6 weeks"
+              className="lx-field"
+            />
+          </Field>
+
+          <Field label="Reservation deposit (%)" htmlFor="preorderDepositPercent">
+            <input
+              id="preorderDepositPercent"
+              name="preorderDepositPercent"
+              type="number"
+              min={10}
+              max={100}
+              defaultValue={50}
+              className="lx-field"
+            />
+          </Field>
+        </div>
+
+        <Field label="Pre-Order concierge note" htmlFor="preorderNote">
+          <input
+            id="preorderNote"
+            name="preorderNote"
+            placeholder="Handcrafted to order and delivered by our Accra concierge."
+            className="lx-field"
+          />
+        </Field>
+      </Card>
+
       <Card className="flex flex-wrap items-end justify-between gap-4 p-5">
         <Field label="Status" htmlFor="status" hint="Drafts are invisible on the storefront.">
           <select id="status" name="status" defaultValue="DRAFT" className="lx-field w-44">

@@ -58,7 +58,7 @@ export function EditGrid({
                 role="tab"
                 onClick={() => setActive(tab.slug)}
                 aria-selected={active === tab.slug}
-                className={`shrink-0 border-b pb-1 text-sm uppercase tracking-[0.1em] transition-colors ${
+                className={`shrink-0 border-b pb-1 text-xs uppercase tracking-[0.12em] transition-colors ${
                   active === tab.slug
                     ? "border-[var(--accent)] text-[var(--text-primary)]"
                     : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]"
@@ -71,14 +71,14 @@ export function EditGrid({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-5 md:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-5 sm:gap-y-12 md:grid-cols-3 lg:grid-cols-4">
         {shown.map((product) => (
           <ProductTile key={product.id} product={product} />
         ))}
       </div>
 
       {shown.length === 0 ? (
-        <p className="py-16 text-center text-sm text-[var(--text-muted)]">
+        <p className="py-16 text-center text-sm font-light text-[var(--text-muted)]">
           Nothing in this room yet.
         </p>
       ) : null}

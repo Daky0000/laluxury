@@ -52,11 +52,11 @@ export default async function AccountPage() {
   const lifetime = paid.reduce((sum, o) => sum + o.total, 0);
 
   return (
-    <div className="lx-container py-12">
+    <div className="lx-container py-12 sm:py-16">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl md:text-4xl">Hello, {user.firstName ?? displayName(user)}</h1>
-          <p className="mt-1.5 text-sm text-[var(--text-secondary)]">
+          <h1 className="text-[clamp(1.875rem,5vw,2.5rem)]">Hello, {user.firstName ?? displayName(user)}</h1>
+          <p className="mt-1.5 text-sm font-light text-[var(--text-secondary)]">
             {paid.length} {paid.length === 1 ? "order" : "orders"} · {formatMoney(lifetime)} spent
             with us
           </p>
@@ -80,7 +80,7 @@ export default async function AccountPage() {
         </div>
       </div>
 
-      <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_18rem]">
+      <div className="mt-8 sm:mt-10 grid gap-8 lg:grid-cols-[1fr_18rem]">
         <section>
           <h2 className="lx-eyebrow mb-4">Your orders</h2>
 
@@ -95,9 +95,9 @@ export default async function AccountPage() {
             <ul className="flex flex-col gap-4">
               {orders.map((order) => (
                 <li key={order.id}>
-                  <Card className="p-5">
+                  <Card className="p-5 sm:p-6">
                     <div className="flex flex-wrap items-center gap-3">
-                      <span className="font-mono text-sm">{order.orderNumber}</span>
+                      <span className="font-mono text-xs">{order.orderNumber}</span>
                       <Badge
                         tone={
                           order.status === "DELIVERED"
@@ -111,10 +111,10 @@ export default async function AccountPage() {
                       >
                         {ORDER_STATUS_LABELS[order.status]}
                       </Badge>
-                      <span className="text-sm text-[var(--text-secondary)]">
+                      <span className="text-sm font-light text-[var(--text-secondary)]">
                         {formatDate(order.placedAt)}
                       </span>
-                      <span className="ml-auto text-lg tabular-nums">
+                      <span className="ml-auto font-display text-lg tabular-nums">
                         {formatMoney(order.total)}
                       </span>
                     </div>
@@ -127,7 +127,7 @@ export default async function AccountPage() {
                               <Thumb src={item.imageUrl} width={40} height={48} />
                             ) : null}
                           </span>
-                          <span className="text-sm">
+                          <span className="text-sm font-light">
                             <span className="block">{item.productTitle}</span>
                             <span className="block text-[var(--text-muted)]">×{item.quantity}</span>
                           </span>
@@ -136,7 +136,7 @@ export default async function AccountPage() {
                     </ul>
 
                     {order.trackingNumber ? (
-                      <p className="mt-3 text-sm text-[var(--text-secondary)]">
+                      <p className="mt-3 text-sm font-light text-[var(--text-secondary)]">
                         Tracking: {order.trackingCompany} {order.trackingNumber}
                       </p>
                     ) : null}
@@ -171,7 +171,7 @@ export default async function AccountPage() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{item.product.title}</span>
-                        <span className="block text-sm text-[var(--text-muted)] tabular-nums">
+                        <span className="block font-display text-sm text-[var(--text-muted)] tabular-nums">
                           {formatMoney(item.product.minPrice)}
                         </span>
                       </span>

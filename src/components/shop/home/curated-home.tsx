@@ -71,7 +71,7 @@ export async function CuratedHome({ settings }: { settings: StoreSettings }) {
               <section
                 key={section.id}
                 id={section.id}
-                className="lx-container scroll-mt-24 py-12 sm:py-16 md:py-20"
+                className="lx-container scroll-mt-24 py-14 sm:py-20"
               >
                 <EditGrid
                   eyebrow={section.eyebrow}

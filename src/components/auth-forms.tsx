@@ -33,7 +33,7 @@ import { OTP_LENGTH } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const submitClass =
-  "mt-2 flex min-h-12 items-center justify-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-6 py-3 text-sm text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50";
+  "mt-2 flex min-h-12 items-center justify-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-6 py-3 text-xs font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50";
 
 // --- Password ---------------------------------------------------------------
 

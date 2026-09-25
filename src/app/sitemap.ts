@@ -10,7 +10,7 @@ import { env } from "@/lib/env";
  * Read from the database on each request rather than baked at build time, so a
  * product published from the console is in the sitemap the moment it goes live.
  */
-export const dynamic = "force-dynamic";
+export const revalidate = 86400;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = env.siteUrl();

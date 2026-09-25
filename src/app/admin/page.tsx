@@ -51,11 +51,17 @@ export default async function AdminDashboard() {
           createdAt: { gte: daysAgo(30) },
         },
       }),
-    ]).then(([awaitingPayment, pendingReviews, unreadMessages, paymentFlags]) => ({
+      db.preorderRequest.count({
+        where: { status: { in: ["NEW", "QUOTED", "SOURCING"] } },
+      }),
+      db.tradeApplication.count(),
+    ]).then(([awaitingPayment, pendingReviews, unreadMessages, paymentFlags, openPreorders, tradePartners]) => ({
       awaitingPayment,
       pendingReviews,
       unreadMessages,
       paymentFlags,
+      openPreorders,
+      tradePartners,
     })),
   ]);
 
@@ -69,10 +75,22 @@ export default async function AdminDashboard() {
       hint: "paid, not yet packed",
     },
     {
+      label: "Pre-orders & Sourcing",
+      count: attention.openPreorders,
+      href: "/admin/preorders",
+      hint: `${attention.tradePartners} trade partners active`,
+    },
+    {
       label: "Awaiting payment",
       count: attention.awaitingPayment,
       href: "/admin/orders?status=PENDING",
       hint: "reserved, unpaid",
+    },
+    {
+      label: "Abandoned bags",
+      count: metrics.abandonedCarts,
+      href: "/admin/carts",
+      hint: "VIP 5% code ready",
     },
     {
       label: "Reviews to check",
@@ -85,18 +103,6 @@ export default async function AdminDashboard() {
       count: attention.unreadMessages,
       href: "/admin/activity",
       hint: "from the contact form",
-    },
-    {
-      label: "Payments to review",
-      count: attention.paymentFlags,
-      href: "/admin/orders",
-      hint: "mismatched or after cancel, 30d",
-    },
-    {
-      label: "Abandoned bags",
-      count: metrics.abandonedCarts,
-      href: "/admin/carts",
-      hint: "this week",
     },
   ];
 

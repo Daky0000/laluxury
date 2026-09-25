@@ -21,7 +21,7 @@ export function MobileNav({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="lx-tap-tight rounded-full text-[var(--text-secondary)] hover:bg-[var(--surface-sunken)] md:hidden"
+        className="lx-tap-tight rounded-full text-[var(--text-secondary)] hover:bg-[var(--surface-sunken)] lg:hidden"
         aria-label="Open menu"
       >
         {children}
@@ -29,7 +29,7 @@ export function MobileNav({
 
       {open ? (
         <div
-          className="fixed inset-0 z-50 flex justify-end bg-ink-950/40 md:hidden"
+          className="fixed inset-0 z-50 flex justify-end bg-ink-950/40 lg:hidden"
           onClick={() => setOpen(false)}
           role="presentation"
         >
@@ -64,18 +64,39 @@ export function MobileNav({
                   All pieces
                 </Link>
               </li>
-              {categories.map((category) => (
-                <li key={category.slug}>
-                  <Link
-                    href={`/shop?category=${category.slug}`}
-                    onClick={() => setOpen(false)}
-                    className="block py-2.5 text-xl"
-                  >
-                    {category.name}
-                  </Link>
-                </li>
-              ))}
+              {categories.map((category) => {
+                const isPreorder = category.slug === "pre-order";
+                return (
+                  <li key={category.slug}>
+                    <Link
+                      href={isPreorder ? "/pre-order" : `/shop?category=${category.slug}`}
+                      onClick={() => setOpen(false)}
+                      className={
+                        isPreorder
+                          ? "flex items-center gap-2 py-2.5 text-xl font-medium text-[#8C6528]"
+                          : "block py-2.5 text-xl"
+                      }
+                    >
+                      {category.name}
+                      {isPreorder ? (
+                        <span className="border border-amber-800/30 bg-amber-950/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-[#8C6528]">
+                          Made to order
+                        </span>
+                      ) : null}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
+
+            <div className="mt-6 flex flex-col gap-0.5">
+              <Link href="/lookbook" onClick={() => setOpen(false)} className="block py-2.5 text-lg text-[var(--text-secondary)]">
+                Lookbook
+              </Link>
+              <Link href="/trade" onClick={() => setOpen(false)} className="block py-2.5 text-lg text-[var(--text-secondary)]">
+                Trade Program
+              </Link>
+            </div>
 
             <div className="mt-8 flex flex-col border-t border-[var(--border-subtle)] pt-4 text-sm">
               <Link href="/account" onClick={() => setOpen(false)} className="py-3 text-[var(--text-secondary)]">

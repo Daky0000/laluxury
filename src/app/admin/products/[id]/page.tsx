@@ -87,6 +87,10 @@ export default async function EditProductPage({ params }: PageProps<"/admin/prod
     care: product.care,
     tags: product.tags,
     isFeatured: product.isFeatured,
+    isPreorder: product.isPreorder,
+    preorderLeadTime: product.preorderLeadTime,
+    preorderDepositPercent: product.preorderDepositPercent,
+    preorderNote: product.preorderNote,
     metaTitle: product.metaTitle,
     metaDescription: product.metaDescription,
     categoryIds: product.categories.map((c) => c.categoryId),
@@ -136,6 +140,7 @@ export default async function EditProductPage({ params }: PageProps<"/admin/prod
         >
           {product.status.toLowerCase()}
         </Badge>
+        {product.isPreorder ? <Badge tone="accent">Pre-Order</Badge> : null}
         {product.isFeatured ? <Badge tone="accent">Featured</Badge> : null}
       </div>
 

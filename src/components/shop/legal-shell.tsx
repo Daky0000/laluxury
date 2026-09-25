@@ -35,10 +35,10 @@ export function LegalShell({
       <div className="max-w-[68ch]">
         <p className="lx-eyebrow">Legal</p>
         <h1 className="mt-3 text-[clamp(2.25rem,5vw,3.25rem)] leading-tight">{title}</h1>
-        <p className="mt-4 text-base font-light leading-relaxed text-[var(--text-muted)]">
+        <p className="mt-4 text-sm sm:text-base font-light leading-relaxed text-[var(--text-muted)]">
           {intro}
         </p>
-        <p className="mt-3 text-sm text-[var(--text-muted)]">Last updated {POLICY_UPDATED}</p>
+        <p className="mt-3 text-xs text-[var(--text-muted)]">Last updated {POLICY_UPDATED}</p>
       </div>
 
       <nav

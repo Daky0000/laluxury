@@ -11,27 +11,94 @@ import { formatMoney } from "@/lib/money";
 import { Card, SectionHeading, Badge } from "@/components/ui";
 import { SettingsForm } from "@/components/admin/settings-form";
 import { IntegrationsForm } from "@/components/admin/integrations-form";
+import { getFxRates, updateFxRatesAction } from "@/app/actions/admin/fx";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function AdminSettingsPage() {
   await requirePermission("settings:manage");
 
-  const [settings, zones, integrations] = await Promise.all([
+  const [settings, zones, integrations, fx] = await Promise.all([
     getSettings(),
     db.shippingZone.findMany({
       include: { rates: { orderBy: { position: "asc" } } },
       orderBy: { createdAt: "asc" },
     }),
     integrationsView(),
+    getFxRates(),
   ]);
 
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading
         title="Settings"
-        description="Store details, policies, and the keys that switch each integration on."
+        description="Store details, policies, storefront FX exchange rates, and the keys that switch each integration on."
       />
+
+      {/* Storefront Multi-Currency Exchange Rates */}
+      <Card className="px-6 py-5.5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">
+              Storefront Multi-Currency Exchange Rates (GHS · USD · GBP · EUR)
+            </h2>
+            <p className="text-xs text-[var(--text-muted)]">
+              Configure the live conversion rates used by the storefront header Currency Switcher and Shop the Room Lookbooks.
+            </p>
+          </div>
+          <Link
+            href="/admin/products/bulk"
+            className="text-xs text-[var(--accent)] hover:underline"
+          >
+            Open Bulk Catalog Price Adjuster →
+          </Link>
+        </div>
+
+        <form action={updateFxRatesAction} className="mt-4 grid gap-4 sm:grid-cols-4 sm:items-end">
+          <div>
+            <label className="block text-xs text-[var(--text-secondary)]">
+              1 USD ($) in GHS (₵)
+            </label>
+            <input
+              type="number"
+              step="0.05"
+              name="ghsPerUsd"
+              defaultValue={fx.ghsPerUsd}
+              className="lx-field mt-1 w-full py-2 text-sm tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-[var(--text-secondary)]">
+              1 GBP (£) in GHS (₵)
+            </label>
+            <input
+              type="number"
+              step="0.05"
+              name="ghsPerGbp"
+              defaultValue={fx.ghsPerGbp}
+              className="lx-field mt-1 w-full py-2 text-sm tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-[var(--text-secondary)]">
+              1 EUR (€) in GHS (₵)
+            </label>
+            <input
+              type="number"
+              step="0.05"
+              name="ghsPerEur"
+              defaultValue={fx.ghsPerEur}
+              className="lx-field mt-1 w-full py-2 text-sm tabular-nums"
+            />
+          </div>
+          <button
+            type="submit"
+            className="rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-xs font-medium text-[var(--accent-contrast)]"
+          >
+            Save Exchange Rates
+          </button>
+        </form>
+      </Card>
 
       {/* Home page layout */}
       <Card className="px-6 py-5.5">

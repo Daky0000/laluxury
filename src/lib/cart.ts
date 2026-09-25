@@ -45,6 +45,8 @@ export type CartLineView = {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  isPreorder: boolean;
+  preorderLeadTime: string | null;
   /** Null when the variant is untracked, otherwise units the shopper may still add. */
   availableStock: number | null;
   /** Set when the line exceeds what is in stock, so checkout can block. */
@@ -60,6 +62,7 @@ export type CartTotals = {
   discountLabel: string | null;
   freeShipping: boolean;
   totalWeightGrams: number;
+  hasPreorderItems: boolean;
   /** Goods after discount; shipping and tax are added at checkout. */
   total: number;
   problems: string[];
@@ -187,7 +190,7 @@ export async function addToCart(variantId: string, quantity = 1): Promise<CartWi
   const cart = await getOrCreateCart();
   const variant = await db.variant.findUnique({
     where: { id: variantId },
-    include: { inventory: true, product: { select: { status: true } } },
+    include: { inventory: true, product: { select: { status: true, isPreorder: true } } },
   });
 
   if (!variant || !variant.isActive) throw new Error("That item is unavailable.");
@@ -198,7 +201,7 @@ export async function addToCart(variantId: string, quantity = 1): Promise<CartWi
 
   // Cap at what is actually sellable rather than failing the whole add.
   const inv = variant.inventory;
-  if (inv && inv.trackInventory && !inv.allowBackorder) {
+  if (inv && inv.trackInventory && !inv.allowBackorder && !variant.product.isPreorder) {
     const available = availableOf(inv);
     if (available <= 0) throw new Error("That item is out of stock.");
     if (desired > available) {
@@ -222,17 +225,6 @@ export async function addToCart(variantId: string, quantity = 1): Promise<CartWi
   return reload(cart.id);
 }
 
-/**
- * Adds several variants in one go, all or nothing.
- *
- * Adding them one at a time would half-fill the bag when the fourth line turns
- * out to be short of stock: the shopper gets an error, and three things they
- * did not knowingly confirm are in the bag anyway. So every line is checked
- * first and nothing is written until all of them pass.
- *
- * The same variant appearing twice is summed before it is checked, so two lines
- * of six cannot slip past a stock level of ten.
- */
 export async function addManyToCart(
   items: { variantId: string; quantity: number }[],
 ): Promise<CartWithItems> {
@@ -246,7 +238,7 @@ export async function addManyToCart(
   const cart = await getOrCreateCart();
   const variants = await db.variant.findMany({
     where: { id: { in: [...wanted.keys()] } },
-    include: { inventory: true, product: { select: { status: true, title: true } } },
+    include: { inventory: true, product: { select: { status: true, title: true, isPreorder: true } } },
   });
 
   const planned: { variantId: string; quantity: number; unitPrice: number }[] = [];
@@ -262,7 +254,7 @@ export async function addManyToCart(
     const desired = (existing?.quantity ?? 0) + quantity;
 
     const inv = variant.inventory;
-    if (inv && inv.trackInventory && !inv.allowBackorder) {
+    if (inv && inv.trackInventory && !inv.allowBackorder && !variant.product.isPreorder) {
       const available = availableOf(inv);
       if (available <= 0) throw new Error(`${variant.title} is out of stock.`);
       if (desired > available) {
@@ -355,7 +347,8 @@ export async function computeCartTotals(cart: CartWithItems): Promise<CartTotals
 
   const lines: CartLineView[] = cart.items.map((item) => {
     const inv = item.variant.inventory;
-    const tracked = Boolean(inv && inv.trackInventory && !inv.allowBackorder);
+    const isPreorder = Boolean(item.variant.product.isPreorder);
+    const tracked = Boolean(inv && inv.trackInventory && !inv.allowBackorder && !isPreorder);
     const available = tracked && inv ? Math.max(0, availableOf(inv)) : null;
 
     let stockProblem: string | null = null;
@@ -379,6 +372,8 @@ export async function computeCartTotals(cart: CartWithItems): Promise<CartTotals
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       lineTotal: item.unitPrice * item.quantity,
+      isPreorder,
+      preorderLeadTime: item.variant.product.preorderLeadTime ?? (isPreorder ? "2–3 weeks" : null),
       availableStock: available,
       stockProblem,
     };
@@ -386,6 +381,7 @@ export async function computeCartTotals(cart: CartWithItems): Promise<CartTotals
 
   const subtotal = lines.reduce((sum, l) => sum + l.lineTotal, 0);
   const itemCount = lines.reduce((sum, l) => sum + l.quantity, 0);
+  const hasPreorderItems = lines.some((l) => l.isPreorder);
   const totalWeightGrams = cart.items.reduce(
     (sum, i) => sum + (i.variant.weightGrams ?? 0) * i.quantity,
     0,
@@ -401,7 +397,6 @@ export async function computeCartTotals(cart: CartWithItems): Promise<CartTotals
       email: cart.email,
     });
 
-    // Code went stale (expired, limit hit, bag changed) - drop it quietly.
     if (!discount) {
       await db.cart.update({ where: { id: cart.id }, data: { discountCode: null } });
     }
@@ -418,6 +413,7 @@ export async function computeCartTotals(cart: CartWithItems): Promise<CartTotals
     discountLabel: discount ? discount.discount.description ?? cart.discountCode : null,
     freeShipping: discount?.freeShipping ?? false,
     totalWeightGrams,
+    hasPreorderItems,
     total: Math.max(0, subtotal - discountTotal),
     problems,
   };

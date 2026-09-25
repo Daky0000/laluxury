@@ -83,6 +83,8 @@ export async function createOrderFromCart(args: {
   billingAddress?: AddressInput | null;
   shippingRateId?: string | null;
   customerNote?: string | null;
+  paymentMethod?: string | null;
+  depositPercent?: number | null;
 }): Promise<FullOrder> {
   const { cart } = args;
   if (cart.items.length === 0) throw new Error("Your bag is empty.");
@@ -128,6 +130,13 @@ export async function createOrderFromCart(args: {
 
   const discountTotal = discount?.amount ?? 0;
   const total = Math.max(0, totals.subtotal - discountTotal + shippingTotal);
+
+  const hasPreorderItems = cart.items.some((item) => Boolean(item.variant.product.isPreorder));
+  const depositPercent =
+    hasPreorderItems && args.depositPercent && args.depositPercent > 0 && args.depositPercent < 100
+      ? args.depositPercent
+      : null;
+  const depositAmount = depositPercent ? Math.round((total * depositPercent) / 100) : null;
 
   // Spread the discount across lines so per-item refunds stay accurate.
   const allocation =
@@ -182,6 +191,9 @@ export async function createOrderFromCart(args: {
         phone: args.phone ?? args.shippingAddress.phone,
         status: "PENDING",
         paymentStatus: "PENDING",
+        hasPreorderItems,
+        paymentMethod: args.paymentMethod ?? "paystack",
+        depositAmount,
         subtotal: totals.subtotal,
         discountTotal,
         shippingTotal,
@@ -202,6 +214,8 @@ export async function createOrderFromCart(args: {
               variantTitle: item.variant.title,
               sku: item.variant.sku,
               imageUrl: item.variant.product.images[0]?.url ?? null,
+              isPreorder: Boolean(item.variant.product.isPreorder),
+              preorderLeadTime: item.variant.product.preorderLeadTime ?? null,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               discountAllocated: allocated,

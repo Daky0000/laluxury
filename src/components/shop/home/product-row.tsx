@@ -23,12 +23,12 @@ export function ProductRow({
 
   return (
     <section id={section.id} className={`scroll-mt-24 ${sage ? "bg-sage-100" : ""}`}>
-      <div className="lx-container py-12 sm:py-16 md:py-20">
+      <div className="lx-container py-14 sm:py-20">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border-subtle)] pb-5 sm:mb-8 sm:pb-6">
           <div className="min-w-0">
             {section.eyebrow ? (
               <p
-                className={`text-sm uppercase tracking-[0.2em] sm:tracking-[0.32em] ${
+                className={`text-xs uppercase tracking-[0.24em] sm:tracking-[0.32em] ${
                   sage ? "text-sage-600" : "text-[var(--accent)]"
                 }`}
               >
@@ -45,7 +45,7 @@ export function ProductRow({
           {section.href ? (
             <Link
               href={section.href}
-              className={`text-sm uppercase tracking-[0.1em] hover:underline ${
+              className={`text-xs uppercase tracking-[0.12em] hover:underline ${
                 sage ? "text-sage-700" : "text-[var(--text-secondary)]"
               }`}
             >
@@ -54,7 +54,7 @@ export function ProductRow({
           ) : null}
         </div>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-5 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-5 sm:gap-y-12 md:grid-cols-4">
           {products.map((product) => (
             <article key={product.id} className="group flex flex-col">
               <Link
@@ -79,12 +79,12 @@ export function ProductRow({
               <div className="flex flex-col gap-2 pt-3.5 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
                 <Link
                   href={`/product/${product.slug}`}
-                  className="min-w-0 text-sm leading-snug hover:underline"
+                  className="min-w-0 text-sm font-light leading-snug hover:underline"
                 >
                   {product.title}
                 </Link>
                 <div className="flex items-center justify-between gap-3 lg:justify-start">
-                  <span className="text-base font-semibold tabular-nums">
+                  <span className="font-display text-base tabular-nums">
                     {formatPrice(product.price)}
                   </span>
                   <AddToBagIcon

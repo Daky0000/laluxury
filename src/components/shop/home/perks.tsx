@@ -59,7 +59,7 @@ export function Perks({ settings }: { settings: StoreSettings }) {
             key={perk.title}
             href={perk.href}
             className={cn(
-              "flex items-center gap-3.5 px-1 py-5 sm:px-5 sm:py-7",
+              "flex items-center gap-3.5 px-2 py-5 sm:px-5 sm:py-6",
               index > 0 && "border-t border-[var(--border-subtle)] sm:border-t-0",
               index % 2 === 1 && "sm:border-l sm:border-[var(--border-subtle)]",
               index >= 2 && "sm:border-t sm:border-[var(--border-subtle)] md:border-t-0",
@@ -67,10 +67,10 @@ export function Perks({ settings }: { settings: StoreSettings }) {
               index % 4 === 0 && "md:border-l-0",
             )}
           >
-            <Icon className="h-5 w-5 shrink-0 text-[var(--accent)]" aria-hidden />
+            <Icon className="h-[18px] w-[18px] shrink-0 text-[var(--accent)]" aria-hidden />
             <span className="min-w-0">
-              <span className="block text-sm">{perk.title}</span>
-              <span className="mt-0.5 block text-sm font-light text-[var(--text-muted)]">
+              <span className="block text-sm font-normal">{perk.title}</span>
+              <span className="mt-0.5 block text-xs font-light text-[var(--text-muted)]">
                 {perk.sub}
               </span>
             </span>

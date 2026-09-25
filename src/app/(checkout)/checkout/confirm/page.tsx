@@ -58,16 +58,14 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
   }
 
   const order = payment.order;
+  const isDirectPayment = payment.provider === "direct" || params.mode === "direct";
 
-  // Verify unless the webhook has already settled it.
-  if (payment.status !== "SUCCESS") {
+  // Verify with Paystack unless it is a direct/concierge order or already settled.
+  if (!isDirectPayment && payment.status !== "SUCCESS") {
     try {
       const transaction = await verifyTransaction(reference);
 
-      if (transaction.status === "success" && transaction.amount !== order.total) {
-        // Paid, but not the right amount. The webhook holds these for review
-        // rather than crediting them; so does this, or the shopper would sit on
-        // "still processing" with nothing written down anywhere.
+      if (transaction.status === "success" && transaction.amount !== payment.amount) {
         const held = await db.orderEvent.findFirst({
           where: { orderId: order.id, type: "payment.mismatch" },
           select: { id: true },
@@ -76,11 +74,11 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
           await logOrderEvent({
             orderId: order.id,
             type: "payment.mismatch",
-            message: `Paystack reported ${formatMoney(transaction.amount)} but the order total is ${formatMoney(order.total)}. Held for review.`,
-            meta: { reference, reported: transaction.amount, expected: order.total },
+            message: `Paystack reported ${formatMoney(transaction.amount)} but the expected amount is ${formatMoney(payment.amount)}. Held for review.`,
+            meta: { reference, reported: transaction.amount, expected: payment.amount },
           });
           await postAlert(
-            `:warning: Payment amount mismatch on ${order.orderNumber}. Paystack says ${formatMoney(transaction.amount)}, order total is ${formatMoney(order.total)}.`,
+            `:warning: Payment amount mismatch on ${order.orderNumber}. Paystack says ${formatMoney(transaction.amount)}, expected ${formatMoney(payment.amount)}.`,
           );
         }
       } else if (transaction.status === "success") {
@@ -121,8 +119,10 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
   if (!fresh) return null;
 
   const latestPayment = fresh.payments[0];
+  const isConfirmedOrder =
+    fresh.paymentStatus === "SUCCESS" || latestPayment?.provider === "direct" || isDirectPayment;
 
-  if (fresh.paymentStatus === "SUCCESS") {
+  if (isConfirmedOrder) {
     // Four more pieces for the room, none of them already in the order.
     const relatedRows = await db.product.findMany({
       where: {
@@ -135,16 +135,29 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
     });
 
     const firstName = fresh.shippingAddress?.firstName;
-    const estimate = fresh.shippingRate?.estimatedDaysMin
-      ? `${fresh.shippingRate.estimatedDaysMin}–${fresh.shippingRate.estimatedDaysMax} days`
-      : (fresh.shippingRate?.name ?? "2–4 days");
+    const estimate = fresh.hasPreorderItems
+      ? (fresh.items.find((i) => i.preorderLeadTime)?.preorderLeadTime ?? "4–6 weeks (Pre-Order)")
+      : fresh.shippingRate?.estimatedDaysMin
+        ? `${fresh.shippingRate.estimatedDaysMin}–${fresh.shippingRate.estimatedDaysMax} days`
+        : (fresh.shippingRate?.name ?? "2–4 days");
+
+    const paymentLabel =
+      fresh.paymentStatus === "SUCCESS"
+        ? latestPayment?.channel
+          ? describeChannel(latestPayment.channel)
+          : "Paid"
+        : fresh.paymentMethod === "pay_on_delivery"
+          ? "Pay on Delivery"
+          : fresh.paymentMethod === "direct_momo"
+            ? "Direct MoMo / Bank"
+            : "Concierge Settlement";
 
     const meta = [
       { label: "Order", value: fresh.orderNumber },
-      { label: "Est. delivery", value: estimate },
+      { label: fresh.hasPreorderItems ? "Est. Lead Time" : "Est. Delivery", value: estimate },
       {
         label: "Payment",
-        value: latestPayment?.channel ? describeChannel(latestPayment.channel) : "Paid",
+        value: paymentLabel,
       },
     ];
 
@@ -162,13 +175,17 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
             </svg>
           </span>
 
-          <p className="lx-eyebrow mt-6.5">Order confirmed</p>
+          <p className="lx-eyebrow mt-6.5">
+            {fresh.hasPreorderItems ? "Pre-Order & Order Confirmed" : "Order confirmed"}
+          </p>
           <h1 className="mt-3 text-[clamp(2.25rem,5vw,3.25rem)] leading-[1.05]">
             Thank you{firstName ? `, ${firstName}` : ""}.
           </h1>
-          <p className="mx-auto mt-3.5 max-w-[460px] text-base font-light leading-relaxed text-[var(--text-secondary)]">
-            Your order is in. A receipt is on its way to {fresh.email}, and our team will call you
-            shortly to arrange delivery.
+          <p className="mx-auto mt-3.5 max-w-[500px] text-base font-light leading-relaxed text-[var(--text-secondary)]">
+            Your order <strong className="font-medium text-[var(--text-primary)]">{fresh.orderNumber}</strong> is
+            confirmed. We have recorded your details under {fresh.email} and our concierge team will
+            reach you on {formatPhone(fresh.phone ?? fresh.shippingAddress?.phone ?? "")} to finalize
+            dispatch.
           </p>
 
           <dl className="mt-7 inline-flex flex-wrap justify-center gap-x-9 gap-y-4 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-8 py-4.5 text-left">
@@ -190,6 +207,22 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
           </dl>
         </section>
 
+        {/* Direct Payment / Pre-Order Instructions Banner */}
+        {fresh.paymentStatus !== "SUCCESS" ? (
+          <section className="lx-container max-w-[760px] pb-6">
+            <div className="border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
+                Next Steps · Settlement &amp; Dispatch
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                {fresh.paymentMethod === "pay_on_delivery"
+                  ? "Your order is reserved for Pay on Delivery / Concierge Verification. Our Accra dispatch team will call you to confirm your delivery window."
+                  : `To complete your ${fresh.depositAmount ? "50% pre-order deposit" : "payment"} of ${formatPrice(fresh.depositAmount ?? fresh.total)} immediately via Mobile Money or Bank Transfer, use your Order Reference (${fresh.orderNumber}) or contact our concierge desk at ${formatPhone(settings.supportPhone)}.`}
+              </p>
+            </div>
+          </section>
+        ) : null}
+
         {/* Order detail */}
         <section className="lx-container max-w-[760px] pb-7">
           <div className="border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
@@ -210,7 +243,14 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
                     ) : null}
                   </span>
                   <span className="flex-1">
-                    <span className="block text-base">{item.productTitle}</span>
+                    <span className="flex flex-wrap items-center gap-2 text-base">
+                      {item.productTitle}
+                      {item.isPreorder ? (
+                        <span className="border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--accent)]">
+                          Pre-Order{item.preorderLeadTime ? ` · ${item.preorderLeadTime}` : ""}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="mt-0.5 block text-sm uppercase tracking-[0.08em] text-[var(--text-muted)]">
                       {item.variantTitle !== "Default" ? `${item.variantTitle} · ` : ""}
                       Qty {item.quantity}
@@ -244,6 +284,20 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
                 <dt className="text-sm uppercase tracking-[0.06em]">Total</dt>
                 <dd className="text-[26px] font-semibold tabular-nums">{formatPrice(fresh.total)}</dd>
               </div>
+              {fresh.depositAmount ? (
+                <div className="mt-3 border-t border-[var(--border-subtle)] pt-3 text-sm">
+                  <div className="flex justify-between font-medium text-[var(--accent)]">
+                    <dt>50% Pre-Order Deposit</dt>
+                    <dd className="tabular-nums">{formatPrice(fresh.depositAmount)}</dd>
+                  </div>
+                  <div className="mt-1 flex justify-between text-[var(--text-secondary)]">
+                    <dt>Balance on White-Glove Delivery</dt>
+                    <dd className="tabular-nums">
+                      {formatPrice(fresh.total - fresh.depositAmount)}
+                    </dd>
+                  </div>
+                </div>
+              ) : null}
             </dl>
           </div>
 

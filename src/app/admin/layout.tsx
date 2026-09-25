@@ -12,9 +12,14 @@ export const dynamic = "force-dynamic";
 /** Nav is filtered by permission, so staff never see a link they cannot open. */
 const NAV: { href: string; label: string; icon: string; permission: Permission }[] = [
   { href: "/admin", label: "Dashboard", icon: "dashboard", permission: "dashboard:view" },
+  { href: "/admin/analytics", label: "Financials & Margins", icon: "analytics", permission: "dashboard:view" },
+  { href: "/admin/orders/new", label: "Showroom POS", icon: "pos", permission: "orders:write" },
   { href: "/admin/orders", label: "Orders", icon: "orders", permission: "orders:read" },
+  { href: "/admin/preorders", label: "Pre-orders & Trade", icon: "preorders", permission: "orders:read" },
+  { href: "/admin/shipments", label: "Containers & Freight", icon: "shipments", permission: "orders:read" },
   { href: "/admin/carts", label: "Abandoned bags", icon: "carts", permission: "orders:read" },
   { href: "/admin/products", label: "Products", icon: "products", permission: "products:read" },
+  { href: "/admin/products/bulk", label: "Bulk FX & Matrix", icon: "products", permission: "products:write" },
   { href: "/admin/categories", label: "Categories", icon: "categories", permission: "products:read" },
   { href: "/admin/media", label: "Media", icon: "media", permission: "products:read" },
   { href: "/admin/inventory", label: "Inventory", icon: "inventory", permission: "inventory:read" },
@@ -33,15 +38,23 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   if (!user) redirect("/login");
   if (!isStaff(user.role)) redirect("/account");
 
-  // The counts beside Orders and Reviews are what is actually waiting on
+  // The counts beside Orders, Pre-orders, and Reviews are what is actually waiting on
   // someone, so the rail says whether there is work without opening anything.
-  const [openOrders, pendingReviews] = await Promise.all([
+  const [openOrders, pendingReviews, openPreorderRequests, openPreorderOrders] = await Promise.all([
     db.order.count({ where: { status: { in: ["PAID", "PROCESSING"] } } }),
     db.review.count({ where: { isApproved: false } }),
+    db.preorderRequest.count({ where: { status: { in: ["NEW", "QUOTED", "SOURCING"] } } }),
+    db.order.count({
+      where: {
+        hasPreorderItems: true,
+        status: { in: ["PENDING", "PAID", "PROCESSING"] },
+      },
+    }),
   ]);
 
   const badges: Record<string, number> = {
     "/admin/orders": openOrders,
+    "/admin/preorders": openPreorderRequests + openPreorderOrders,
     "/admin/reviews": pendingReviews,
   };
 

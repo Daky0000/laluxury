@@ -25,14 +25,15 @@ export default async function CheckoutPage() {
     getIntegrations(),
   ]);
 
-  // A returning customer has typed all of this before. The most recent
-  // delivery address is the likeliest one, and every field stays editable.
-  const lastAddress = user
-    ? await db.address.findFirst({
+  const savedAddresses = user
+    ? await db.address.findMany({
         where: { userId: user.id },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
+        take: 6,
       })
-    : null;
+    : [];
+
+  const lastAddress = savedAddresses[0] ?? null;
 
   const defaults: CheckoutDefaults = {
     email: user?.email ?? cart.email ?? "",
@@ -46,23 +47,33 @@ export default async function CheckoutPage() {
     postalCode: lastAddress?.postalCode ?? "",
   };
 
-  return (
-    <div className="lx-container pb-16 pt-11">
-      <h1 className="mb-6 text-[clamp(2.25rem,5vw,3.25rem)]">Your bag</h1>
+  const hasPreorderItems = totals.lines.some((line) => line.isPreorder);
+  const paystackReady = isReady(integrations, "paystack");
 
-      {!isReady(integrations, "paystack") ? (
-        <p className="mb-8 border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
-          Payments are not switched on yet. Add your Paystack keys under Settings →
-          Integrations to accept orders.
-        </p>
-      ) : null}
+  return (
+    <div className="lx-container py-12 sm:py-16">
+      <h1 className="mb-8 text-[clamp(2rem,5vw,3rem)]">Your bag &amp; checkout</h1>
 
       <CheckoutForm
         subtotal={totals.subtotal}
         discountTotal={totals.discountTotal}
         goodsTotal={totals.total}
         defaults={defaults}
+        savedAddresses={savedAddresses.map((a) => ({
+          id: a.id,
+          label: `${a.city}, ${a.region}`,
+          firstName: a.firstName,
+          lastName: a.lastName,
+          phone: formatPhone(a.phone),
+          line1: a.line1,
+          line2: a.line2 ?? "",
+          city: a.city,
+          region: a.region,
+          postalCode: a.postalCode ?? "",
+        }))}
         isSignedIn={Boolean(user)}
+        hasPreorderItems={hasPreorderItems}
+        paystackReady={paystackReady}
         freeShippingThreshold={settings.freeShippingThreshold}
         lines={<CartLines lines={totals.lines} />}
         discount={<DiscountForm appliedCode={totals.discountCode} />}

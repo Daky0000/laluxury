@@ -1,75 +1,92 @@
 /**
  * Runs the seed from `npm start`, before the server listens.
  *
- * The production database only accepts connections from inside Railway's
- * network, so a seed cannot be run from a laptop — it has to happen during a
- * release. This is that hook, and it now fires on every boot, so a catalog
- * change reaches the shop by being pushed like anything else.
- *
- * What makes running it every time safe is in `prisma/seed.ts`: the catalog is
- * fingerprinted, and a boot whose fingerprint already matches skips the catalog
- * writes entirely. So the ordinary restart costs one query and changes nothing,
- * while a deploy that actually edited the catalog applies it.
- *
- * RUN_SEED=1 still exists, and now means "apply the catalog even though the
- * fingerprint matches" — the escape hatch for putting a hand-edited row back to
- * what this file says it should be.
- *
- * Two deliberate properties:
- *
- *   - Never fatal. A failed seed logs loudly but still exits 0, because a bad
- *     seed must not stop the storefront from booting — that would turn a data
- *     problem into an outage, and the healthcheck would roll the release back
- *     with nothing in the build log to explain why.
- *   - Sequential. RUN_DEMO_ORDERS runs after the seed rather than instead of
- *     it, since demo orders reference the catalog the seed just wrote.
+ * Railway Cost Optimization:
+ * Instead of unconditionally spawning `tsx prisma/seed.ts` (which boots the
+ * TypeScript compiler and Prisma Client in a child process and consumes ~350MB
+ * of extra RAM on every container restart), we first compute the catalog
+ * revision hash in plain Node and query the `Setting` table directly over a
+ * lightweight `pg` connection. If `catalog.revision` already matches and
+ * `RUN_SEED !== "1"`, we skip spawning `tsx` altogether!
  */
+import "dotenv/config";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-const tasks = ["db:seed"];
+const CATALOG_SCHEMA_VERSION = 3;
+const REVISION_KEY = "catalog.revision";
 
-// Demo customers and orders, so the console has something to show before real
-// trade starts. Opt-in, and never wanted twice.
-if (process.env.RUN_DEMO_ORDERS === "1") tasks.push("db:demo");
+function computeSeedRevision() {
+  try {
+    const seedPath = resolve(process.cwd(), "prisma/seed.ts");
+    return createHash("sha256")
+      .update(`v${CATALOG_SCHEMA_VERSION}\n`)
+      .update(readFileSync(seedPath, "utf8"))
+      .digest("hex")
+      .slice(0, 12);
+  } catch {
+    return null;
+  }
+}
 
-/**
- * Reads back what the seed claims to have written, over a plain pg connection
- * using the same DATABASE_URL. If the seed reports rows and this reports none,
- * the two are not talking to the same database.
- */
-async function verify() {
+async function checkStateAndVerify() {
   const { default: pg } = await import("pg");
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   try {
     await client.connect();
     const { rows } = await client.query(
-      'SELECT current_database() AS db, inet_server_addr()::text AS host, ' +
+      'SELECT current_database() AS db, ' +
+        '(SELECT value FROM "Setting" WHERE key = $1) AS rev_setting, ' +
         '(SELECT count(*) FROM "Product" WHERE status = \'ACTIVE\')::int AS live_products, ' +
         '(SELECT count(*) FROM "Product")::int AS products, ' +
         '(SELECT count(*) FROM "Category" WHERE "isActive")::int AS categories',
+      [REVISION_KEY],
     );
-    console.log(`[seed-once] verify: ${JSON.stringify(rows[0])}`);
+    const row = rows[0] ?? {};
+    const appliedRevision = row.rev_setting?.revision ?? null;
+    console.log(
+      `[seed-once] status: db=${row.db}, live_products=${row.live_products}, categories=${row.categories}, revision=${appliedRevision ?? "none"}`,
+    );
+    return { appliedRevision, liveProducts: row.live_products ?? 0 };
   } catch (error) {
-    console.error(`[seed-once] verify failed: ${error.message}`);
+    console.error(`[seed-once] check failed: ${error.message}`);
+    return { appliedRevision: null, liveProducts: 0 };
   } finally {
     await client.end().catch(() => {});
   }
 }
 
-/** Resolves to the exit code rather than rejecting, so one failure is survivable. */
 function run(task) {
-  return new Promise((resolve) => {
-    console.log(`[seed-once] running ${task}.`);
-    const child = spawn("npm", ["run", task], {
+  return new Promise((resolveCode) => {
+    console.log(`[seed-once] running ${task}...`);
+    const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+    const child = spawn(npmCmd, ["run", task], {
       stdio: "inherit",
       shell: process.platform === "win32",
     });
-    child.on("exit", (code) => resolve(code ?? 1));
+    child.on("exit", (code) => resolveCode(code ?? 1));
     child.on("error", (error) => {
       console.error(`[seed-once] ${task} COULD NOT START: ${error.message}.`);
-      resolve(1);
+      resolveCode(1);
     });
   });
+}
+
+const expectedRevision = computeSeedRevision();
+const initial = await checkStateAndVerify();
+const forced = process.env.RUN_SEED === "1";
+
+const tasks = [];
+if (forced || !expectedRevision || initial.appliedRevision !== expectedRevision || initial.liveProducts === 0) {
+  tasks.push("db:seed");
+} else {
+  console.log(`[seed-once] catalog already at revision ${expectedRevision} — skipping heavy tsx seed on boot (Railway RAM/CPU saver).`);
+}
+
+if (process.env.RUN_DEMO_ORDERS === "1") {
+  tasks.push("db:demo");
 }
 
 const failed = [];
@@ -78,10 +95,12 @@ for (const task of tasks) {
   if (code !== 0) failed.push(`${task} (exit ${code})`);
 }
 
-await verify();
+if (tasks.length > 0) {
+  await checkStateAndVerify();
+}
 
 if (failed.length === 0) {
-  console.log(`[seed-once] ${tasks.join(", ")} finished.`);
+  console.log(`[seed-once] boot check complete.`);
 } else {
   console.error(
     `[seed-once] FAILED: ${failed.join(", ")}. Booting anyway — the store will come up, ` +

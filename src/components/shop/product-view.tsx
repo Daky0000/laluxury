@@ -35,6 +35,10 @@ export function ProductView({
   badge,
   productId,
   isSaved,
+  isPreorder = false,
+  preorderLeadTime = null,
+  preorderDepositPercent = null,
+  preorderNote = null,
   header,
   description,
   footer,
@@ -46,6 +50,10 @@ export function ProductView({
   badge?: string | null;
   productId: string;
   isSaved: boolean;
+  isPreorder?: boolean;
+  preorderLeadTime?: string | null;
+  preorderDepositPercent?: number | null;
+  preorderNote?: string | null;
   /** Category, title and rating — rendered above the price. */
   header: ReactNode;
   /** The short description, between the stock line and the options. */
@@ -167,7 +175,7 @@ export function ProductView({
           ) : null}
 
           {images.length > 1 ? (
-            <span className="pointer-events-none absolute bottom-4 right-4 bg-[rgba(43,39,36,0.72)] px-2.5 py-1 text-sm tracking-[0.06em] text-[var(--surface)]">
+            <span className="pointer-events-none absolute bottom-4 right-4 bg-[rgba(43,39,36,0.72)] px-2.5 py-1 text-xs tracking-[0.06em] text-[var(--surface)]">
               {safeIndex + 1} / {images.length}
             </span>
           ) : null}
@@ -182,7 +190,12 @@ export function ProductView({
           onSelectionChange={selectValues}
           valueImages={valueImages}
           productId={productId}
+          productTitle={title}
           isSaved={isSaved}
+          isPreorder={isPreorder}
+          preorderLeadTime={preorderLeadTime}
+          preorderDepositPercent={preorderDepositPercent}
+          preorderNote={preorderNote}
           description={description}
         />
         {footer}

@@ -5,14 +5,15 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getIntegrations, isReady } from "@/lib/integrations";
-import { getOrCreateCart } from "@/lib/cart";
-import { createOrderFromCart } from "@/lib/orders";
-import { getSession } from "@/lib/auth/session";
+import { clearCart, getOrCreateCart } from "@/lib/cart";
+import { createOrderFromCart, logOrderEvent } from "@/lib/orders";
+import { createSessionCookie, getSession } from "@/lib/auth/session";
 import { hashPassword, passwordProblems } from "@/lib/auth/password";
 import { initializeTransaction } from "@/lib/paystack";
 import { InsufficientStockError } from "@/lib/inventory";
 import { GHANA_REGIONS } from "@/lib/constants";
 import { normalisePhone } from "@/lib/phone";
+import { formatMoney } from "@/lib/money";
 
 /** Everything Paystack supports for GHS; see lib/paystack. */
 const PAYSTACK_CHANNELS = ["card", "mobile_money", "bank_transfer", "ussd", "bank", "qr"];
@@ -27,8 +28,6 @@ const schema = z.object({
   email: z.string().email("Enter a valid email address."),
   firstName: z.string().min(1, "Enter a first name."),
   lastName: z.string().min(1, "Enter a last name."),
-  // Checked against the same parser the rest of the shop uses, so the number
-  // the rider calls and the number the order notices go to is one we can dial.
   phone: z
     .string()
     .min(1, "Enter a phone number we can reach you on.")
@@ -44,6 +43,8 @@ const schema = z.object({
   }),
   postalCode: z.string().optional(),
   shippingRateId: z.string().optional(),
+  paymentMethod: z.string().optional(),
+  preorderDepositOption: z.enum(["full", "deposit_50"]).optional(),
   /** Paystack channels, comma separated. Whitelisted below before it is sent. */
   channels: z.string().optional(),
   customerNote: z.string().optional(),
@@ -66,6 +67,8 @@ export async function placeOrderAction(
     region: formData.get("region"),
     postalCode: formData.get("postalCode") || undefined,
     shippingRateId: formData.get("shippingRateId") || undefined,
+    paymentMethod: formData.get("paymentMethod") || undefined,
+    preorderDepositOption: formData.get("preorderDepositOption") || undefined,
     channels: formData.get("channels") || undefined,
     customerNote: formData.get("customerNote") || undefined,
     createAccount: formData.get("createAccount") === "on",
@@ -82,34 +85,21 @@ export async function placeOrderAction(
   }
 
   const integrations = await getIntegrations();
-  if (!isReady(integrations, "paystack")) {
-    return {
-      ok: false,
-      message: "Payments are not switched on yet. Add your Paystack keys under Settings → Integrations.",
-    };
-  }
+  const paystackConfigured = isReady(integrations, "paystack");
 
   const data = parsed.data;
   const email = data.email.toLowerCase().trim();
-  // Stored canonically — 233XXXXXXXXX — the way accounts hold it, so the order
-  // can be matched to a customer later and the texts go to a number Vynfy takes.
   const phone = normalisePhone(data.phone)!;
 
-  // The payment choice only narrows what Paystack offers; anything we do not
-  // recognise falls back to its full set rather than failing the order.
   const channels = (data.channels ?? "")
     .split(",")
     .map((channel) => channel.trim())
     .filter((channel) => PAYSTACK_CHANNELS.includes(channel));
+
   const session = await getSession();
   let userId = session?.userId ?? null;
 
-  // Optional account creation at checkout.
-  //
-  // Both the email and the phone are unique on an account, so either already
-  // being taken has to stop here with a sentence rather than fall through to
-  // the database and come back as a constraint error - or, worse, quietly
-  // place the order with no account behind it when one was asked for.
+  // Optional 1-click account creation at checkout for guests.
   if (!userId && data.createAccount) {
     const problems = passwordProblems(data.password ?? "");
     if (problems.length) return { ok: false, fieldErrors: { password: problems[0] } };
@@ -122,7 +112,7 @@ export async function placeOrderAction(
       return {
         ok: false,
         message:
-          "There is already an account with that email or phone number. Sign in first, or untick 'Save my details' to check out as a guest.",
+          "There is already an account with that email or phone number. Sign in first, or untick 'Create my account' to check out as a guest.",
       };
     }
 
@@ -132,10 +122,40 @@ export async function placeOrderAction(
         firstName: data.firstName,
         lastName: data.lastName,
         phone,
+        phoneVerified: new Date(),
         passwordHash: await hashPassword(data.password ?? ""),
       },
     });
     userId = created.id;
+
+    // Save their default delivery address and log them in immediately.
+    await db.address.create({
+      data: {
+        userId: created.id,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone,
+        line1: data.line1,
+        line2: data.line2 ?? null,
+        city: data.city,
+        region: data.region,
+        postalCode: data.postalCode ?? null,
+        country: "GH",
+        isDefault: true,
+      },
+    });
+
+    await createSessionCookie({ userId: created.id, role: created.role });
+  } else if (!userId) {
+    // Guest checkout: if an existing user matches this email or phone, link the
+    // order to their profile so it appears in their order history later.
+    const existing = await db.user.findFirst({
+      where: { OR: [{ email }, { phone }] },
+      select: { id: true },
+    });
+    if (existing) {
+      userId = existing.id;
+    }
   }
 
   const cart = await getOrCreateCart();
@@ -143,7 +163,14 @@ export async function placeOrderAction(
     return { ok: false, message: "Your bag is empty." };
   }
 
-  let authorizationUrl: string;
+  const paymentMethod = data.paymentMethod ?? "momo";
+  const isDirectMethod =
+    !paystackConfigured ||
+    paymentMethod === "direct_momo" ||
+    paymentMethod === "pay_on_delivery";
+  const depositPercent = data.preorderDepositOption === "deposit_50" ? 50 : null;
+
+  let redirectUrl: string;
 
   try {
     const order = await createOrderFromCart({
@@ -163,41 +190,78 @@ export async function placeOrderAction(
       },
       shippingRateId: data.shippingRateId ?? null,
       customerNote: data.customerNote ?? null,
+      paymentMethod,
+      depositPercent,
     });
 
-    // Reference doubles as our payment idempotency key.
+    const chargeAmount = order.depositAmount ?? order.total;
     const reference = `${order.orderNumber}-${Date.now().toString(36).toUpperCase()}`;
 
     await db.payment.create({
       data: {
         orderId: order.id,
         reference,
-        amount: order.total,
+        provider: isDirectMethod ? "direct" : "paystack",
+        channel: paymentMethod,
+        amount: chargeAmount,
         currency: order.currency,
         status: "PENDING",
       },
     });
 
-    const init = await initializeTransaction({
-      email,
-      amount: order.total,
-      reference,
-      callbackUrl: `${env.siteUrl()}/checkout/confirm`,
-      channels: channels.length ? channels : undefined,
-      metadata: {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        custom_fields: [
-          {
-            display_name: "Order",
-            variable_name: "order_number",
-            value: order.orderNumber,
-          },
-        ],
-      },
-    });
+    if (isDirectMethod) {
+      await clearCart(cart.id);
 
-    authorizationUrl = init.authorization_url;
+      const methodLabel =
+        paymentMethod === "pay_on_delivery"
+          ? "Pay on delivery / concierge verification"
+          : paymentMethod === "direct_momo"
+            ? "Direct MoMo / Bank transfer"
+            : "Concierge checkout (direct settlement)";
+
+      await logOrderEvent({
+        orderId: order.id,
+        type: "order.confirmed_direct",
+        message: `Order confirmed via ${methodLabel}. Amount due: ${formatMoney(chargeAmount, order.currency)}${order.depositAmount ? ` (50% pre-order deposit; total ${formatMoney(order.total, order.currency)})` : ""}.`,
+        actorId: userId,
+      });
+
+      if (userId) {
+        await db.customerInteraction.create({
+          data: {
+            userId,
+            type: "ORDER_PLACED",
+            subject: `Order ${order.orderNumber}`,
+            body: `Placed order (${formatMoney(order.total, order.currency)}) via ${methodLabel}.`,
+            meta: { orderId: order.id, orderNumber: order.orderNumber },
+          },
+        });
+      }
+
+      redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=direct`;
+    } else {
+      const init = await initializeTransaction({
+        email,
+        amount: chargeAmount,
+        reference,
+        callbackUrl: `${env.siteUrl()}/checkout/confirm`,
+        channels: channels.length ? channels : undefined,
+        metadata: {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          depositAmount: order.depositAmount,
+          custom_fields: [
+            {
+              display_name: "Order",
+              variable_name: "order_number",
+              value: order.orderNumber,
+            },
+          ],
+        },
+      });
+
+      redirectUrl = init.authorization_url;
+    }
   } catch (error) {
     if (error instanceof InsufficientStockError) {
       return { ok: false, message: error.message };
@@ -209,5 +273,5 @@ export async function placeOrderAction(
   }
 
   // Outside the try: redirect() throws a control-flow signal by design.
-  redirect(authorizationUrl);
+  redirect(redirectUrl);
 }

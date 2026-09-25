@@ -37,6 +37,7 @@ export async function Footer() {
           href: `/shop?category=${room.slug}`,
         })),
         { label: "New in", href: "/shop?sort=newest" },
+        { label: "Pre-Order & Bespoke", href: "/pre-order" },
       ],
     },
     {
@@ -52,11 +53,12 @@ export async function Footer() {
       head: "Studio",
       links: [
         { label: `About ${settings.storeName}`, href: "/contact" },
+        { label: "Lookbook", href: "/lookbook" },
+        { label: "Trade Program", href: "/trade" },
         {
           label: "WhatsApp us",
           href: whatsapp ? `https://wa.me/${whatsapp}` : "/contact",
         },
-        { label: "Wholesale", href: "/contact" },
         ...(settings.instagramUrl
           ? [{ label: "Instagram", href: settings.instagramUrl }]
           : []),
@@ -69,9 +71,9 @@ export async function Footer() {
       {/* Two columns of links on a phone, three plus the blurb from `md`. Four
           across at 768px gave each column about 160px, which wraps every second
           label onto a line of its own. */}
-      <div className="lx-container grid gap-x-8 gap-y-10 py-12 sm:py-16 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
+      <div className="lx-container grid gap-x-8 gap-y-10 py-14 sm:py-20 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
-          <p className="font-display text-[28px] uppercase tracking-[0.16em]">
+          <p className="font-display text-2xl font-light uppercase tracking-[0.16em] sm:text-3xl">
             {settings.storeName}
           </p>
           <p data-dw-field="footer.description" className="mt-4 max-w-[320px] text-sm font-light leading-[1.7] text-[var(--text-secondary)]">
@@ -83,7 +85,7 @@ export async function Footer() {
         <div className="grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-3 md:contents">
           {columns.map((column) => (
             <nav key={column.head} aria-label={column.head}>
-              <p className="mb-3 text-sm uppercase tracking-[0.18em] text-[var(--text-primary)]">
+              <p className="mb-4 text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-primary)]">
                 {column.head}
               </p>
               <ul>
@@ -91,7 +93,7 @@ export async function Footer() {
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="flex min-h-11 items-center text-sm font-light text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+                      className="inline-flex py-1.5 text-sm font-light text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
                     >
                       {link.label}
                     </Link>
@@ -107,26 +109,29 @@ export async function Footer() {
           as what it is — the policies, and the way back into the cookie
           choice — rather than as another place to shop. */}
       <div className="border-t border-[var(--border-subtle)]">
-        <div className="lx-container flex flex-wrap gap-x-6 gap-y-1 py-3 text-sm text-[var(--text-secondary)]">
+        <div className="lx-container flex flex-wrap gap-x-6 gap-y-1 py-3 text-xs text-[var(--text-secondary)]">
           {LEGAL_LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="flex min-h-11 items-center transition-colors hover:text-[var(--accent)]"
+              className="inline-flex py-2 items-center transition-colors hover:text-[var(--accent)]"
             >
               {link.label}
             </Link>
           ))}
-          <CookieSettingsLink className="flex min-h-11 items-center underline-offset-4 transition-colors hover:text-[var(--accent)] hover:underline" />
+          <CookieSettingsLink className="inline-flex py-2 items-center underline-offset-4 transition-colors hover:text-[var(--accent)] hover:underline" />
         </div>
       </div>
 
       <div className="border-t border-[var(--border-subtle)]">
-        <div className="lx-safe-b lx-container flex flex-col items-start justify-between gap-2 pt-5 text-sm tracking-[0.04em] text-[var(--text-muted)] sm:flex-row sm:items-center">
-          <p>
-            © {year} {settings.storeName} Home &amp; Living
-          </p>
-          <p>{settings.addressLine} · nationwide delivery</p>
+        <div className="lx-safe-b lx-container flex flex-col items-start justify-between gap-2 pt-5 text-xs tracking-[0.06em] text-[var(--text-muted)] sm:flex-row sm:items-center">
+          <div>
+            <p>
+              © {year} {settings.storeName} Home &amp; Living
+            </p>
+            <p>{settings.addressLine} · nationwide delivery</p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">MTN MoMo · Telecel · AirtelTigo · Visa / Mastercard</p>
+          </div>
         </div>
       </div>
     </footer>

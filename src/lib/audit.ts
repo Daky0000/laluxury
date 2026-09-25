@@ -30,6 +30,8 @@ export async function recordAudit(args: {
   });
 }
 
+export const logAudit = recordAudit;
+
 export async function recentAudit(limit = 50) {
   return db.auditLog.findMany({
     orderBy: { createdAt: "desc" },

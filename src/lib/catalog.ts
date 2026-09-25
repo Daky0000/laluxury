@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { db } from "./db";
 import type { Prisma, ProductStatus } from "@/generated/prisma";
 
@@ -32,6 +33,7 @@ export type CatalogFilters = {
   /** Only pieces whose "was" price is above what they sell for today. */
   onSaleOnly?: boolean;
   featuredOnly?: boolean;
+  preorderOnly?: boolean;
   sort?: ProductSort;
   page?: number;
   perPage?: number;
@@ -46,6 +48,10 @@ export const productCardSelect = {
   maxPrice: true,
   compareAtPrice: true,
   isFeatured: true,
+  isPreorder: true,
+  preorderLeadTime: true,
+  preorderDepositPercent: true,
+  preorderNote: true,
   tags: true,
   brand: true,
   createdAt: true,
@@ -121,6 +127,16 @@ function buildWhere(filters: CatalogFilters, status: ProductStatus | null = "ACT
 
   if (filters.featuredOnly) and.push({ isFeatured: true });
 
+  if (filters.preorderOnly) {
+    and.push({
+      OR: [
+        { isPreorder: true },
+        { categories: { some: { category: { slug: "pre-order" } } } },
+        { tags: { hasSome: ["pre-order", "preorder"] } },
+      ],
+    });
+  }
+
   // Each selected option group is ANDed, values within a group are ORed:
   // "Ivory or Sand" AND "Large".
   if (filters.options) {
@@ -152,24 +168,36 @@ function buildWhere(filters: CatalogFilters, status: ProductStatus | null = "ACT
 
   if (filters.inStockOnly) {
     and.push({
-      variants: {
-        some: {
-          isActive: true,
-          OR: [
-            { inventory: { is: null } },
-            { inventory: { trackInventory: false } },
-            { inventory: { allowBackorder: true } },
-            { inventory: { onHand: { gt: 0 } } },
-          ],
+      OR: [
+        { isPreorder: true },
+        {
+          variants: {
+            some: {
+              isActive: true,
+              OR: [
+                { inventory: { is: null } },
+                { inventory: { trackInventory: false } },
+                { inventory: { allowBackorder: true } },
+                { inventory: { onHand: { gt: 0 } } },
+              ],
+            },
+          },
         },
-      },
+      ],
     });
   }
 
   return and.length ? { AND: and } : {};
 }
 
-export function isInStock(product: Pick<ProductCard, "variants">): boolean {
+export function isInStock(
+  product: Pick<ProductCard, "variants"> & {
+    isPreorder?: boolean;
+    categories?: { category: { slug: string } }[];
+  },
+): boolean {
+  if (product.isPreorder) return true;
+  if (product.categories?.some((c) => c.category.slug === "pre-order")) return true;
   return product.variants.some((v) => {
     const inv = v.inventory;
     if (!inv || !inv.trackInventory || inv.allowBackorder) return true;
@@ -306,12 +334,12 @@ export const productDetailInclude = {
 
 export type ProductDetail = Prisma.ProductGetPayload<{ include: typeof productDetailInclude }>;
 
-export async function getProductBySlug(slug: string): Promise<ProductDetail | null> {
+export const getProductBySlug = cache(async (slug: string): Promise<ProductDetail | null> => {
   return db.product.findFirst({
     where: { slug, status: "ACTIVE" },
     include: productDetailInclude,
   });
-}
+});
 
 export async function ratingFor(productId: string) {
   const result = await db.review.aggregate({

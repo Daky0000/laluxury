@@ -29,7 +29,7 @@ const globalForPrisma = globalThis as unknown as {
  */
 function poolMax(): number {
   const configured = Number(process.env.DATABASE_POOL_MAX);
-  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 5;
+  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 3;
 }
 
 function createClient() {
@@ -40,7 +40,10 @@ function createClient() {
     // request, which is indistinguishable from a broken site. Ten seconds and
     // then a real error.
     connectionTimeoutMillis: 10_000,
-    idleTimeoutMillis: 10_000,
+    // Release idle connections after 5s and allow the pool to go completely idle
+    // so Railway Postgres can enter serverless sleep when there is no traffic.
+    idleTimeoutMillis: 5_000,
+    allowExitOnIdle: true,
     // Names the connections in pg_stat_activity, so "who is holding these?" has
     // an answer next time.
     application_name: "laluxury",

@@ -72,10 +72,10 @@ export default async function ContactPage() {
   return (
     <>
       {/* Hero */}
-      <section className="lx-container pb-2 pt-14 text-center">
+      <section className="lx-container lx-page-header text-center">
         <p className="lx-eyebrow">We&rsquo;re here to help</p>
-        <h1 className="mt-3 text-[clamp(2.5rem,6vw,3.875rem)] leading-tight">Get in touch</h1>
-        <p className="mx-auto mt-3 max-w-[520px] text-base font-light leading-relaxed text-[var(--text-muted)]">
+        <h1 className="mt-3 text-[clamp(2.25rem,5vw,3.5rem)] leading-tight">Get in touch</h1>
+        <p className="mx-auto mt-3 max-w-[520px] text-sm sm:text-base font-light leading-relaxed text-[var(--text-muted)]">
           Questions about an order, sizing, or wholesale? Reach us any way you like — we usually
           reply within the hour.
         </p>
@@ -83,15 +83,15 @@ export default async function ContactPage() {
 
       {/* Quick channels */}
       {channels.length > 0 ? (
-        <section className="lx-container pb-2 pt-9">
+        <section className="lx-container pt-8 pb-4">
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {channels.map((channel) => {
               const Icon = channel.icon;
               const body = (
                 <>
-                  <Icon className="h-6 w-6 text-[var(--accent)]" strokeWidth={1.5} aria-hidden />
+                  <Icon className="h-5 w-5 text-[var(--accent)]" strokeWidth={1.5} aria-hidden />
                   <span>
-                    <span className="block text-sm uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                    <span className="block text-xs uppercase tracking-[0.16em] text-[var(--text-muted)]">
                       {channel.label}
                     </span>
                     <span className="mt-1.5 block text-base text-[var(--text-primary)]">
@@ -106,12 +106,12 @@ export default async function ContactPage() {
                   {channel.href ? (
                     <a
                       href={channel.href}
-                      className="flex h-full flex-col gap-3.5 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-6 py-6 transition-colors hover:border-[var(--border-strong)]"
+                      className="flex h-full flex-col gap-3.5 border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-6 transition-colors hover:border-[var(--border-strong)]"
                     >
                       {body}
                     </a>
                   ) : (
-                    <div className="flex h-full flex-col gap-3.5 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-6 py-6">
+                    <div className="flex h-full flex-col gap-3.5 border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-6">
                       {body}
                     </div>
                   )}
@@ -123,7 +123,7 @@ export default async function ContactPage() {
       ) : null}
 
       {/* Form + info */}
-      <section className="lx-container grid items-start gap-10 pb-5 pt-10 lg:grid-cols-[1.3fr_1fr] lg:gap-14">
+      <section className="lx-container grid items-start gap-10 py-12 sm:py-16 lg:grid-cols-[1.3fr_1fr] lg:gap-14">
         <div className="border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-7 sm:p-9">
           <ContactForm />
         </div>
@@ -141,10 +141,10 @@ export default async function ContactPage() {
           <dl className="border-t border-[var(--border-subtle)]">
             {info.map((row) => (
               <div key={row.label} className="border-b border-[var(--border-subtle)] py-4.5">
-                <dt className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                <dt className="text-xs uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   {row.label}
                 </dt>
-                <dd className="mt-1.5 text-base font-light leading-relaxed">{row.value}</dd>
+                <dd className="mt-1.5 text-sm sm:text-base font-light leading-relaxed">{row.value}</dd>
               </div>
             ))}
           </dl>
@@ -152,17 +152,17 @@ export default async function ContactPage() {
       </section>
 
       {/* FAQ */}
-      <section className="lx-container max-w-[900px] pb-5 pt-12">
+      <section className="lx-container max-w-[900px] py-12 sm:py-16">
         <h2 className="mb-6 text-center text-[clamp(1.75rem,4vw,2.25rem)]">Common questions</h2>
 
         <div className="border-t border-[var(--border-subtle)]">
           {faqs.map((faq) => (
             <details key={faq.q} className="group border-b border-[var(--border-subtle)]">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-base marker:hidden [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-sm sm:text-base marker:hidden [&::-webkit-details-marker]:hidden">
                 {faq.q}
                 <span
                   aria-hidden
-                  className="shrink-0 text-[19px] leading-none text-[var(--accent-hover)]"
+                  className="shrink-0 text-lg leading-none text-[var(--accent-hover)]"
                 >
                   <span className="group-open:hidden">+</span>
                   <span className="hidden group-open:inline">&minus;</span>

@@ -52,6 +52,10 @@ export type EditorProduct = {
   care: string | null;
   tags: string[];
   isFeatured: boolean;
+  isPreorder?: boolean;
+  preorderLeadTime?: string | null;
+  preorderDepositPercent?: number | null;
+  preorderNote?: string | null;
   metaTitle: string | null;
   metaDescription: string | null;
   /** The product-wide "was" price, for variants without one of their own. */
@@ -372,6 +376,73 @@ function DetailsTab({
               </p>
             </div>
           </div>
+        </Card>
+
+        <Card className="flex flex-col gap-4 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="lx-eyebrow">Pre-Order &amp; Bespoke Sourcing</h3>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                Enable when this piece is not currently in stock in Accra and is made-to-order or sourced upon request.
+                Turning this on automatically places it in the Pre-Order category and enables backorder checkout.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                name="isPreorder"
+                defaultChecked={Boolean(product.isPreorder)}
+                className="h-4 w-4 accent-[var(--accent)]"
+              />
+              Available on Pre-Order
+            </label>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Estimated lead time"
+              htmlFor="preorderLeadTime"
+              hint="Shown on product tiles, product page, and checkout (e.g. 4–6 weeks)."
+            >
+              <input
+                id="preorderLeadTime"
+                name="preorderLeadTime"
+                defaultValue={product.preorderLeadTime ?? "4–6 weeks"}
+                placeholder="4–6 weeks"
+                className="lx-field"
+              />
+            </Field>
+
+            <Field
+              label="Reservation deposit (%)"
+              htmlFor="preorderDepositPercent"
+              hint="Default deposit percentage offered at checkout (e.g. 50)."
+            >
+              <input
+                id="preorderDepositPercent"
+                name="preorderDepositPercent"
+                type="number"
+                min={10}
+                max={100}
+                defaultValue={product.preorderDepositPercent ?? 50}
+                className="lx-field"
+              />
+            </Field>
+          </div>
+
+          <Field
+            label="Pre-Order concierge note"
+            htmlFor="preorderNote"
+            hint="Optional craftsmanship or shipping note displayed on the product page."
+          >
+            <input
+              id="preorderNote"
+              name="preorderNote"
+              defaultValue={product.preorderNote ?? ""}
+              placeholder="Handcrafted to order and shipped with white-glove delivery in Accra."
+              className="lx-field"
+            />
+          </Field>
         </Card>
 
         <Card className="flex flex-wrap items-end justify-between gap-4 p-5">

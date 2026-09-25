@@ -74,7 +74,7 @@ export function CartDrawer() {
           so the checkout button at the foot is never left under it. */}
       <div className="absolute right-0 top-0 flex h-dvh w-[420px] max-w-[92vw] flex-col overscroll-contain border-l border-[var(--border-subtle)] bg-[var(--surface-raised)]">
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4 sm:px-6 sm:py-6">
-          <h2 className="text-2xl">Your bag</h2>
+          <h2 className="font-display text-2xl">Your bag</h2>
           <button
             type="button"
             onClick={() => setOpen(false)}
@@ -91,7 +91,7 @@ export function CartDrawer() {
               <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
             </div>
           ) : summary.lines.length === 0 ? (
-            <p className="py-[70px] text-center text-sm font-light leading-7 text-[var(--text-muted)]">
+            <p className="py-20 text-center text-sm font-light leading-7 text-[var(--text-muted)]">
               Your bag is empty.
               <br />
               Add something soft.
@@ -101,7 +101,7 @@ export function CartDrawer() {
               {summary.lines.map((line) => (
                 <li
                   key={line.id}
-                  className="flex gap-3.5 border-b border-[var(--border-subtle)] py-[18px]"
+                  className="flex gap-4 border-b border-[var(--border-subtle)] py-5"
                 >
                   <div className="min-w-0 flex-1">
                     <Link href={`/product/${line.slug}`} onClick={() => setOpen(false)}>
@@ -141,7 +141,7 @@ export function CartDrawer() {
                     ) : null}
                   </div>
 
-                  <p className="shrink-0 text-[17px] font-semibold tabular-nums">
+                  <p className="shrink-0 font-display text-base tabular-nums">
                     {formatPrice(line.lineTotal)}
                   </p>
                 </li>
@@ -181,7 +181,7 @@ export function CartDrawer() {
           <Link
             href="/cart"
             onClick={() => setOpen(false)}
-            className="mt-3 block py-2 text-center text-sm text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+            className="mt-3 block py-2 text-center text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
           >
             View full bag
           </Link>

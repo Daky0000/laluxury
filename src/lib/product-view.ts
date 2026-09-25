@@ -12,7 +12,7 @@ export type ProductTileData = {
   id: string;
   title: string;
   slug: string;
-  /** Category label under the title, e.g. "Bedding". */
+  /** Category label under the title, e.g. "Bedding" or "Pre-Order". */
   category: string;
   categorySlug: string;
   price: number;
@@ -21,6 +21,9 @@ export type ProductTileData = {
   /** True when several variants are priced differently, so the price reads "from ₵x". */
   hasRange: boolean;
   badge: string | null;
+  isPreorder: boolean;
+  preorderLeadTime: string | null;
+  preorderDepositPercent: number | null;
   imageUrl: string | null;
   imageAlt: string;
   /** Second image, revealed on hover where the product has one. */
@@ -34,6 +37,8 @@ export type ProductTileData = {
 
 /** Merchandising badges are ordinary tags, so the owner can set them in the admin. */
 const BADGES: Record<string, string> = {
+  "pre-order": "Pre-Order",
+  preorder: "Pre-Order",
   bestseller: "Bestseller",
   new: "New",
   luxe: "Luxe",
@@ -42,19 +47,22 @@ const BADGES: Record<string, string> = {
 };
 
 export function toTile(product: ProductCard): ProductTileData {
-  // A product can sit in several rooms; label it with the first non-student one
-  // so the student range still reads as Bedding, Living and so on.
+  const isPreorder =
+    Boolean(product.isPreorder) ||
+    product.categories.some((c) => c.category.slug === "pre-order") ||
+    product.tags.some((t) => t.toLowerCase() === "pre-order" || t.toLowerCase() === "preorder");
+
+  // A product can sit in several rooms; label it with the first non-student/non-pre-order
+  // room if it has one, or Pre-Order if it is exclusively in Pre-Order.
   const category =
     [...product.categories]
       .sort((a, b) => a.category.position - b.category.position)
-      .find((c) => c.category.slug !== "student")?.category ??
+      .find((c) => c.category.slug !== "student" && c.category.slug !== "pre-order")?.category ??
     product.categories[0]?.category ?? { name: "", slug: "" };
 
   const badgeTag = product.tags.find((tag) => BADGES[tag.toLowerCase()]);
   const [primary, secondary] = product.images;
 
-  // Whichever option group the owner gave hex values to is the colour one,
-  // whatever they named it. Four dots is all the tile has room for.
   const swatches = (product.options ?? [])
     .flatMap((option) => option.values)
     .filter((value): value is { value: string; hexColor: string } => Boolean(value.hexColor))
@@ -71,12 +79,15 @@ export function toTile(product: ProductCard): ProductTileData {
     maxPrice: product.maxPrice,
     compareAtPrice: product.compareAtPrice,
     hasRange: product.maxPrice > product.minPrice,
-    badge: badgeTag ? BADGES[badgeTag.toLowerCase()] : null,
+    badge: isPreorder ? "Pre-Order" : badgeTag ? BADGES[badgeTag.toLowerCase()] : null,
+    isPreorder,
+    preorderLeadTime: product.preorderLeadTime ?? (isPreorder ? "2–3 weeks" : null),
+    preorderDepositPercent: product.preorderDepositPercent ?? null,
     imageUrl: primary?.url ?? null,
     imageAlt: primary?.alt ?? product.title,
     hoverImageUrl: secondary?.url ?? null,
     variantId: product.variants.length === 1 ? product.variants[0].id : null,
-    inStock: isInStock(product),
+    inStock: isPreorder ? true : isInStock(product),
     swatches,
   };
 }

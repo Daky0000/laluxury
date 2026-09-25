@@ -176,6 +176,12 @@ model Product {
   isFeatured Boolean  @default(false)
   tags       String[] @default([])
 
+  // Pre-order / bespoke sourcing configuration
+  isPreorder             Boolean @default(false)
+  preorderLeadTime       String?
+  preorderDepositPercent Int?
+  preorderNote           String?
+
   // SEO
   metaTitle       String?
   metaDescription String?
@@ -602,6 +608,13 @@ model Order {
   customerNote String?
   staffNote    String?
 
+  hasPreorderItems Boolean   @default(false)
+  paymentMethod    String    @default("paystack")
+  depositAmount    Int?
+  balancePaidAt    DateTime?
+  preorderStage    String    @default("DEPOSIT_CONFIRMED")
+  preorderNote     String?
+
   trackingNumber  String?
   trackingCompany String?
 
@@ -627,6 +640,7 @@ model Order {
   @@index([paymentStatus])
   @@index([email])
   @@index([placedAt])
+  @@index([hasPreorderItems])
 }
 
 model OrderItem {
@@ -644,6 +658,9 @@ model OrderItem {
   variantTitle String
   sku          String
   imageUrl     String?
+
+  isPreorder       Boolean @default(false)
+  preorderLeadTime String?
 
   quantity          Int
   unitPrice         Int
@@ -814,6 +831,57 @@ model ContactMessage {
   createdAt DateTime @default(now())
 
   @@index([isHandled, createdAt])
+}
+
+enum PreorderRequestStatus {
+  NEW
+  QUOTED
+  SOURCING
+  ARRIVED
+  COMPLETED
+  CANCELLED
+}
+
+model PreorderRequest {
+  id               String                @id @default(cuid())
+  name             String
+  email            String
+  phone            String
+  productTitle     String
+  productId        String?
+  variantTitle     String?
+  quantity         Int                   @default(1)
+  targetBudget     Int?
+  notes            String?
+  imageUrl         String?
+  swatchRequest    String?
+  convertedOrderId String?
+  status           PreorderRequestStatus @default(NEW)
+  staffNote        String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([status, createdAt])
+  @@index([email])
+}
+
+model TradeApplication {
+  id              String   @id @default(cuid())
+  name            String
+  company         String
+  role            String
+  email           String
+  phone           String
+  portfolioUrl    String?
+  projectScope    String?
+  status          String   @default("APPROVED")
+  discountCode    String?
+  discountPercent Int      @default(12)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([email])
 }
 
 // ---------------------------------------------------------------------------
