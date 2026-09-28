@@ -61,8 +61,11 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
     "/admin/reviews": pendingReviews,
   };
 
+  const hiddenAdminNav = new Set(settings.hiddenAdminNavItems ?? []);
   const permissions = permissionsFor(user.role);
-  const items = NAV.filter((item) => can(user.role, item.permission)).map((item) => ({
+  const items = NAV.filter(
+    (item) => can(user.role, item.permission) && !hiddenAdminNav.has(item.href),
+  ).map((item) => ({
     ...item,
     badge: badges[item.href] || undefined,
   }));

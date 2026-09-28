@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { displayName, requirePermission } from "@/lib/auth";
-import { DEFAULT_SETTINGS, updateSettings, type StoreSettings } from "@/lib/settings";
+import {
+  DEFAULT_SETTINGS,
+  updateSettings,
+  ADMIN_NAV_MENU_ITEMS,
+  STOREFRONT_NAV_MENU_ITEMS,
+  type StoreSettings,
+} from "@/lib/settings";
 import { isLandingPage } from "@/lib/landing";
 import { normaliseSections } from "@/lib/home-sections";
 import { runAgentTurn } from "@/lib/agent/runtime";
@@ -69,6 +75,15 @@ export async function updateSettingsAction(
     newsletterTitle: text("newsletterTitle"),
     newsletterBody: text("newsletterBody"),
   };
+
+  if (formData.has("navMenusConfigured")) {
+    patch.hiddenAdminNavItems = ADMIN_NAV_MENU_ITEMS.map((item) => item.href).filter(
+      (href) => !formData.getAll("visibleAdminNav").map(String).includes(href),
+    );
+    patch.hiddenStorefrontNavItems = STOREFRONT_NAV_MENU_ITEMS.map((item) => item.key).filter(
+      (key) => !formData.getAll("visibleStorefrontNav").map(String).includes(key),
+    );
+  }
 
   await updateSettings(patch);
   await recordAudit({

@@ -10,8 +10,15 @@ export type NavCategory = {
   slug: string;
 };
 
-export function CategoryNav({ categories }: { categories: NavCategory[] }) {
+export function CategoryNav({
+  categories,
+  hiddenItems = [],
+}: {
+  categories: NavCategory[];
+  hiddenItems?: string[];
+}) {
   const { navHidden, toggleNav } = useFrontendNav();
+  const hidden = new Set(hiddenItems);
 
   if (navHidden) {
     return (
@@ -35,12 +42,14 @@ export function CategoryNav({ categories }: { categories: NavCategory[] }) {
       aria-label="Categories"
       className="hidden items-center gap-5 text-xs tracking-[0.1em] lg:flex"
     >
-      <Link
-        href="/shop"
-        className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-      >
-        Shop All
-      </Link>
+      {!hidden.has("shop") ? (
+        <Link
+          href="/shop"
+          className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+        >
+          Shop All
+        </Link>
+      ) : null}
       {categories.map((category) => {
         const isPreorder = category.slug === "pre-order";
         return (
@@ -60,24 +69,30 @@ export function CategoryNav({ categories }: { categories: NavCategory[] }) {
           </Link>
         );
       })}
-      <Link
-        href="/lookbook"
-        className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-      >
-        Lookbook
-      </Link>
-      <Link
-        href="/trade"
-        className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-      >
-        Trade
-      </Link>
-      <Link
-        href="/orders/track"
-        className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-      >
-        Track Order
-      </Link>
+      {!hidden.has("lookbook") ? (
+        <Link
+          href="/lookbook"
+          className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+        >
+          Lookbook
+        </Link>
+      ) : null}
+      {!hidden.has("trade") ? (
+        <Link
+          href="/trade"
+          className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+        >
+          Trade
+        </Link>
+      ) : null}
+      {!hidden.has("track") ? (
+        <Link
+          href="/orders/track"
+          className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+        >
+          Track Order
+        </Link>
+      ) : null}
     </nav>
   );
 }

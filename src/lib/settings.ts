@@ -57,7 +57,41 @@ export type StoreSettings = {
   hideStorefrontNav: boolean;
   /** Hide admin console sidebar rail by default. */
   hideAdminNav: boolean;
+  /** Specific admin nav item hrefs that are hidden from the menu. */
+  hiddenAdminNavItems: string[];
+  /** Specific storefront nav item keys that are hidden from the menu. */
+  hiddenStorefrontNavItems: string[];
 };
+
+export const ADMIN_NAV_MENU_ITEMS: { href: string; label: string }[] = [
+  { href: "/admin", label: "Dashboard" },
+  { href: "/admin/analytics", label: "Financials & Margins" },
+  { href: "/admin/orders/new", label: "Showroom POS" },
+  { href: "/admin/orders", label: "Orders" },
+  { href: "/admin/preorders", label: "Pre-orders & Trade" },
+  { href: "/admin/shipments", label: "Containers & Freight" },
+  { href: "/admin/carts", label: "Abandoned bags" },
+  { href: "/admin/products", label: "Products" },
+  { href: "/admin/products/bulk", label: "Bulk FX & Matrix" },
+  { href: "/admin/categories", label: "Categories" },
+  { href: "/admin/media", label: "Media" },
+  { href: "/admin/inventory", label: "Inventory" },
+  { href: "/admin/customers", label: "Customers" },
+  { href: "/admin/discounts", label: "Discounts" },
+  { href: "/admin/reviews", label: "Reviews" },
+  { href: "/admin/agent", label: "AI agent" },
+  { href: "/admin/users", label: "Staff" },
+  { href: "/admin/activity", label: "Activity" },
+  { href: "/admin/settings", label: "Settings" },
+];
+
+export const STOREFRONT_NAV_MENU_ITEMS: { key: string; label: string; href: string }[] = [
+  { key: "shop", label: "Shop All", href: "/shop" },
+  { key: "lookbook", label: "Lookbook", href: "/lookbook" },
+  { key: "trade", label: "Trade Program", href: "/trade" },
+  { key: "track", label: "Track Order", href: "/orders/track" },
+  { key: "contact", label: "Contact", href: "/contact" },
+];
 
 export const DEFAULT_SETTINGS: StoreSettings = {
   // The shop opens on the catalog: the owner would rather visitors see every
@@ -105,6 +139,8 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   agentRequiresApproval: true,
   hideStorefrontNav: false,
   hideAdminNav: false,
+  hiddenAdminNavItems: [],
+  hiddenStorefrontNavItems: [],
 };
 
 const SETTINGS_KEY = "store";
@@ -125,6 +161,12 @@ export async function getSettings(): Promise<StoreSettings> {
     landingPage: isLandingPage(stored.landingPage)
       ? stored.landingPage
       : DEFAULT_SETTINGS.landingPage,
+    hiddenAdminNavItems: Array.isArray(stored.hiddenAdminNavItems)
+      ? stored.hiddenAdminNavItems
+      : DEFAULT_SETTINGS.hiddenAdminNavItems,
+    hiddenStorefrontNavItems: Array.isArray(stored.hiddenStorefrontNavItems)
+      ? stored.hiddenStorefrontNavItems
+      : DEFAULT_SETTINGS.hiddenStorefrontNavItems,
   };
 }
 

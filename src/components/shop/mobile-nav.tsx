@@ -9,12 +9,15 @@ import { useFrontendNav } from "./frontend-nav-context";
 export function MobileNav({
   categories,
   children,
+  hiddenItems = [],
 }: {
   categories: { name: string; slug: string }[];
   children: ReactNode;
+  hiddenItems?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const { navHidden } = useFrontendNav();
+  const hidden = new Set(hiddenItems);
 
   useOverlay(open, () => setOpen(false));
 
@@ -61,15 +64,17 @@ export function MobileNav({
             </div>
 
             <ul className="flex flex-col">
-              <li>
-                <Link
-                  href="/shop"
-                  onClick={() => setOpen(false)}
-                  className="block py-2.5 text-xl"
-                >
-                  All pieces
-                </Link>
-              </li>
+              {!hidden.has("shop") ? (
+                <li>
+                  <Link
+                    href="/shop"
+                    onClick={() => setOpen(false)}
+                    className="block py-2.5 text-xl"
+                  >
+                    All pieces
+                  </Link>
+                </li>
+              ) : null}
               {categories.map((category) => {
                 const isPreorder = category.slug === "pre-order";
                 return (
@@ -96,24 +101,32 @@ export function MobileNav({
             </ul>
 
             <div className="mt-6 flex flex-col gap-0.5">
-              <Link href="/lookbook" onClick={() => setOpen(false)} className="block py-2.5 text-lg text-[var(--text-secondary)]">
-                Lookbook
-              </Link>
-              <Link href="/trade" onClick={() => setOpen(false)} className="block py-2.5 text-lg text-[var(--text-secondary)]">
-                Trade Program
-              </Link>
+              {!hidden.has("lookbook") ? (
+                <Link href="/lookbook" onClick={() => setOpen(false)} className="block py-2.5 text-lg text-[var(--text-secondary)]">
+                  Lookbook
+                </Link>
+              ) : null}
+              {!hidden.has("trade") ? (
+                <Link href="/trade" onClick={() => setOpen(false)} className="block py-2.5 text-lg text-[var(--text-secondary)]">
+                  Trade Program
+                </Link>
+              ) : null}
             </div>
 
             <div className="mt-8 flex flex-col border-t border-[var(--border-subtle)] pt-4 text-sm">
               <Link href="/account" onClick={() => setOpen(false)} className="py-3 text-[var(--text-secondary)]">
                 Your account
               </Link>
-              <Link href="/orders/track" onClick={() => setOpen(false)} className="py-3 text-[var(--text-secondary)]">
-                Track an order
-              </Link>
-              <Link href="/contact" onClick={() => setOpen(false)} className="py-3 text-[var(--text-secondary)]">
-                Contact
-              </Link>
+              {!hidden.has("track") ? (
+                <Link href="/orders/track" onClick={() => setOpen(false)} className="py-3 text-[var(--text-secondary)]">
+                  Track an order
+                </Link>
+              ) : null}
+              {!hidden.has("contact") ? (
+                <Link href="/contact" onClick={() => setOpen(false)} className="py-3 text-[var(--text-secondary)]">
+                  Contact
+                </Link>
+              ) : null}
             </div>
           </nav>
         </div>

@@ -4,7 +4,11 @@ import { useActionState, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { updateSettingsAction } from "@/app/actions/admin/system";
 import type { AdminState } from "@/app/actions/admin/products";
-import type { StoreSettings } from "@/lib/settings";
+import {
+  ADMIN_NAV_MENU_ITEMS,
+  STOREFRONT_NAV_MENU_ITEMS,
+  type StoreSettings,
+} from "@/lib/settings";
 import { LANDING_PAGES, type LandingPage } from "@/lib/landing";
 import { Card, Field, Alert } from "@/components/ui";
 import { ImageUrlField } from "./image-url-field";
@@ -53,48 +57,117 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
         </p>
       </Card>
 
-      <Card className="flex flex-col gap-4 p-5">
-        <h2 className="lx-eyebrow">Navigation</h2>
-        <p className="-mt-2 text-sm text-[var(--text-secondary)]">
-          Configure default navigation display across the storefront and admin console.
-        </p>
+      <Card className="flex flex-col gap-5 p-5">
+        <div>
+          <h2 className="lx-eyebrow">Navigation Menus</h2>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+            Choose which menu items are displayed in the Admin sidebar and on the Storefront. Uncheck any menu item to hide it.
+          </p>
+        </div>
 
-        <div className="flex flex-col gap-4 pt-1">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              id="hideStorefrontNav"
-              name="hideStorefrontNav"
-              defaultChecked={settings.hideStorefrontNav}
-              className="mt-0.5 h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--color-clay-700)] focus:ring-[var(--color-clay-700)]"
-            />
-            <div className="text-sm">
-              <span className="font-medium text-[var(--text-primary)]">
-                Hide storefront navigation by default
-              </span>
-              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                Hides the category links in the header for a minimal view. Shoppers can still toggle them with the Eye button in the header or with Alt+N.
-              </p>
-            </div>
-          </label>
+        <input type="hidden" name="navMenusConfigured" value="1" />
 
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              id="hideAdminNav"
-              name="hideAdminNav"
-              defaultChecked={settings.hideAdminNav}
-              className="mt-0.5 h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--color-clay-700)] focus:ring-[var(--color-clay-700)]"
-            />
-            <div className="text-sm">
-              <span className="font-medium text-[var(--text-primary)]">
-                Hide admin console sidebar by default
-              </span>
-              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                Opens the admin console with the navigation rail collapsed to maximize workspace area. Can be toggled open with the panel button or Ctrl+B.
-              </p>
-            </div>
-          </label>
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
+            Storefront Header Menu Items
+          </h3>
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {STOREFRONT_NAV_MENU_ITEMS.map((item) => {
+              const isChecked = !settings.hiddenStorefrontNavItems?.includes(item.key);
+              return (
+                <label
+                  key={item.key}
+                  className="flex items-center gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] px-3 py-2 text-sm cursor-pointer hover:border-[var(--color-clay-700)] transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    name="visibleStorefrontNav"
+                    value={item.key}
+                    defaultChecked={isChecked}
+                    className="h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--color-clay-700)] focus:ring-[var(--color-clay-700)]"
+                  />
+                  <span className="font-medium text-[var(--text-primary)]">{item.label}</span>
+                  <span className="ml-auto text-xs text-[var(--text-muted)]">{item.href}</span>
+                </label>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            Category links (Bedding, Living, etc.) can be set active or hidden under{" "}
+            <a href="/admin/categories" className="underline underline-offset-4 hover:text-[var(--text-primary)]">
+              Categories
+            </a>
+            .
+          </p>
+        </div>
+
+        <div className="border-t border-[var(--border-subtle)] pt-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
+            Admin Console Sidebar Menu Items
+          </h3>
+          <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
+            {ADMIN_NAV_MENU_ITEMS.map((item) => {
+              const isChecked = !settings.hiddenAdminNavItems?.includes(item.href);
+              return (
+                <label
+                  key={item.href}
+                  className="flex items-center gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] px-3 py-2 text-sm cursor-pointer hover:border-[var(--color-clay-700)] transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    name="visibleAdminNav"
+                    value={item.href}
+                    defaultChecked={isChecked}
+                    className="h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--color-clay-700)] focus:ring-[var(--color-clay-700)]"
+                  />
+                  <span className="font-medium text-[var(--text-primary)]">{item.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="border-t border-[var(--border-subtle)] pt-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
+            Default Container Behavior
+          </h3>
+          <div className="flex flex-col gap-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                id="hideStorefrontNav"
+                name="hideStorefrontNav"
+                defaultChecked={settings.hideStorefrontNav}
+                className="mt-0.5 h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--color-clay-700)] focus:ring-[var(--color-clay-700)]"
+              />
+              <div className="text-sm">
+                <span className="font-medium text-[var(--text-primary)]">
+                  Collapse storefront category bar by default
+                </span>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Start storefront pages with the category links bar collapsed into the Eye toggle button.
+                </p>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                id="hideAdminNav"
+                name="hideAdminNav"
+                defaultChecked={settings.hideAdminNav}
+                className="mt-0.5 h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--color-clay-700)] focus:ring-[var(--color-clay-700)]"
+              />
+              <div className="text-sm">
+                <span className="font-medium text-[var(--text-primary)]">
+                  Collapse admin console sidebar by default
+                </span>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Start the admin console with the left navigation rail collapsed for full-width views.
+                </p>
+              </div>
+            </label>
+          </div>
         </div>
       </Card>
 

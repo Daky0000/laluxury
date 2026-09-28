@@ -59,7 +59,10 @@ export async function Header() {
           </Link>
 
           {/* Right: the menu, then currency, search, account and the bag. */}
-          <CategoryNav categories={categories} />
+          <CategoryNav
+            categories={categories}
+            hiddenItems={settings.hiddenStorefrontNavItems}
+          />
 
           {/* `shrink-0` so a long store name never eats into the controls. */}
           <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
@@ -86,7 +89,10 @@ export async function Header() {
 
             {/* The categories collapse into this on a phone, so the menu keeps
                 the same side of the header at every width. */}
-            <MobileNav categories={categories}>
+            <MobileNav
+              categories={categories}
+              hiddenItems={settings.hiddenStorefrontNavItems}
+            >
               <Menu className="h-5 w-5" aria-hidden />
             </MobileNav>
           </div>
