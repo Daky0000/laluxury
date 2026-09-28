@@ -1,9 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, EyeOff } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useFrontendNav } from "./frontend-nav-context";
 
 export type NavCategory = {
   name: string;
@@ -13,36 +10,21 @@ export type NavCategory = {
 export function CategoryNav({
   categories,
   hiddenItems = [],
+  hidden = false,
 }: {
   categories: NavCategory[];
   hiddenItems?: string[];
+  hidden?: boolean;
 }) {
-  const { navHidden, toggleNav } = useFrontendNav();
-  const hidden = new Set(hiddenItems);
-
-  if (navHidden) {
-    return (
-      <div className="hidden items-center lg:flex">
-        <button
-          type="button"
-          onClick={toggleNav}
-          title="Show category navigation (Alt+N)"
-          aria-label="Show category navigation"
-          className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--border-subtle)] px-2.5 py-1 text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)] transition-colors hover:border-[var(--color-clay-700)] hover:text-[var(--text-primary)]"
-        >
-          <Eye className="h-3 w-3" aria-hidden />
-          <span>Show navigation</span>
-        </button>
-      </div>
-    );
-  }
+  if (hidden) return null;
+  const hiddenSet = new Set(hiddenItems);
 
   return (
     <nav
       aria-label="Categories"
       className="hidden items-center gap-5 text-xs tracking-[0.1em] lg:flex"
     >
-      {!hidden.has("shop") ? (
+      {!hiddenSet.has("shop") ? (
         <Link
           href="/shop"
           className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
@@ -69,7 +51,7 @@ export function CategoryNav({
           </Link>
         );
       })}
-      {!hidden.has("lookbook") ? (
+      {!hiddenSet.has("lookbook") ? (
         <Link
           href="/lookbook"
           className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
@@ -77,7 +59,7 @@ export function CategoryNav({
           Lookbook
         </Link>
       ) : null}
-      {!hidden.has("trade") ? (
+      {!hiddenSet.has("trade") ? (
         <Link
           href="/trade"
           className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
@@ -85,7 +67,7 @@ export function CategoryNav({
           Trade
         </Link>
       ) : null}
-      {!hidden.has("track") ? (
+      {!hiddenSet.has("track") ? (
         <Link
           href="/orders/track"
           className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
@@ -98,29 +80,5 @@ export function CategoryNav({
 }
 
 export function FrontendNavToggle() {
-  const { navHidden, toggleNav } = useFrontendNav();
-
-  return (
-    <button
-      type="button"
-      onClick={toggleNav}
-      title={navHidden ? "Show navigation (Alt+N)" : "Hide navigation (Alt+N)"}
-      aria-label={navHidden ? "Show navigation" : "Hide navigation"}
-      className={cn(
-        "lx-tap-tight rounded-full transition-colors",
-        navHidden
-          ? "text-[var(--color-clay-700)] hover:text-[var(--accent)]"
-          : "text-[var(--text-secondary)] hover:text-[var(--accent)]",
-      )}
-    >
-      {navHidden ? (
-        <Eye className="h-[19px] w-[19px]" strokeWidth={1.5} aria-hidden />
-      ) : (
-        <EyeOff className="h-[19px] w-[19px]" strokeWidth={1.5} aria-hidden />
-      )}
-      <span className="sr-only">
-        {navHidden ? "Show navigation" : "Hide navigation"}
-      </span>
-    </button>
-  );
+  return null;
 }

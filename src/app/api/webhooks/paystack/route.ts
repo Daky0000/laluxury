@@ -58,15 +58,15 @@ async function handleEvent(event: PaystackWebhookEvent): Promise<void> {
   switch (event.event) {
     case "charge.success": {
       // Guard against a tampered or mismatched amount before crediting.
-      if (event.data.amount !== payment.order.total) {
+      if (event.data.amount !== payment.amount) {
         await logOrderEvent({
           orderId: payment.orderId,
           type: "payment.mismatch",
-          message: `Paystack reported ${formatMoney(event.data.amount)} but the order total is ${formatMoney(payment.order.total)}. Held for review.`,
-          meta: { reference, reported: event.data.amount, expected: payment.order.total },
+          message: `Paystack reported ${formatMoney(event.data.amount)} but expected payment amount is ${formatMoney(payment.amount)} (order total: ${formatMoney(payment.order.total)}). Held for review.`,
+          meta: { reference, reported: event.data.amount, expected: payment.amount, orderTotal: payment.order.total },
         });
         await postAlert(
-          `:warning: Payment amount mismatch on ${payment.order.orderNumber}. Paystack says ${formatMoney(event.data.amount)}, order total is ${formatMoney(payment.order.total)}.`,
+          `:warning: Payment amount mismatch on ${payment.order.orderNumber}. Paystack says ${formatMoney(event.data.amount)}, expected payment is ${formatMoney(payment.amount)}.`,
         );
         return;
       }

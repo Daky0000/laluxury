@@ -16,7 +16,7 @@ import { headers } from "next/headers";
  * office connection, and one address cannot try every phone number in Accra.
  */
 
-type Window = { hits: number[] };
+type Window = { hits: number[]; windowMs: number };
 
 const windows = new Map<string, Window>();
 
@@ -24,11 +24,11 @@ const windows = new Map<string, Window>();
 const SWEEP_EVERY_MS = 5 * 60 * 1000;
 let lastSweep = Date.now();
 
-function sweep(now: number, windowMs: number): void {
+function sweep(now: number): void {
   if (now - lastSweep < SWEEP_EVERY_MS) return;
   lastSweep = now;
   for (const [key, window] of windows) {
-    window.hits = window.hits.filter((at) => now - at < windowMs);
+    window.hits = window.hits.filter((at) => now - at < window.windowMs);
     if (window.hits.length === 0) windows.delete(key);
   }
 }
@@ -53,9 +53,10 @@ export function rateLimit(
   options: { limit: number; windowMs: number },
 ): RateLimitResult {
   const now = Date.now();
-  sweep(now, options.windowMs);
+  sweep(now);
 
-  const window = windows.get(key) ?? { hits: [] };
+  const window = windows.get(key) ?? { hits: [], windowMs: options.windowMs };
+  window.windowMs = Math.max(window.windowMs, options.windowMs);
   window.hits = window.hits.filter((at) => now - at < options.windowMs);
 
   const allowed = window.hits.length < options.limit;

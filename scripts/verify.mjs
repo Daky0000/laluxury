@@ -84,7 +84,7 @@ check("no negative stock", negativeStock.length, 0);
 const multiOption = products.find((p) => p.options.length > 0);
 if (multiOption) {
   const withValues = await db.variant.findMany({
-    where: { productId: multiOption.id },
+    where: { productId: multiOption.id, isActive: true },
     include: { optionValues: true },
   });
   const wrong = withValues.filter((v) => v.optionValues.length !== multiOption.options.length);

@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { currentUser, displayName } from "@/lib/auth";
-import { isStaff } from "@/lib/auth/rbac";
+import { can, isStaff, type Permission } from "@/lib/auth/rbac";
 import { toMajorUnits } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
+
+const TYPE_PERMISSIONS: Record<string, Permission> = {
+  customers: "customers:read",
+  orders: "orders:read",
+  inventory: "inventory:read",
+  products: "products:read",
+};
 
 function csvEscape(val: unknown): string {
   if (val === null || val === undefined) return "";
@@ -30,6 +37,11 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type") ?? "orders";
+  const requiredPermission = TYPE_PERMISSIONS[type] ?? "orders:read";
+  if (!can(user.role, requiredPermission)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const today = new Date().toISOString().slice(0, 10);
 
   if (type === "customers") {

@@ -178,14 +178,21 @@ export async function releaseStock(
   if (lines.length === 0) return;
 
   await db.$transaction(async (tx) => {
-    for (const line of lines) {
-      const item = await tx.inventoryItem.findUnique({ where: { variantId: line.variantId } });
+    const ordered = [...lines].sort((a, b) => a.variantId.localeCompare(b.variantId));
+    for (const line of ordered) {
+      const locked = await tx.$queryRaw<
+        { id: string; onHand: number; reserved: number; trackInventory: boolean }[]
+      >`SELECT id, "onHand", reserved, "trackInventory"
+          FROM "InventoryItem" WHERE "variantId" = ${line.variantId} FOR UPDATE`;
+
+      const item = locked[0];
       if (!item || !item.trackInventory) continue;
 
+      const newReserved = Math.max(0, item.reserved - line.quantity);
       await tx.inventoryItem.update({
         where: { id: item.id },
         // Clamped so a replayed release can never push reserved negative.
-        data: { reserved: Math.max(0, item.reserved - line.quantity) },
+        data: { reserved: newReserved },
       });
 
       await recordMovement(tx, {
@@ -212,16 +219,23 @@ export async function commitStock(
   if (lines.length === 0) return;
 
   await db.$transaction(async (tx) => {
-    for (const line of lines) {
-      const item = await tx.inventoryItem.findUnique({ where: { variantId: line.variantId } });
+    const ordered = [...lines].sort((a, b) => a.variantId.localeCompare(b.variantId));
+    for (const line of ordered) {
+      const locked = await tx.$queryRaw<
+        { id: string; onHand: number; reserved: number; trackInventory: boolean }[]
+      >`SELECT id, "onHand", reserved, "trackInventory"
+          FROM "InventoryItem" WHERE "variantId" = ${line.variantId} FOR UPDATE`;
+
+      const item = locked[0];
       if (!item || !item.trackInventory) continue;
 
       const onHandAfter = item.onHand - line.quantity;
+      const newReserved = Math.max(0, item.reserved - line.quantity);
       await tx.inventoryItem.update({
         where: { id: item.id },
         data: {
           onHand: onHandAfter,
-          reserved: Math.max(0, item.reserved - line.quantity),
+          reserved: newReserved,
         },
       });
 

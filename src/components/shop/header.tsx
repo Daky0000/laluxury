@@ -1,16 +1,13 @@
 import Link from "next/link";
-import { Search, User, Menu } from "lucide-react";
+import { Search, User } from "lucide-react";
 import { db } from "@/lib/db";
 import { cartItemCount } from "@/lib/cart";
 import { currentUser } from "@/lib/auth";
 import { announcementItems, getSettings } from "@/lib/settings";
 import { isStaff } from "@/lib/auth/rbac";
 import { SearchDialog } from "./search-dialog";
-import { MobileNav } from "./mobile-nav";
 import { BagButton } from "./bag-button";
-import { CurrencySwitcher } from "./currency-switcher";
-import { FrontendNavProvider } from "./frontend-nav-context";
-import { CategoryNav, FrontendNavToggle } from "./category-nav";
+import { CategoryNav } from "./category-nav";
 
 export async function Header() {
   const [settings, count, user, categories] = await Promise.all([
@@ -27,7 +24,7 @@ export async function Header() {
   const announcements = announcementItems(settings);
 
   return (
-    <FrontendNavProvider defaultHidden={settings.hideStorefrontNav}>
+    <>
       {/* Announcement marquee. The list is duplicated so the loop has no seam. */}
       {announcements.length > 0 ? (
         <div className="overflow-hidden whitespace-nowrap bg-ink-900 text-xs uppercase tracking-[0.2em] text-ink-400 sm:tracking-[0.28em]">
@@ -58,18 +55,15 @@ export async function Header() {
             </span>
           </Link>
 
-          {/* Right: the menu, then currency, search, account and the bag. */}
+          {/* Right: the menu, search, account and the bag. */}
           <CategoryNav
             categories={categories}
             hiddenItems={settings.hiddenStorefrontNavItems}
+            hidden={settings.hideStorefrontNav}
           />
 
           {/* `shrink-0` so a long store name never eats into the controls. */}
           <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-            <FrontendNavToggle />
-
-            <CurrencySwitcher />
-
             <SearchDialog>
               <span className="lx-tap-tight text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]">
                 <Search className="h-[19px] w-[19px]" strokeWidth={1.5} aria-hidden />
@@ -86,18 +80,9 @@ export async function Header() {
             </Link>
 
             <BagButton count={count} />
-
-            {/* The categories collapse into this on a phone, so the menu keeps
-                the same side of the header at every width. */}
-            <MobileNav
-              categories={categories}
-              hiddenItems={settings.hiddenStorefrontNavItems}
-            >
-              <Menu className="h-5 w-5" aria-hidden />
-            </MobileNav>
           </div>
         </div>
       </header>
-    </FrontendNavProvider>
+    </>
   );
 }
