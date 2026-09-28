@@ -6,6 +6,7 @@ import { logoutAction } from "@/app/actions/auth";
 import { AdminNav } from "@/components/admin/nav";
 import { AdminTopbar } from "@/components/admin/topbar";
 import { AdminNavProvider } from "@/components/admin/admin-nav-context";
+import { getSettings } from "@/lib/settings";
 import { initials } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +42,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
 
   // The counts beside Orders, Pre-orders, and Reviews are what is actually waiting on
   // someone, so the rail says whether there is work without opening anything.
-  const [openOrders, pendingReviews, openPreorderRequests, openPreorderOrders] = await Promise.all([
+  const [openOrders, pendingReviews, openPreorderRequests, openPreorderOrders, settings] = await Promise.all([
     db.order.count({ where: { status: { in: ["PAID", "PROCESSING"] } } }),
     db.review.count({ where: { isApproved: false } }),
     db.preorderRequest.count({ where: { status: { in: ["NEW", "QUOTED", "SOURCING"] } } }),
@@ -51,6 +52,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
         status: { in: ["PENDING", "PAID", "PROCESSING"] },
       },
     }),
+    getSettings(),
   ]);
 
   const badges: Record<string, number> = {
@@ -67,7 +69,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const name = displayName(user);
 
   return (
-    <AdminNavProvider>
+    <AdminNavProvider defaultHidden={settings.hideAdminNav}>
       <div data-theme="admin" className="flex min-h-screen bg-[var(--surface)]">
         <AdminNav
           items={items}

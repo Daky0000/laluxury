@@ -27,7 +27,7 @@ export async function Header() {
   const announcements = announcementItems(settings);
 
   return (
-    <FrontendNavProvider>
+    <FrontendNavProvider defaultHidden={settings.hideStorefrontNav}>
       {/* Announcement marquee. The list is duplicated so the loop has no seam. */}
       {announcements.length > 0 ? (
         <div className="overflow-hidden whitespace-nowrap bg-ink-900 text-xs uppercase tracking-[0.2em] text-ink-400 sm:tracking-[0.28em]">

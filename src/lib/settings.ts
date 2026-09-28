@@ -53,6 +53,10 @@ export type StoreSettings = {
   homeSections: HomeSection[];
   /** Ask the agent to confirm before it changes anything on the live store. */
   agentRequiresApproval: boolean;
+  /** Hide category navigation links in storefront header by default. */
+  hideStorefrontNav: boolean;
+  /** Hide admin console sidebar rail by default. */
+  hideAdminNav: boolean;
 };
 
 export const DEFAULT_SETTINGS: StoreSettings = {
@@ -99,6 +103,8 @@ export const DEFAULT_SETTINGS: StoreSettings = {
     "Private access to restocks and a ₵20 welcome credit on your first order.",
   homeSections: DEFAULT_HOME_SECTIONS,
   agentRequiresApproval: true,
+  hideStorefrontNav: false,
+  hideAdminNav: false,
 };
 
 const SETTINGS_KEY = "store";

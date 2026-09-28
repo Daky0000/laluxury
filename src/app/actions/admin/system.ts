@@ -50,6 +50,8 @@ export async function updateSettingsAction(
     lowStockThreshold: Math.max(0, Number(formData.get("lowStockThreshold")) || 5),
     freeShippingThreshold: threshold ? toMinorUnits(Number(threshold)) : null,
     agentRequiresApproval: formData.get("agentRequiresApproval") === "on",
+    hideStorefrontNav: formData.get("hideStorefrontNav") === "on",
+    hideAdminNav: formData.get("hideAdminNav") === "on",
 
     // Home page content
     heroEyebrow: text("heroEyebrow"),

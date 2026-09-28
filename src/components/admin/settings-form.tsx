@@ -54,6 +54,51 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
       </Card>
 
       <Card className="flex flex-col gap-4 p-5">
+        <h2 className="lx-eyebrow">Navigation</h2>
+        <p className="-mt-2 text-sm text-[var(--text-secondary)]">
+          Configure default navigation display across the storefront and admin console.
+        </p>
+
+        <div className="flex flex-col gap-4 pt-1">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              id="hideStorefrontNav"
+              name="hideStorefrontNav"
+              defaultChecked={settings.hideStorefrontNav}
+              className="mt-0.5 h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--color-clay-700)] focus:ring-[var(--color-clay-700)]"
+            />
+            <div className="text-sm">
+              <span className="font-medium text-[var(--text-primary)]">
+                Hide storefront navigation by default
+              </span>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Hides the category links in the header for a minimal view. Shoppers can still toggle them with the Eye button in the header or with Alt+N.
+              </p>
+            </div>
+          </label>
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              id="hideAdminNav"
+              name="hideAdminNav"
+              defaultChecked={settings.hideAdminNav}
+              className="mt-0.5 h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--color-clay-700)] focus:ring-[var(--color-clay-700)]"
+            />
+            <div className="text-sm">
+              <span className="font-medium text-[var(--text-primary)]">
+                Hide admin console sidebar by default
+              </span>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Opens the admin console with the navigation rail collapsed to maximize workspace area. Can be toggled open with the panel button or Ctrl+B.
+              </p>
+            </div>
+          </label>
+        </div>
+      </Card>
+
+      <Card className="flex flex-col gap-4 p-5">
         <h2 className="lx-eyebrow">Store</h2>
 
         <div className="grid gap-4 sm:grid-cols-2">

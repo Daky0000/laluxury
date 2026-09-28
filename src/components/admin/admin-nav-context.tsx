@@ -44,26 +44,43 @@ function subscribe(callback: () => void) {
   };
 }
 
-function getSnapshot(): boolean {
-  if (typeof window === "undefined") return false;
+function getSnapshot(defaultHidden = false): boolean {
+  if (typeof window === "undefined") return defaultHidden;
   try {
     const params = new URLSearchParams(window.location.search);
     const param = params.get("hideNav") ?? params.get("nav");
     if (param === "true" || param === "1") return true;
     if (param === "false" || param === "0") return false;
 
-    return localStorage.getItem(STORAGE_KEY) === "true";
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored !== null) return stored === "true";
+    return defaultHidden;
   } catch {
-    return false;
+    return defaultHidden;
   }
 }
 
-function getServerSnapshot(): boolean {
-  return false;
-}
+export function AdminNavProvider({
+  children,
+  defaultHidden = false,
+}: {
+  children: ReactNode;
+  defaultHidden?: boolean;
+}) {
+  const getSnapshotWithDefault = useCallback(
+    () => getSnapshot(defaultHidden),
+    [defaultHidden],
+  );
+  const getServerSnapshotWithDefault = useCallback(
+    () => defaultHidden,
+    [defaultHidden],
+  );
 
-export function AdminNavProvider({ children }: { children: ReactNode }) {
-  const navHidden = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const navHidden = useSyncExternalStore(
+    subscribe,
+    getSnapshotWithDefault,
+    getServerSnapshotWithDefault,
+  );
   const pathname = usePathname();
 
   useEffect(() => {
@@ -78,7 +95,7 @@ export function AdminNavProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleNav = useCallback(() => {
-    const next = !getSnapshot();
+    const next = !getSnapshot(defaultHidden);
     try {
       localStorage.setItem(STORAGE_KEY, String(next));
     } catch {}
@@ -97,7 +114,7 @@ export function AdminNavProvider({ children }: { children: ReactNode }) {
     } catch {}
 
     window.dispatchEvent(new Event(NAV_CHANGE_EVENT));
-  }, []);
+  }, [defaultHidden]);
 
   // Keyboard shortcut: Ctrl+B or Cmd+B to toggle admin sidebar
   useEffect(() => {
