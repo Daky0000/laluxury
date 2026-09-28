@@ -2,7 +2,9 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Search, Store } from "lucide-react";
+import { Search, Store, PanelLeftOpen, PanelLeftClose } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useAdminNav } from "./admin-nav-context";
 
 /**
  * The console topbar from the admin artboard: where you are, what this screen
@@ -29,6 +31,7 @@ const TITLES: { prefix: string; title: string; subtitle: string; search?: string
 
 export function AdminTopbar() {
   const pathname = usePathname();
+  const { navHidden, toggleNav } = useAdminNav();
   const match = TITLES.find((entry) => pathname.startsWith(entry.prefix)) ?? TITLES[TITLES.length - 1];
 
   return (
@@ -42,11 +45,24 @@ export function AdminTopbar() {
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
         {/* The rail's own trigger is fixed at the top-left corner below `lg`,
             so the title starts clear of it. */}
-        <div className="min-w-0 pl-12 lg:pl-0">
-          <h1 className="font-display text-2xl font-medium leading-none sm:text-[28px]">
-            {match.title}
-          </h1>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">{match.subtitle}</p>
+        <div className="flex items-center gap-3 min-w-0 pl-12 lg:pl-0">
+          {navHidden ? (
+            <button
+              type="button"
+              onClick={toggleNav}
+              title="Show navigation (Ctrl+B)"
+              aria-label="Show navigation"
+              className="hidden lg:grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] text-[var(--text-secondary)] transition-colors hover:border-[var(--color-clay-700)] hover:text-[var(--text-primary)]"
+            >
+              <PanelLeftOpen className="h-4 w-4" aria-hidden />
+            </button>
+          ) : null}
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl font-medium leading-none sm:text-[28px]">
+              {match.title}
+            </h1>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">{match.subtitle}</p>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 sm:ml-auto">
@@ -72,6 +88,28 @@ export function AdminTopbar() {
               </button>
             </form>
           ) : null}
+
+          <button
+            type="button"
+            onClick={toggleNav}
+            title={navHidden ? "Show navigation (Ctrl+B)" : "Hide navigation (Ctrl+B)"}
+            aria-label={navHidden ? "Show navigation" : "Hide navigation"}
+            className={cn(
+              "grid h-11 w-11 shrink-0 place-items-center rounded-lg border transition-colors sm:h-[38px] sm:w-[38px]",
+              navHidden
+                ? "border-[var(--color-clay-700)] bg-[var(--surface-raised)] text-[var(--color-clay-700)] hover:bg-[var(--color-clay-700)] hover:text-white"
+                : "border-[var(--border-subtle)] bg-[var(--surface-raised)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
+            )}
+          >
+            {navHidden ? (
+              <PanelLeftOpen className="h-[17px] w-[17px]" strokeWidth={1.6} aria-hidden />
+            ) : (
+              <PanelLeftClose className="h-[17px] w-[17px]" strokeWidth={1.6} aria-hidden />
+            )}
+            <span className="sr-only">
+              {navHidden ? "Show navigation" : "Hide navigation"}
+            </span>
+          </button>
 
           <Link
             href="/"

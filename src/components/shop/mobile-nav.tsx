@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { useOverlay } from "@/lib/use-overlay";
+import { useFrontendNav } from "./frontend-nav-context";
 
 export function MobileNav({
   categories,
@@ -13,8 +14,13 @@ export function MobileNav({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const { navHidden } = useFrontendNav();
 
   useOverlay(open, () => setOpen(false));
+
+  if (navHidden) {
+    return null;
+  }
 
   return (
     <>

@@ -5,6 +5,7 @@ import { can, isStaff, permissionsFor, ROLE_LABELS, type Permission } from "@/li
 import { logoutAction } from "@/app/actions/auth";
 import { AdminNav } from "@/components/admin/nav";
 import { AdminTopbar } from "@/components/admin/topbar";
+import { AdminNavProvider } from "@/components/admin/admin-nav-context";
 import { initials } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -66,28 +67,30 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const name = displayName(user);
 
   return (
-    <div data-theme="admin" className="flex min-h-screen bg-[var(--surface)]">
-      <AdminNav
-        items={items}
-        user={{ name, role: ROLE_LABELS[user.role], initials: initials(name) }}
-      />
+    <AdminNavProvider>
+      <div data-theme="admin" className="flex min-h-screen bg-[var(--surface)]">
+        <AdminNav
+          items={items}
+          user={{ name, role: ROLE_LABELS[user.role], initials: initials(name) }}
+        />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <AdminTopbar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <AdminTopbar />
 
-        <main className="min-w-0 flex-1 px-5 pb-11 pt-7 lg:px-8">{children}</main>
+          <main className="min-w-0 flex-1 px-5 pb-11 pt-7 lg:px-8">{children}</main>
 
-        <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--border-subtle)] px-5 py-3 text-xs text-[var(--text-muted)] lg:px-8">
-          <span>
-            Signed in as {name} · {permissions.length} permissions
-          </span>
-          <form action={logoutAction} className="ml-auto">
-            <button type="submit" className="underline-offset-4 hover:underline">
-              Sign out
-            </button>
-          </form>
-        </footer>
+          <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--border-subtle)] px-5 py-3 text-xs text-[var(--text-muted)] lg:px-8">
+            <span>
+              Signed in as {name} · {permissions.length} permissions
+            </span>
+            <form action={logoutAction} className="ml-auto">
+              <button type="submit" className="underline-offset-4 hover:underline">
+                Sign out
+              </button>
+            </form>
+          </footer>
+        </div>
       </div>
-    </div>
+    </AdminNavProvider>
   );
 }

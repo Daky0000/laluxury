@@ -24,9 +24,11 @@ import {
   Calculator,
   Menu,
   X,
+  PanelLeftClose,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOverlay } from "@/lib/use-overlay";
+import { useAdminNav } from "./admin-nav-context";
 
 const ICONS = {
   dashboard: LayoutDashboard,
@@ -65,6 +67,7 @@ export function AdminNav({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { navHidden, toggleNav } = useAdminNav();
 
   useOverlay(open, () => setOpen(false));
 
@@ -75,13 +78,24 @@ export function AdminNav({
 
   const rail = (
     <>
-      <div className="flex flex-col border-b border-white/8 px-6 pb-6">
-        <Link href="/admin" className="font-display text-[26px] font-medium uppercase leading-none tracking-[0.16em] text-[#f5f4ef]">
-          LaLuxury
-        </Link>
-        <span className="mt-1 text-sm uppercase tracking-[0.34em] text-[#85827a]">
-          Admin console
-        </span>
+      <div className="flex items-start justify-between border-b border-white/8 px-6 pb-6">
+        <div className="flex flex-col">
+          <Link href="/admin" className="font-display text-[26px] font-medium uppercase leading-none tracking-[0.16em] text-[#f5f4ef]">
+            LaLuxury
+          </Link>
+          <span className="mt-1 text-sm uppercase tracking-[0.34em] text-[#85827a]">
+            Admin console
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={toggleNav}
+          title="Hide navigation (Ctrl+B)"
+          aria-label="Hide navigation"
+          className="hidden lg:grid h-7 w-7 place-items-center rounded text-[#85827a] hover:bg-white/10 hover:text-[#f5f4ef] transition-colors"
+        >
+          <PanelLeftClose className="h-4 w-4" aria-hidden />
+        </button>
       </div>
 
       <ul className="flex flex-1 flex-col gap-1 px-4 py-4.5">
@@ -140,7 +154,10 @@ export function AdminNav({
 
       <nav
         aria-label="Admin"
-        className="adm-rail sticky top-0 hidden h-dvh w-[236px] shrink-0 flex-col overflow-y-auto py-6.5 lg:flex"
+        className={cn(
+          "adm-rail sticky top-0 h-dvh w-[236px] shrink-0 flex-col overflow-y-auto py-6.5",
+          navHidden ? "hidden" : "hidden lg:flex",
+        )}
       >
         {rail}
       </nav>

@@ -9,6 +9,8 @@ import { SearchDialog } from "./search-dialog";
 import { MobileNav } from "./mobile-nav";
 import { BagButton } from "./bag-button";
 import { CurrencySwitcher } from "./currency-switcher";
+import { FrontendNavProvider } from "./frontend-nav-context";
+import { CategoryNav, FrontendNavToggle } from "./category-nav";
 
 export async function Header() {
   const [settings, count, user, categories] = await Promise.all([
@@ -25,7 +27,7 @@ export async function Header() {
   const announcements = announcementItems(settings);
 
   return (
-    <>
+    <FrontendNavProvider>
       {/* Announcement marquee. The list is duplicated so the loop has no seam. */}
       {announcements.length > 0 ? (
         <div className="overflow-hidden whitespace-nowrap bg-ink-900 text-xs uppercase tracking-[0.2em] text-ink-400 sm:tracking-[0.28em]">
@@ -57,57 +59,12 @@ export async function Header() {
           </Link>
 
           {/* Right: the menu, then currency, search, account and the bag. */}
-          <nav
-            aria-label="Categories"
-            className="hidden items-center gap-5 text-xs tracking-[0.1em] lg:flex"
-          >
-            <Link
-              href="/shop"
-              className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-            >
-              Shop All
-            </Link>
-            {categories.map((category) => {
-              const isPreorder = category.slug === "pre-order";
-              return (
-                <Link
-                  key={category.slug}
-                  href={isPreorder ? "/pre-order" : `/shop?category=${category.slug}`}
-                  className={
-                    isPreorder
-                      ? "inline-flex items-center gap-1.5 border border-amber-800/30 bg-amber-950/10 px-2.5 py-1 font-medium text-[#8C6528] transition-colors hover:bg-amber-950/20"
-                      : "text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-                  }
-                >
-                  {isPreorder ? (
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#D4AF37]" aria-hidden />
-                  ) : null}
-                  {category.name}
-                </Link>
-              );
-            })}
-            <Link
-              href="/lookbook"
-              className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-            >
-              Lookbook
-            </Link>
-            <Link
-              href="/trade"
-              className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-            >
-              Trade
-            </Link>
-            <Link
-              href="/orders/track"
-              className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-            >
-              Track Order
-            </Link>
-          </nav>
+          <CategoryNav categories={categories} />
 
           {/* `shrink-0` so a long store name never eats into the controls. */}
           <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+            <FrontendNavToggle />
+
             <CurrencySwitcher />
 
             <SearchDialog>
@@ -135,6 +92,6 @@ export async function Header() {
           </div>
         </div>
       </header>
-    </>
+    </FrontendNavProvider>
   );
 }
