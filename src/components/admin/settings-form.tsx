@@ -7,8 +7,8 @@ import type { AdminState } from "@/app/actions/admin/products";
 import {
   ADMIN_NAV_MENU_ITEMS,
   STOREFRONT_NAV_MENU_ITEMS,
-  type StoreSettings,
-} from "@/lib/settings";
+} from "@/lib/nav-config";
+import type { StoreSettings } from "@/lib/settings";
 import { LANDING_PAGES, type LandingPage } from "@/lib/landing";
 import { Card, Field, Alert } from "@/components/ui";
 import { ImageUrlField } from "./image-url-field";
