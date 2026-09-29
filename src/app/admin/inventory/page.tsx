@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/auth/rbac";
 import { availableOf } from "@/lib/inventory";
 import { formatDate } from "@/lib/utils";
-import { Card, Badge, EmptyState, SectionHeading, Stat } from "@/components/ui";
+import { Card, Badge, EmptyState, SectionHeading, Stat, InfoTooltip } from "@/components/ui";
 import { StockRow } from "@/components/admin/stock-row";
 import { StockBulkBar } from "@/components/admin/stock-bulk-bar";
 import type { Prisma } from "@/generated/prisma";
@@ -71,26 +71,38 @@ export default async function AdminInventoryPage({ searchParams }: PageProps<"/a
   const canWrite = can(user.role, "inventory:write");
 
   return (
-    <div className="flex flex-col gap-6">
-      <SectionHeading
-        title="Inventory"
-        description="Type a count straight into On hand — it saves itself. Tick rows to set or receive stock for many at once. Available is on-hand minus units held for unshipped orders, and every change is written to the stock ledger."
-        action={
-          <ExportLink href="/api/admin/export/inventory" />
-        }
-      />
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">Stock &amp; Inventory</h2>
+            <InfoTooltip content="Track on-hand warehouse stock, items held for customer orders, and reorder levels." />
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            Type counts directly into On Hand to update stock immediately.
+          </p>
+        </div>
+        <ExportLink href="/api/admin/export/inventory" />
+      </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Units on hand" value={String(totals._sum.onHand ?? 0)} />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Stat
+          label="On Hand"
+          value={String(totals._sum.onHand ?? 0)}
+          tooltip="Total physical pieces or boxes stored in your warehouse."
+          hint="Physical warehouse count"
+        />
         <Stat
           label="Reserved"
           value={String(totals._sum.reserved ?? 0)}
-          hint="held for open orders"
+          tooltip="Items bought and paid for by customers waiting to be packed &amp; delivered. Cannot be sold again."
+          hint="Locked for open orders"
         />
         <Stat
-          label="Needs attention"
+          label="Needs Restocking"
           value={String(outOfStock + lowStock)}
-          hint={`${outOfStock} out, ${lowStock} low`}
+          tooltip="Products that have reached or dropped below their reorder threshold."
+          hint={`${outOfStock} out, ${lowStock} running low`}
         />
       </div>
 
@@ -98,14 +110,14 @@ export default async function AdminInventoryPage({ searchParams }: PageProps<"/a
         <form method="get" className="flex flex-wrap items-end gap-3">
           <div className="min-w-48 flex-1">
             <label htmlFor="q" className="lx-eyebrow mb-1.5 block">
-              Search
+              Search Stock
             </label>
             <div className="relative">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
                 aria-hidden
               />
-              <input id="q" name="q" defaultValue={q} placeholder="SKU or product" className="lx-field pl-9" />
+              <input id="q" name="q" defaultValue={q} placeholder="Search by product name or SKU code..." className="lx-field pl-9" />
             </div>
           </div>
 

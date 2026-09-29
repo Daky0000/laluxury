@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { db } from "./db";
 import { env } from "./env";
 import type { Prisma } from "@/generated/prisma";
@@ -136,16 +137,33 @@ function merge(base: Integrations, stored: DeepPartial<Integrations>): Integrati
   return out;
 }
 
-export async function getIntegrations(): Promise<Integrations> {
-  const row = await db.setting.findUnique({ where: { key: KEY } });
-  return merge(fromEnv(), (row?.value as DeepPartial<Integrations>) ?? {});
+let cachedIntegrations: { data: Integrations; expiresAt: number } | null = null;
+const INTEGRATIONS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+export function invalidateIntegrationsCache(): void {
+  cachedIntegrations = null;
 }
+
+async function fetchIntegrations(): Promise<Integrations> {
+  const now = Date.now();
+  if (cachedIntegrations && cachedIntegrations.expiresAt > now) {
+    return cachedIntegrations.data;
+  }
+
+  const row = await db.setting.findUnique({ where: { key: KEY } });
+  const merged = merge(fromEnv(), (row?.value as DeepPartial<Integrations>) ?? {});
+  cachedIntegrations = { data: merged, expiresAt: now + INTEGRATIONS_CACHE_TTL_MS };
+  return merged;
+}
+
+export const getIntegrations = cache(fetchIntegrations);
 
 /**
  * Saves a patch. A blank string means "leave this one alone", so the admin form
  * can render empty secret fields without wiping the stored value on every save.
  */
 export async function updateIntegrations(patch: DeepPartial<Integrations>): Promise<void> {
+  invalidateIntegrationsCache();
   const row = await db.setting.findUnique({ where: { key: KEY } });
   const current = (row?.value as DeepPartial<Integrations>) ?? {};
   const next = structuredClone(current) as Record<string, Record<string, unknown>>;
@@ -171,6 +189,7 @@ export async function updateIntegrations(patch: DeepPartial<Integrations>): Prom
 
 /** Clears one field back to whatever the environment provides. */
 export async function clearIntegrationField(group: string, field: string): Promise<void> {
+  invalidateIntegrationsCache();
   const row = await db.setting.findUnique({ where: { key: KEY } });
   const current = (row?.value as Record<string, Record<string, unknown>>) ?? {};
   if (current[group]) delete current[group][field];

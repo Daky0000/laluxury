@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { db } from "./db";
 import {
   DEFAULT_HOME_SECTIONS,
@@ -116,18 +117,33 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   agentRequiresApproval: true,
   hideStorefrontNav: false,
   hideAdminNav: false,
-  hiddenAdminNavItems: [],
-  hiddenStorefrontNavItems: [],
+  hiddenAdminNavItems: ["/admin/preorders"],
+  hiddenStorefrontNavItems: ["pre-order"],
 };
 
 const SETTINGS_KEY = "store";
 
-export async function getSettings(): Promise<StoreSettings> {
+let cachedSettings: { data: StoreSettings; expiresAt: number } | null = null;
+const SETTINGS_CACHE_TTL_MS = 60 * 1000;
+
+export function invalidateSettingsCache(): void {
+  cachedSettings = null;
+}
+
+async function fetchSettings(): Promise<StoreSettings> {
+  const now = Date.now();
+  if (cachedSettings && cachedSettings.expiresAt > now) {
+    return cachedSettings.data;
+  }
+
   const row = await db.setting.findUnique({ where: { key: SETTINGS_KEY } });
-  if (!row) return DEFAULT_SETTINGS;
+  if (!row) {
+    cachedSettings = { data: DEFAULT_SETTINGS, expiresAt: now + SETTINGS_CACHE_TTL_MS };
+    return DEFAULT_SETTINGS;
+  }
 
   const stored = row.value as Partial<StoreSettings>;
-  return {
+  const resolved: StoreSettings = {
     ...DEFAULT_SETTINGS,
     ...stored,
     // The section list is the one setting written as free-form JSON, so it is
@@ -145,10 +161,16 @@ export async function getSettings(): Promise<StoreSettings> {
       ? stored.hiddenStorefrontNavItems
       : DEFAULT_SETTINGS.hiddenStorefrontNavItems,
   };
+
+  cachedSettings = { data: resolved, expiresAt: now + SETTINGS_CACHE_TTL_MS };
+  return resolved;
 }
 
+export const getSettings = cache(fetchSettings);
+
 export async function updateSettings(patch: Partial<StoreSettings>): Promise<StoreSettings> {
-  const current = await getSettings();
+  invalidateSettingsCache();
+  const current = await fetchSettings();
   const next = { ...current, ...patch };
 
   await db.setting.upsert({
@@ -157,6 +179,7 @@ export async function updateSettings(patch: Partial<StoreSettings>): Promise<Sto
     update: { value: next },
   });
 
+  cachedSettings = { data: next, expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS };
   return next;
 }
 

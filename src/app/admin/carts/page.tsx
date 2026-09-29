@@ -9,7 +9,7 @@ import { daysAgo, relativeTime } from "@/lib/utils";
 import { Card, EmptyState, SectionHeading, Stat } from "@/components/ui";
 import { Thumb } from "@/components/shop/photo";
 
-export const metadata: Metadata = { title: "Abandoned bags" };
+export const metadata: Metadata = { title: "Unfinished Orders (Abandoned Carts)" };
 
 /** An hour without a tap and the shopper has gone; a month and the bag is stale. */
 const IDLE_MS = 60 * 60 * 1000;
@@ -92,14 +92,14 @@ export default async function AbandonedCartsPage() {
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading
-        title="Abandoned bags & Concierge Recovery"
-        description={`Bags left for more than an hour in the last ${STALE_DAYS} days. Courtesy code BAG5 (5% OFF) is active and ready to share via 1-click WhatsApp or Email recovery.`}
+        title="Unfinished Orders (Abandoned Carts)"
+        description={`Shoppers who left items in their cart in the last ${STALE_DAYS} days. Courtesy discount code BAG5 (5% OFF) is ready to send via WhatsApp or email with one click.`}
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Bags" value={String(rows.length)} hint={`${anonymous} anonymous`} />
-        <Stat label="Reachable" value={String(reachable.length)} hint="have a phone or email" />
-        <Stat label="Left in bags" value={formatMoney(value)} hint="goods before delivery" />
+        <Stat label="Total Carts Left" value={String(rows.length)} hint={`${anonymous} anonymous shoppers`} />
+        <Stat label="Customers Reachable" value={String(reachable.length)} hint="Have phone or email on file" />
+        <Stat label="Total Value in Carts" value={formatMoney(value)} hint="Potential sales recovery" />
       </div>
 
       {rows.length === 0 ? (

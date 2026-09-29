@@ -34,6 +34,7 @@ export function CategoryNav({
       ) : null}
       {categories.map((category) => {
         const isPreorder = category.slug === "pre-order";
+        if (isPreorder && hiddenSet.has("pre-order")) return null;
         return (
           <Link
             key={category.slug}
@@ -51,6 +52,15 @@ export function CategoryNav({
           </Link>
         );
       })}
+      {!hiddenSet.has("pre-order") && !categories.some((c) => c.slug === "pre-order") ? (
+        <Link
+          href="/pre-order"
+          className="inline-flex items-center gap-1.5 border border-amber-800/30 bg-amber-950/10 px-2.5 py-1 font-medium text-[#8C6528] transition-colors hover:bg-amber-950/20"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-[#D4AF37]" aria-hidden />
+          Pre-Order
+        </Link>
+      ) : null}
       {!hiddenSet.has("lookbook") ? (
         <Link
           href="/lookbook"

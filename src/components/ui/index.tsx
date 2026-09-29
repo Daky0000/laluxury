@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { InfoTooltip } from "./tooltip";
 
 /**
  * Shared primitives. Deliberately small and unopinionated so the storefront
@@ -231,24 +232,25 @@ export function Stat({
   value,
   delta,
   hint,
+  tooltip,
 }: {
   label: string;
   value: string;
   delta?: { value: string; positive: boolean };
   hint?: string;
+  tooltip?: string;
 }) {
-  // The KPI tile from the admin artboard: label and trend on one line, the
-  // number set large in the display face, then what it is measured against.
   return (
     <Card className="px-5 py-5">
       <div className="flex items-start justify-between gap-3">
-        <span className="text-sm uppercase tracking-[0.1em] text-[var(--text-muted)]">
-          {label}
+        <span className="flex items-center text-xs font-medium uppercase tracking-[0.06em] text-[var(--text-muted)]">
+          <span>{label}</span>
+          {tooltip ? <InfoTooltip content={tooltip} /> : null}
         </span>
         {delta ? (
           <span
             className={cn(
-              "text-sm font-semibold tabular-nums",
+              "text-xs font-semibold tabular-nums",
               delta.positive ? "text-sage-600" : "text-[var(--accent)]",
             )}
           >
@@ -256,8 +258,8 @@ export function Stat({
           </span>
         ) : null}
       </div>
-      <p className="mt-2.5 font-display text-[34px] leading-none tabular-nums">{value}</p>
-      {hint ? <p className="mt-1.5 text-xs text-[var(--text-muted)]">{hint}</p> : null}
+      <p className="mt-2 text-[30px] font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-[var(--text-muted)]">{hint}</p> : null}
     </Card>
   );
 }
@@ -265,3 +267,6 @@ export function Stat({
 export function Divider({ className }: { className?: string }) {
   return <hr className={cn("border-t border-[var(--border-subtle)]", className)} />;
 }
+
+export * from "./tooltip";
+

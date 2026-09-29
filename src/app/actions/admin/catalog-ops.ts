@@ -8,6 +8,7 @@ import { ensureUniqueCode } from "@/lib/discounts";
 import { uniqueSlug } from "@/lib/slug";
 import { toMinorUnits } from "@/lib/money";
 import { recordAudit } from "@/lib/audit";
+import { invalidateCatalogFacetsCache, invalidateNavCategoriesCache } from "@/lib/catalog";
 import type { DiscountType, DiscountScope } from "@/generated/prisma";
 import type { AdminState } from "./products";
 
@@ -17,6 +18,7 @@ import type { AdminState } from "./products";
 
 /** The storefront views that show stock, price or availability. */
 function revalidateStorefront() {
+  invalidateCatalogFacetsCache();
   revalidatePath("/shop");
   revalidatePath("/");
   revalidatePath("/product/[slug]", "page");
@@ -363,6 +365,8 @@ export async function saveCategoryAction(
     });
   }
 
+  invalidateNavCategoriesCache();
+  invalidateCatalogFacetsCache();
   revalidatePath("/admin/categories");
   revalidatePath("/admin/products");
   revalidatePath("/shop");
@@ -376,6 +380,8 @@ export async function deleteCategoryAction(categoryId: string): Promise<AdminSta
   // Products keep existing; only the association goes.
   await db.category.delete({ where: { id: categoryId } });
 
+  invalidateNavCategoriesCache();
+  invalidateCatalogFacetsCache();
   revalidatePath("/admin/categories");
   revalidatePath("/admin/products");
   revalidatePath("/shop");

@@ -7,6 +7,7 @@ import {
   MAX_UPLOAD_BYTES,
   mediaPath,
 } from "./media-format";
+import { invalidateMediaMetaCache } from "./media-cache";
 import type { Prisma } from "@/generated/prisma";
 
 /**
@@ -342,6 +343,7 @@ export async function deleteMedia(id: string): Promise<void> {
   }
 
   await db.mediaAsset.delete({ where: { id } });
+  invalidateMediaMetaCache(id);
 }
 
 /**

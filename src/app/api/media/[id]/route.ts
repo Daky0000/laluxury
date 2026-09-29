@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getCachedMediaMeta, setCachedMediaMeta } from "@/lib/media-cache";
 
 export const runtime = "nodejs";
 
@@ -15,26 +16,47 @@ export async function GET(request: Request, ctx: RouteContext<"/api/media/[id]">
   const { id: segment } = await ctx.params;
   const id = segment.split(".")[0];
 
-  // 1. Query metadata first WITHOUT reading the large binary blob.
-  const meta = await db.mediaAsset.findUnique({
-    where: { id },
-    select: { id: true, source: true, mimeType: true, url: true, updatedAt: true },
-  });
+  // 1. Check in-memory metadata cache first to avoid hitting Postgres on every revalidation.
+  let meta = getCachedMediaMeta(id);
 
   if (!meta) {
-    return new NextResponse("Not found", { status: 404 });
+    const row = await db.mediaAsset.findUnique({
+      where: { id },
+      select: { id: true, source: true, mimeType: true, url: true, updatedAt: true },
+    });
+
+    if (!row) {
+      return new NextResponse("Not found", { status: 404 });
+    }
+
+    meta = row;
+    setCachedMediaMeta(id, meta);
   }
 
-  // A CDN or pasted asset only ever had an address; send the caller there.
+  // A CDN or pasted asset only ever had an address; send the caller there permanently.
+  // 308 + immutable caching guarantees the browser/edge proxy caches the redirect and
+  // never burdens the Railway web container or database again for this asset.
   if (meta.source !== "DATABASE") {
     if (!meta.url) return new NextResponse("Not found", { status: 404 });
-    return NextResponse.redirect(new URL(meta.url, request.url), 302);
+    return NextResponse.redirect(new URL(meta.url, request.url), {
+      status: 308,
+      headers: {
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    });
   }
 
   // 2. Check ETag before pulling megabytes of binary data from Postgres.
+  // Served straight from metadata without querying the binary column.
   const etag = `"${meta.id}-${meta.updatedAt.getTime()}"`;
   if (request.headers.get("if-none-match") === etag) {
-    return new NextResponse(null, { status: 304, headers: { ETag: etag } });
+    return new NextResponse(null, {
+      status: 304,
+      headers: {
+        ETag: etag,
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    });
   }
 
   // 3. Client cache missed; read the binary data now.

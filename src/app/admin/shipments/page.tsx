@@ -45,8 +45,8 @@ export default async function AdminShipmentsPage() {
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading
-        title="Supplier & Container Shipment Tracker"
-        description="Group multiple Pre-Order commissions into Sea or Air Freight Containers. Advancing a container's milestone automatically updates every customer order and live tracker inside that container."
+        title="Shipments &amp; Freight Containers"
+        description="Group customer pre-orders into Sea or Air shipping containers. Advancing a container's milestone automatically updates the live delivery tracking for every customer inside that container."
       />
 
       {/* Top Row: Create New Container + Assign Orders */}
@@ -55,7 +55,7 @@ export default async function AdminShipmentsPage() {
         <Card className="p-6">
           <div className="flex items-center gap-2">
             <Plus className="h-4 w-4 text-[var(--accent)]" />
-            <h2 className="text-base font-medium">Create New Container / Airway Manifest</h2>
+            <h2 className="text-base font-medium">Create New Shipping Container / Airway Bill</h2>
           </div>
           <form action={createContainerManifestAction} className="mt-4 space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">

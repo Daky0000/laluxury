@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { uniqueSlug, skuFromTitle, slugify } from "@/lib/slug";
-import { buildSearchText, refreshPriceRange } from "@/lib/catalog";
+import { buildSearchText, refreshPriceRange, invalidateCatalogFacetsCache } from "@/lib/catalog";
 import { toMinorUnits } from "@/lib/money";
 import { ensureInventoryItem } from "@/lib/inventory";
 import { recordAudit } from "@/lib/audit";
@@ -23,6 +23,7 @@ function fail(message: string): AdminState {
  * revalidate window happens to lapse.
  */
 function revalidateProduct(id?: string) {
+  invalidateCatalogFacetsCache();
   revalidatePath("/admin/products");
   revalidatePath("/admin/preorders");
   if (id) revalidatePath(`/admin/products/${id}`);

@@ -14,7 +14,7 @@ export const ADMIN_NAV_MENU_ITEMS: AdminNavMenuItem[] = [
   { href: "/admin/analytics", label: "Financials & Margins" },
   { href: "/admin/orders/new", label: "Showroom POS" },
   { href: "/admin/orders", label: "Orders" },
-  { href: "/admin/preorders", label: "Pre-orders & Trade" },
+  { href: "/admin/preorders", label: "Pre-Orders & Sourcing" },
   { href: "/admin/shipments", label: "Containers & Freight" },
   { href: "/admin/carts", label: "Abandoned bags" },
   { href: "/admin/products", label: "Products" },
@@ -33,6 +33,7 @@ export const ADMIN_NAV_MENU_ITEMS: AdminNavMenuItem[] = [
 
 export const STOREFRONT_NAV_MENU_ITEMS: StorefrontNavMenuItem[] = [
   { key: "shop", label: "Shop All", href: "/shop" },
+  { key: "pre-order", label: "Pre-Orders & Sourcing", href: "/pre-order" },
   { key: "lookbook", label: "Lookbook", href: "/lookbook" },
   { key: "trade", label: "Trade Program", href: "/trade" },
   { key: "track", label: "Track Order", href: "/orders/track" },

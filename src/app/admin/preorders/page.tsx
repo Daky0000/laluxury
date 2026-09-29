@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/auth";
 import { formatMoney, toMajorUnits } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
 import { formatDate } from "@/lib/utils";
-import { Badge, Card } from "@/components/ui";
+import { Badge, Card, InfoTooltip } from "@/components/ui";
 import {
   updatePreorderRequestAction,
   updateOrderPreorderMilestoneAction,
@@ -81,24 +81,29 @@ export default async function AdminPreordersPage() {
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="lx-eyebrow">Concierge &amp; Bespoke Pipeline</p>
-          <h1 className="mt-1 text-2xl md:text-3xl">Pre-orders, Sourcing &amp; Trade</h1>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">Pre-Orders &amp; Sourcing</h2>
+            <InfoTooltip content="Pre-order flow: 1. Deposit Paid → 2. Workshop & Shipping → 3. Arrival in Accra & Delivery." />
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            Custom furniture requests, deposits, workshop production, and arrivals.
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/pre-order"
             target="_blank"
-            className="inline-flex items-center gap-1.5 rounded-(--radius-card) border border-[var(--border-subtle)] px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] shadow-xs"
           >
-            View Storefront Hub
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+            Storefront Hub
+            <ExternalLink className="h-3 w-3" aria-hidden />
           </Link>
           <Link
             href="/admin/products/new"
-            className="inline-flex items-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-4 py-2 text-sm text-[var(--accent-contrast)]"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:opacity-90"
           >
-            <PackagePlus className="h-4 w-4" aria-hidden />
-            Add Pre-Order Piece
+            <PackagePlus className="h-3.5 w-3.5" aria-hidden />
+            + Add Pre-Order
           </Link>
         </div>
       </div>

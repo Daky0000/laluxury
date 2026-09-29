@@ -50,20 +50,20 @@ export default async function BulkProductEditorPage() {
       </Link>
 
       <SectionHeading
-        title="Bulk Price, FX & Pre-Order Matrix"
-        description="Adjust catalog prices across categories when exchange rates move, configure Pre-Order lead times in bulk, or inline-edit unit price, cost price (COGS), and stock."
+        title="Quick Price &amp; Stock Editor"
+        description="Easily update multiple product prices at once, configure Pre-Order deposits, or quickly edit prices, wholesale costs, and stock levels in the table below."
       />
 
       {/* Top Two-Column Batch Action Cards */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Card 1: FX / Percentage Price Adjuster */}
+        {/* Card 1: Percentage Price Adjuster */}
         <Card className="p-6">
           <div className="flex items-center gap-2">
             <Percent className="h-4 w-4 text-[var(--accent)]" />
-            <h2 className="text-base font-medium">FX &amp; Inflation Percentage Price Adjuster</h2>
+            <h2 className="text-base font-medium">Bulk Percentage Price Adjuster</h2>
           </div>
           <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            Increase or decrease all prices in a category (or the entire store) by a percentage and optionally round to the nearest ₵10.
+            Increase or decrease all product prices in a category (or the entire store) by a percentage (e.g. +5% or -10%) and optionally round to the nearest ₵10.
           </p>
 
           <form action={bulkAdjustPricesByPercentAction} className="mt-4 space-y-3">

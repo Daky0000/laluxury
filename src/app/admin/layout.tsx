@@ -3,35 +3,190 @@ import { db } from "@/lib/db";
 import { currentUser, displayName } from "@/lib/auth";
 import { can, isStaff, permissionsFor, ROLE_LABELS, type Permission } from "@/lib/auth/rbac";
 import { logoutAction } from "@/app/actions/auth";
-import { AdminNav } from "@/components/admin/nav";
+import { AdminNav, type NavItem } from "@/components/admin/nav";
 import { AdminTopbar } from "@/components/admin/topbar";
 import { AdminNavProvider } from "@/components/admin/admin-nav-context";
+import { AdminHelpModal } from "@/components/admin/admin-help-modal";
 import { getSettings } from "@/lib/settings";
 import { initials } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-/** Nav is filtered by permission, so staff never see a link they cannot open. */
-const NAV: { href: string; label: string; icon: string; permission: Permission }[] = [
-  { href: "/admin", label: "Dashboard", icon: "dashboard", permission: "dashboard:view" },
-  { href: "/admin/analytics", label: "Financials & Margins", icon: "analytics", permission: "dashboard:view" },
-  { href: "/admin/orders/new", label: "Showroom POS", icon: "pos", permission: "orders:write" },
-  { href: "/admin/orders", label: "Orders", icon: "orders", permission: "orders:read" },
-  { href: "/admin/preorders", label: "Pre-orders & Trade", icon: "preorders", permission: "orders:read" },
-  { href: "/admin/shipments", label: "Containers & Freight", icon: "shipments", permission: "orders:read" },
-  { href: "/admin/carts", label: "Abandoned bags", icon: "carts", permission: "orders:read" },
-  { href: "/admin/products", label: "Products", icon: "products", permission: "products:read" },
-  { href: "/admin/products/bulk", label: "Bulk FX & Matrix", icon: "products", permission: "products:write" },
-  { href: "/admin/categories", label: "Categories", icon: "categories", permission: "products:read" },
-  { href: "/admin/media", label: "Media", icon: "media", permission: "products:read" },
-  { href: "/admin/inventory", label: "Inventory", icon: "inventory", permission: "inventory:read" },
-  { href: "/admin/customers", label: "Customers", icon: "customers", permission: "customers:read" },
-  { href: "/admin/discounts", label: "Discounts", icon: "discounts", permission: "discounts:read" },
-  { href: "/admin/reviews", label: "Reviews", icon: "reviews", permission: "reviews:moderate" },
-  { href: "/admin/agent", label: "AI agent", icon: "agent", permission: "agent:use" },
-  { href: "/admin/users", label: "Staff", icon: "users", permission: "users:manage" },
-  { href: "/admin/activity", label: "Activity", icon: "activity", permission: "settings:manage" },
-  { href: "/admin/settings", label: "Settings", icon: "settings", permission: "settings:manage" },
+/**
+ * Navigation is grouped logically with clear plain-language labels and helpful
+ * descriptions designed for beginners and experienced store operators alike.
+ * Filtered by permission, so staff never see a link they cannot open.
+ */
+const NAV: {
+  href: string;
+  label: string;
+  shortLabel?: string;
+  icon: string;
+  permission: Permission;
+  group: string;
+  description: string;
+}[] = [
+  // --- Overview & Reports ---
+  {
+    href: "/admin",
+    label: "Dashboard",
+    icon: "dashboard",
+    permission: "dashboard:view",
+    group: "Overview",
+    description: "Store activity, alerts & today's summary",
+  },
+  {
+    href: "/admin/analytics",
+    label: "Sales & Profits",
+    icon: "analytics",
+    permission: "dashboard:view",
+    group: "Overview",
+    description: "Revenue, profit margins & financial reports",
+  },
+
+  // --- Orders & Fulfillment ---
+  {
+    href: "/admin/orders",
+    label: "Orders",
+    icon: "orders",
+    permission: "orders:read",
+    group: "Orders & Sales",
+    description: "Pack, ship & manage customer purchases",
+  },
+  {
+    href: "/admin/orders/new",
+    label: "In-Store Sale (POS)",
+    icon: "pos",
+    permission: "orders:write",
+    group: "Orders & Sales",
+    description: "Cash register for showroom & walk-in sales",
+  },
+  {
+    href: "/admin/preorders",
+    label: "Pre-Orders & Sourcing",
+    icon: "preorders",
+    permission: "orders:read",
+    group: "Orders & Sales",
+    description: "Custom orders, deposits & arrivals",
+  },
+  {
+    href: "/admin/shipments",
+    label: "Shipments & Freight",
+    icon: "shipments",
+    permission: "orders:read",
+    group: "Orders & Sales",
+    description: "Shipping containers & delivery milestones",
+  },
+  {
+    href: "/admin/carts",
+    label: "Unfinished Orders",
+    icon: "carts",
+    permission: "orders:read",
+    group: "Orders & Sales",
+    description: "Abandoned shopping carts ready for follow-up",
+  },
+
+  // --- Catalog & Stock ---
+  {
+    href: "/admin/products",
+    label: "Products",
+    icon: "products",
+    permission: "products:read",
+    group: "Catalog & Stock",
+    description: "Manage products, prices & photos",
+  },
+  {
+    href: "/admin/inventory",
+    label: "Stock & Inventory",
+    icon: "inventory",
+    permission: "inventory:read",
+    group: "Catalog & Stock",
+    description: "Track on-hand stock & low inventory alerts",
+  },
+  {
+    href: "/admin/products/bulk",
+    label: "Quick Price Editor",
+    icon: "bulk",
+    permission: "products:write",
+    group: "Catalog & Stock",
+    description: "Bulk change prices or update stock levels",
+  },
+  {
+    href: "/admin/categories",
+    label: "Categories & Rooms",
+    icon: "categories",
+    permission: "products:read",
+    group: "Catalog & Stock",
+    description: "Organize items into rooms & collections",
+  },
+  {
+    href: "/admin/media",
+    label: "Photo Library",
+    icon: "media",
+    permission: "products:read",
+    group: "Catalog & Stock",
+    description: "Upload & browse product images",
+  },
+
+  // --- Customers & Marketing ---
+  {
+    href: "/admin/customers",
+    label: "Customers",
+    icon: "customers",
+    permission: "customers:read",
+    group: "Customers & Marketing",
+    description: "Shopper directory & purchase history",
+  },
+  {
+    href: "/admin/discounts",
+    label: "Promo Codes & Deals",
+    icon: "discounts",
+    permission: "discounts:read",
+    group: "Customers & Marketing",
+    description: "Discount coupons & promotional offers",
+  },
+  {
+    href: "/admin/reviews",
+    label: "Customer Reviews",
+    icon: "reviews",
+    permission: "reviews:moderate",
+    group: "Customers & Marketing",
+    description: "Check & approve customer ratings & feedback",
+  },
+
+  // --- Store Setup & Tools ---
+  {
+    href: "/admin/agent",
+    label: "AI Store Assistant",
+    icon: "agent",
+    permission: "agent:use",
+    group: "Settings & Tools",
+    description: "Ask AI for store help, advice & copy",
+  },
+  {
+    href: "/admin/users",
+    label: "Team & Staff",
+    icon: "users",
+    permission: "users:manage",
+    group: "Settings & Tools",
+    description: "Staff accounts & access permissions",
+  },
+  {
+    href: "/admin/activity",
+    label: "Store Audit Log",
+    icon: "activity",
+    permission: "settings:manage",
+    group: "Settings & Tools",
+    description: "Timeline of changes made to the store",
+  },
+  {
+    href: "/admin/settings",
+    label: "Store Settings",
+    icon: "settings",
+    permission: "settings:manage",
+    group: "Settings & Tools",
+    description: "Payments, shipping fees & store info",
+  },
 ];
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
@@ -40,8 +195,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   if (!user) redirect("/login");
   if (!isStaff(user.role)) redirect("/account");
 
-  // The counts beside Orders, Pre-orders, and Reviews are what is actually waiting on
-  // someone, so the rail says whether there is work without opening anything.
+  // Counts of action items waiting for staff attention
   const [openOrders, pendingReviews, openPreorderRequests, openPreorderOrders, settings] = await Promise.all([
     db.order.count({ where: { status: { in: ["PAID", "PROCESSING"] } } }),
     db.review.count({ where: { isApproved: false } }),
@@ -63,7 +217,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
 
   const hiddenAdminNav = new Set(settings.hiddenAdminNavItems ?? []);
   const permissions = permissionsFor(user.role);
-  const items = NAV.filter(
+  const items: NavItem[] = NAV.filter(
     (item) => can(user.role, item.permission) && !hiddenAdminNav.has(item.href),
   ).map((item) => ({
     ...item,
@@ -82,19 +236,35 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
         <div className="flex min-w-0 flex-1 flex-col">
           <AdminTopbar />
 
-          <main className="min-w-0 flex-1 px-5 pb-11 pt-7 lg:px-8">{children}</main>
+          <main className="min-w-0 flex-1 px-4 pb-12 pt-6 sm:px-6 lg:px-8">{children}</main>
 
-          <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--border-subtle)] px-5 py-3 text-xs text-[var(--text-muted)] lg:px-8">
-            <span>
-              Signed in as {name} · {permissions.length} permissions
+          <footer className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] bg-[var(--surface-raised)]/60 px-5 py-3 text-xs text-[var(--text-muted)] lg:px-8">
+            <span className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
+              <span>Signed in as <strong>{name}</strong> ({ROLE_LABELS[user.role]})</span>
+              <span>· {permissions.length} store permissions</span>
             </span>
-            <form action={logoutAction} className="ml-auto">
-              <button type="submit" className="underline-offset-4 hover:underline">
-                Sign out
-              </button>
-            </form>
+
+            <div className="ml-auto flex items-center gap-4">
+              <a
+                href="/"
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-[var(--text-primary)] transition-colors underline-offset-4 hover:underline"
+              >
+                View Online Store ↗
+              </a>
+              <form action={logoutAction}>
+                <button type="submit" className="text-red-700 underline-offset-4 hover:underline">
+                  Sign out
+                </button>
+              </form>
+            </div>
           </footer>
         </div>
+
+        {/* Global Beginner Help Modal / Glossary */}
+        <AdminHelpModal />
       </div>
     </AdminNavProvider>
   );

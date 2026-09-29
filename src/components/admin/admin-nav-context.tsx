@@ -6,17 +6,25 @@ import {
   useCallback,
   useSyncExternalStore,
   useEffect,
+  useState,
   type ReactNode,
 } from "react";
 import { usePathname } from "next/navigation";
 
 const STORAGE_KEY = "laluxury_admin_hide_nav";
+const BEGINNER_MODE_KEY = "laluxury_admin_beginner_mode";
 const NAV_CHANGE_EVENT = "laluxury:admin-nav-change";
 
 interface AdminNavContextValue {
   navHidden: boolean;
   toggleNav: () => void;
   setNavHidden: (hidden: boolean) => void;
+  helpOpen: boolean;
+  toggleHelp: () => void;
+  setHelpOpen: (open: boolean) => void;
+  beginnerMode: boolean;
+  toggleBeginnerMode: () => void;
+  setBeginnerMode: (enabled: boolean) => void;
 }
 
 const AdminNavContext = createContext<AdminNavContextValue | null>(null);
@@ -28,6 +36,12 @@ export function useAdminNav(): AdminNavContextValue {
       navHidden: false,
       toggleNav: () => {},
       setNavHidden: () => {},
+      helpOpen: false,
+      toggleHelp: () => {},
+      setHelpOpen: () => {},
+      beginnerMode: true,
+      toggleBeginnerMode: () => {},
+      setBeginnerMode: () => {},
     };
   }
   return context;
@@ -82,6 +96,40 @@ export function AdminNavProvider({
     getServerSnapshotWithDefault,
   );
   const pathname = usePathname();
+
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [beginnerMode, setBeginnerModeState] = useState(true);
+
+  // Initialize beginner mode from localStorage on mount (defaults to true for friendly guidance)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(BEGINNER_MODE_KEY);
+      if (stored !== null) {
+        setBeginnerModeState(stored === "true");
+      }
+    } catch {}
+  }, []);
+
+  const setBeginnerMode = useCallback((enabled: boolean) => {
+    setBeginnerModeState(enabled);
+    try {
+      localStorage.setItem(BEGINNER_MODE_KEY, String(enabled));
+    } catch {}
+  }, []);
+
+  const toggleBeginnerMode = useCallback(() => {
+    setBeginnerModeState((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(BEGINNER_MODE_KEY, String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const toggleHelp = useCallback(() => {
+    setHelpOpen((prev) => !prev);
+  }, []);
 
   useEffect(() => {
     window.dispatchEvent(new Event(NAV_CHANGE_EVENT));
@@ -139,7 +187,19 @@ export function AdminNavProvider({
   }, [toggleNav]);
 
   return (
-    <AdminNavContext.Provider value={{ navHidden, toggleNav, setNavHidden }}>
+    <AdminNavContext.Provider
+      value={{
+        navHidden,
+        toggleNav,
+        setNavHidden,
+        helpOpen,
+        toggleHelp,
+        setHelpOpen,
+        beginnerMode,
+        toggleBeginnerMode,
+        setBeginnerMode,
+      }}
+    >
       {children}
     </AdminNavContext.Provider>
   );

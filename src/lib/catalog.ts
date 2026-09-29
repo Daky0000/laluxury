@@ -234,11 +234,67 @@ export async function searchProducts(filters: CatalogFilters) {
   };
 }
 
+export type NavCategory = { name: string; slug: string };
+
+let cachedNavCategories: { data: NavCategory[]; expiresAt: number } | null = null;
+const NAV_CATEGORIES_CACHE_TTL_MS = 5 * 60 * 1000;
+
+export function invalidateNavCategoriesCache(): void {
+  cachedNavCategories = null;
+}
+
+async function fetchNavCategories(): Promise<NavCategory[]> {
+  const now = Date.now();
+  if (cachedNavCategories && cachedNavCategories.expiresAt > now) {
+    return cachedNavCategories.data;
+  }
+
+  const rows = await db.category.findMany({
+    where: { isActive: true, parentId: null },
+    orderBy: { position: "asc" },
+    select: { name: true, slug: true },
+  });
+
+  cachedNavCategories = { data: rows, expiresAt: now + NAV_CATEGORIES_CACHE_TTL_MS };
+  return rows;
+}
+
+/** Top-level navigation categories for storefront header and footer. Cached in memory. */
+export const getNavCategories = cache(fetchNavCategories);
+
+export type CatalogFacetsResult = {
+  productTotal: number;
+  categories: {
+    id: string;
+    name: string;
+    slug: string;
+    parentId: string | null;
+    productCount: number;
+  }[];
+  priceMin: number;
+  priceMax: number;
+  tags: { name: string; count: number }[];
+  options: { name: string; values: { value: string; hexColor: string | null }[] }[];
+};
+
+let cachedFacets: { data: CatalogFacetsResult; expiresAt: number } | null = null;
+const FACETS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+export function invalidateCatalogFacetsCache(): void {
+  cachedFacets = null;
+}
+
 /**
  * Facet counts for the filter rail. Computed against the *unfiltered* active
  * catalog so a shopper can always see and undo a filter that returned nothing.
+ * Cached for 2 minutes to eliminate full-table scans on every page load.
  */
-export async function catalogFacets() {
+async function fetchCatalogFacets(): Promise<CatalogFacetsResult> {
+  const now = Date.now();
+  if (cachedFacets && cachedFacets.expiresAt > now) {
+    return cachedFacets.data;
+  }
+
   const [categories, priceRange, tagRows, options, productTotal] = await Promise.all([
     db.category.findMany({
       where: { isActive: true },
@@ -287,7 +343,7 @@ export async function catalogFacets() {
     for (const tag of row.tags) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
   }
 
-  return {
+  const result: CatalogFacetsResult = {
     productTotal,
     categories: categories.map((c) => ({
       id: c.id,
@@ -307,7 +363,12 @@ export async function catalogFacets() {
       values: [...values.entries()].map(([value, hexColor]) => ({ value, hexColor })),
     })),
   };
+
+  cachedFacets = { data: result, expiresAt: now + FACETS_CACHE_TTL_MS };
+  return result;
 }
+
+export const catalogFacets = cache(fetchCatalogFacets);
 
 export const productDetailInclude = {
   images: { orderBy: { position: "asc" } },

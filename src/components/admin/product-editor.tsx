@@ -34,7 +34,7 @@ import { uploadProductImagesAction } from "@/app/actions/admin/media";
 import { bulkAdjustStockAction } from "@/app/actions/admin/catalog-ops";
 import { UPLOAD_ACCEPT } from "@/lib/media-format";
 import { MediaPicker } from "@/components/admin/media-picker";
-import { Card, Field, Alert, Badge } from "@/components/ui";
+import { Card, Field, Alert, Badge, InfoTooltip } from "@/components/ui";
 import { formatMoney, toMajorUnits } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -787,16 +787,17 @@ function BulkStock({ product }: { product: EditorProduct }) {
 
   return (
     <Card className="p-5">
-      <h3 className="lx-eyebrow mb-1.5">Stock for every variant</h3>
-      <p className="mb-4 text-sm text-[var(--text-secondary)]">
-        Applies to all {ids.length} variant{ids.length === 1 ? "" : "s"} at once. Setting a figure
-        also tells the storefront to count it; single corrections are still best made in
-        Inventory.
+      <div className="flex items-center gap-1.5 mb-1">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Stock for every variant</h3>
+        <InfoTooltip content="Applies to all variants at once. Sets or adds stock in the inventory ledger." />
+      </div>
+      <p className="mb-3.5 text-xs text-[var(--text-secondary)]">
+        Quickly update stock across all {ids.length} variant{ids.length === 1 ? "" : "s"} at once.
       </p>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="lx-eyebrow">Adjustment</span>
+          <span className="text-xs font-medium text-[var(--text-secondary)]">Adjustment</span>
           <select
             value={mode}
             onChange={(event) => setMode(event.target.value as "set" | "add")}
@@ -808,7 +809,7 @@ function BulkStock({ product }: { product: EditorProduct }) {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="lx-eyebrow">Units</span>
+          <span className="text-xs font-medium text-[var(--text-secondary)]">Units</span>
           <input
             type="number"
             min="0"

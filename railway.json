@@ -5,7 +5,9 @@
     "buildCommand": "npm run build"
   },
   "deploy": {
-    "startCommand": "npm start",
+    "preDeployCommand": "npm run db:migrate && node scripts/seed-once.mjs",
+    "preDeployTimeoutSeconds": 300,
+    "startCommand": "node --max-old-space-size=384 ./node_modules/next/dist/bin/next start",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",

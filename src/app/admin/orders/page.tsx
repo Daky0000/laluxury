@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/auth";
 import { formatMoney } from "@/lib/money";
 import { formatDate, buildQuery } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
-import { Card, Badge, EmptyState, SectionHeading } from "@/components/ui";
+import { Card, Badge, EmptyState, SectionHeading, InfoTooltip } from "@/components/ui";
 import { ManualOrderPanel } from "@/components/admin/manual-order-form";
 import type { OrderStatus, PaymentStatus, Prisma } from "@/generated/prisma";
 
@@ -81,24 +81,29 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeading
-        title="Orders"
-        description={`${total} matching.`}
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <ExportLink
-              href="/api/admin/export?type=orders"
-              label="Export Accounting & Pre-Order CSV"
-            />
-            <Link
-              href="/admin/orders/new"
-              className="inline-flex items-center gap-1.5 rounded-(--radius-card) bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] hover:opacity-95"
-            >
-              + Showroom POS / Multi-Item Order
-            </Link>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">Customer Orders</h2>
+            <InfoTooltip content="Order lifecycle: 1. Awaiting Payment → 2. Paid (Pack now!) → 3. Processing → 4. Shipped → 5. Delivered" />
           </div>
-        }
-      />
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            {total} {total === 1 ? "order" : "orders"} found · View, pack, ship, and track customer purchases.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportLink
+            href="/api/admin/export?type=orders"
+            label="Export CSV"
+          />
+          <Link
+            href="/admin/orders/new"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:opacity-90 transition-opacity"
+          >
+            + In-Store POS Sale
+          </Link>
+        </div>
+      </div>
 
       <ManualOrderPanel
         variants={sellable.map((variant) => ({

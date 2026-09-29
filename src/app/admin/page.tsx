@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CheckCircle2, Circle } from "lucide-react";
+import {
+  CheckCircle2,
+  Circle,
+  Plus,
+  Calculator,
+  PackageCheck,
+  Settings,
+  ArrowRight,
+  TrendingUp,
+} from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { dashboardMetrics, revenueSeries, topProducts } from "@/lib/analytics";
@@ -8,39 +17,39 @@ import { lowStockItems } from "@/lib/inventory";
 import { integrationStatus } from "@/lib/integrations";
 import { formatMoney } from "@/lib/money";
 import { daysAgo, formatDate, relativeTime } from "@/lib/utils";
-import { Card, Stat, Badge, EmptyState } from "@/components/ui";
+import { Card, Stat, Badge, EmptyState, InfoTooltip } from "@/components/ui";
 import { RevenueChart } from "@/components/admin/revenue-chart";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
+import { getSettings } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-const cardTitle = "text-sm font-semibold";
 const tableHead =
-  "border-b border-[var(--border-subtle)] px-2 py-2.5 text-left text-sm font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]";
+  "border-b border-[var(--border-subtle)] px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]";
 
 export default async function AdminDashboard() {
   await requirePermission("dashboard:view");
 
-  const [metrics, series, top, lowStock, recentOrders, integrations, attention] = await Promise.all([
+  const [metrics, series, top, lowStock, recentOrders, integrations, attention, settings] = await Promise.all([
     dashboardMetrics(30),
     revenueSeries(30),
     topProducts(30, 5),
     lowStockItems(6),
     db.order.findMany({
       orderBy: { placedAt: "desc" },
-      take: 6,
+      take: 8,
       select: {
         id: true,
         orderNumber: true,
         email: true,
         total: true,
         status: true,
+        paymentStatus: true,
         placedAt: true,
         shippingAddress: { select: { firstName: true, lastName: true, city: true } },
       },
     }),
     integrationStatus(),
-    // The things somebody has to act on today, in one glance.
     Promise.all([
       db.order.count({ where: { status: "PENDING", paymentStatus: "PENDING" } }),
       db.review.count({ where: { isApproved: false } }),
@@ -63,109 +72,105 @@ export default async function AdminDashboard() {
       openPreorders,
       tradePartners,
     })),
+    getSettings(),
   ]);
 
-  const unready = integrations.filter((i) => !i.ready);
+  const hiddenAdminNav = new Set(settings.hiddenAdminNavItems ?? []);
 
   const todo = [
     {
-      label: "To fulfil",
+      label: "Orders to Pack",
       count: metrics.pendingFulfilment,
       href: "/admin/orders?status=PAID",
-      hint: "paid, not yet packed",
+      tooltip: "Paid orders waiting for warehouse packing & delivery.",
+      urgent: metrics.pendingFulfilment > 0,
     },
     {
-      label: "Pre-orders & Sourcing",
-      count: attention.openPreorders,
-      href: "/admin/preorders",
-      hint: `${attention.tradePartners} trade partners active`,
-    },
-    {
-      label: "Awaiting payment",
+      label: "Awaiting Payment",
       count: attention.awaitingPayment,
       href: "/admin/orders?status=PENDING",
-      hint: "reserved, unpaid",
+      tooltip: "Items reserved. Customer has not completed payment yet.",
+      urgent: false,
     },
     {
-      label: "Abandoned bags",
+      label: "Pre-Orders",
+      count: attention.openPreorders,
+      href: "/admin/preorders",
+      tooltip: "Custom furniture requests & advance commissions.",
+      urgent: attention.openPreorders > 0,
+    },
+    {
+      label: "Unfinished Carts",
       count: metrics.abandonedCarts,
       href: "/admin/carts",
-      hint: "VIP 5% code ready",
+      tooltip: "Carts left behind before payment. Ready for 1-click WhatsApp follow-up.",
+      urgent: false,
     },
     {
-      label: "Reviews to check",
+      label: "Reviews to Check",
       count: attention.pendingReviews,
       href: "/admin/reviews",
-      hint: "not yet on the storefront",
+      tooltip: "Customer reviews waiting for moderation before appearing on site.",
+      urgent: attention.pendingReviews > 0,
     },
     {
-      label: "Unread messages",
+      label: "Customer Messages",
       count: attention.unreadMessages,
       href: "/admin/activity",
-      hint: "from the contact form",
+      tooltip: "Unread inquiries submitted through website contact form.",
+      urgent: attention.unreadMessages > 0,
     },
-  ];
+  ].filter((item) => !hiddenAdminNav.has(item.href.split("?")[0]));
 
   return (
-    <div className="flex flex-col gap-4.5">
-      {/* Setup nudge */}
-      {unready.length > 0 ? (
-        <Card className="border-warning/30 bg-warning/5 p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
-            <div>
-              <p className="text-sm font-medium">
-                {unready.length} integration{unready.length === 1 ? "" : "s"} still to configure
-              </p>
-              <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                {unready.map((i) => i.label).join(", ")}. Paste the keys under Settings →
-                Integrations and they take effect straight away.
-              </p>
-              <Link
-                href="/admin/settings"
-                className="mt-2 inline-flex items-center gap-1 text-xs underline underline-offset-4"
-              >
-                Setup guide <ArrowRight className="h-3 w-3" aria-hidden />
-              </Link>
-            </div>
-          </div>
-        </Card>
-      ) : null}
+    <div className="flex flex-col gap-5">
+      {/* Top Header & Quick Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
+            Overview
+          </h2>
+          <p className="text-xs text-[var(--text-muted)]">
+            Sales, open orders, and store activity today.
+          </p>
+        </div>
 
-      {/* What needs doing */}
-      <Card className="px-6 py-5">
-        <h2 className={cardTitle}>Needs attention</h2>
-        <ul className="mt-3 grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          {todo.map((item) => (
-            <li key={item.label}>
-              <Link
-                href={item.href}
-                className={`block rounded-lg border px-3.5 py-3 transition-colors hover:bg-[var(--surface-sunken)] ${
-                  item.count > 0 ? "border-[var(--border-strong)]" : "border-[var(--border-subtle)]"
-                }`}
-              >
-                <span className="block text-sm uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                  {item.label}
-                </span>
-                <span
-                  className={`mt-1 block font-display text-[28px] leading-none tabular-nums ${
-                    item.count > 0 ? "text-[var(--accent)]" : "text-[var(--text-muted)]"
-                  }`}
-                >
-                  {item.count}
-                </span>
-                <span className="mt-1 block text-xs text-[var(--text-muted)]">{item.hint}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </Card>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/admin/products/new"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:opacity-90 transition-opacity"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Add Product</span>
+          </Link>
+          <Link
+            href="/admin/orders/new"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] shadow-xs hover:bg-[var(--surface-sunken)] transition-colors"
+          >
+            <Calculator className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+            <span>In-Store POS</span>
+          </Link>
+          <Link
+            href="/admin/orders?status=PAID"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] shadow-xs hover:bg-[var(--surface-sunken)] transition-colors"
+          >
+            <PackageCheck className="h-3.5 w-3.5 text-blue-600" />
+            <span>Orders to Pack</span>
+            {metrics.pendingFulfilment > 0 ? (
+              <span className="rounded-full bg-blue-600 px-1.5 py-0.2 text-[10px] font-bold text-white tabular-nums">
+                {metrics.pendingFulfilment}
+              </span>
+            ) : null}
+          </Link>
+        </div>
+      </div>
 
-      {/* Headline numbers */}
-      <div className="grid gap-4.5 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Primary KPI Stats */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Revenue (30d)"
           value={formatMoney(metrics.revenue)}
+          tooltip="Total money collected from paid customer orders in the last 30 days."
           delta={
             metrics.revenueChange !== null
               ? {
@@ -177,8 +182,9 @@ export default async function AdminDashboard() {
           hint={`Across ${metrics.orderCount} paid orders`}
         />
         <Stat
-          label="Orders"
+          label="Paid Orders"
           value={String(metrics.orderCount)}
+          tooltip="Number of completed customer purchases in the last 30 days."
           delta={
             metrics.orderCountChange !== null
               ? {
@@ -187,52 +193,111 @@ export default async function AdminDashboard() {
                 }
               : undefined
           }
-          hint="Paid in the last 30 days"
+          hint="Completed checkouts"
         />
         <Stat
-          label="Avg order value"
+          label="Avg. Order Spend"
           value={formatMoney(metrics.averageOrderValue)}
+          tooltip="Average amount spent each time a customer buys."
           hint="Per paid order"
         />
         <Stat
-          label="To fulfil"
+          label="Ready to Pack"
           value={String(metrics.pendingFulfilment)}
-          hint={metrics.pendingFulfilment > 0 ? "Awaiting packing" : "All clear"}
+          tooltip="Paid customer orders waiting for warehouse packaging & delivery."
+          hint={metrics.pendingFulfilment > 0 ? "Awaiting packing" : "All orders packed"}
         />
       </div>
 
-      {/* Chart + top products */}
-      <div className="grid gap-4.5 lg:grid-cols-[1.5fr_1fr]">
-        <Card className="px-6 py-5.5">
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <h2 className={cardTitle}>Revenue · last 30 days</h2>
-            <span className="text-sm font-semibold text-sage-600 tabular-nums">
-              {formatMoney(metrics.revenue)} total
+      {/* Action Items / Needs Attention */}
+      <Card className="p-4 sm:p-5">
+        <div className="flex items-center gap-1.5 mb-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Needs Attention
+          </h3>
+          <InfoTooltip content="Action items requiring staff attention or customer follow-up." />
+        </div>
+
+        <ul className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          {todo.map((item) => (
+            <li key={item.label}>
+              <Link
+                href={item.href}
+                className={`group block rounded-lg border p-3 transition-colors hover:bg-[var(--surface-sunken)] ${
+                  item.urgent
+                    ? "border-[var(--accent)] bg-[var(--accent)]/5 shadow-xs"
+                    : item.count > 0
+                      ? "border-[var(--border-strong)] bg-[var(--surface-raised)]"
+                      : "border-[var(--border-subtle)] bg-[var(--surface-raised)]/60"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-[var(--text-secondary)] truncate">
+                    {item.label}
+                  </span>
+                  <InfoTooltip content={item.tooltip} size={12} />
+                </div>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span
+                    className={`font-semibold text-2xl tracking-tight tabular-nums ${
+                      item.count > 0 ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"
+                    }`}
+                  >
+                    {item.count}
+                  </span>
+                  {item.count > 0 ? (
+                    <span className="text-[11px] font-medium text-[var(--accent)] group-hover:underline">
+                      View →
+                    </span>
+                  ) : null}
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      {/* Revenue Chart + Top Selling Items */}
+      <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+        <Card className="p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">Revenue · Last 30 Days</h3>
+              <InfoTooltip content="Daily sales volume from confirmed customer orders." />
+            </div>
+            <span className="text-xs font-semibold tabular-nums text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+              {formatMoney(metrics.revenue)}
             </span>
           </div>
           <RevenueChart data={series} />
         </Card>
 
-        <Card className="px-6 py-5.5">
-          <h2 className={cardTitle}>Top products</h2>
+        <Card className="p-5">
+          <div className="mb-3 flex items-center gap-1.5">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Top Products</h3>
+            <InfoTooltip content="Highest earning items by total sales in the last 30 days." />
+          </div>
           {top.length === 0 ? (
-            <p className="py-10 text-center text-sm text-[var(--text-muted)]">
-              No sales in this window yet.
+            <p className="py-10 text-center text-xs text-[var(--text-muted)]">
+              No sales recorded yet this month.
             </p>
           ) : (
-            <ol className="mt-4 flex flex-col gap-3.5">
+            <ol className="flex flex-col gap-2.5">
               {top.map((product, index) => (
-                <li key={product.title} className="flex items-center gap-3">
-                  <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] bg-[var(--surface-sunken)] text-xs font-semibold text-[var(--accent)] tabular-nums">
+                <li
+                  key={product.title}
+                  className="flex items-center gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] p-2 text-xs"
+                >
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-[var(--surface-sunken)] text-[11px] font-bold text-[var(--text-primary)] tabular-nums">
                     {index + 1}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{product.title}</span>
-                    <span className="text-sm text-[var(--text-muted)]">
-                      {product.units} sold
+                  <span className="min-w-0 flex-1 truncate font-medium text-[var(--text-primary)]">
+                    {product.title}
+                    <span className="block text-[11px] font-normal text-[var(--text-muted)]">
+                      {product.units} {product.units === 1 ? "unit" : "units"} sold
                     </span>
                   </span>
-                  <span className="text-sm font-medium tabular-nums">
+                  <span className="font-semibold tabular-nums text-[var(--text-primary)]">
                     {formatMoney(product.revenue)}
                   </span>
                 </li>
@@ -242,62 +307,87 @@ export default async function AdminDashboard() {
         </Card>
       </div>
 
-      {/* Recent orders */}
-      <Card className="px-6 py-5.5">
-        <div className="mb-2 flex items-center justify-between gap-4">
-          <h2 className={cardTitle}>Recent orders</h2>
-          <Link href="/admin/orders" className="text-sm text-[var(--accent)]">
-            View all →
+      {/* Recent Orders Table */}
+      <Card className="p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Recent Orders</h3>
+            <InfoTooltip content="Latest customer orders placed online or via in-store POS." />
+          </div>
+          <Link
+            href="/admin/orders"
+            className="text-xs font-medium text-[var(--accent)] hover:underline"
+          >
+            All orders →
           </Link>
         </div>
 
         {recentOrders.length === 0 ? (
-          <EmptyState title="No orders yet" description="They will appear here as they come in." />
+          <EmptyState
+            title="No orders yet"
+            description="Recent purchases will show up here as customers check out."
+          />
         ) : (
-          <div className="overflow-x-auto overscroll-x-contain" tabIndex={0} role="region" aria-label="Scrollable table">
-            <table className="w-full min-w-[640px] border-collapse">
+          <div
+            className="overflow-x-auto overscroll-x-contain"
+            tabIndex={0}
+            role="region"
+            aria-label="Recent orders table"
+          >
+            <table className="w-full min-w-[640px] border-collapse text-xs">
               <thead>
                 <tr>
                   <th className={tableHead}>Order</th>
                   <th className={tableHead}>Customer</th>
-                  <th className={tableHead}>Date</th>
+                  <th className={tableHead}>When</th>
                   <th className={tableHead}>Total</th>
-                  <th className={tableHead}>Status</th>
+                  <th className={tableHead}>
+                    <span className="inline-flex items-center gap-1">
+                      <span>Status</span>
+                      <InfoTooltip content="Order lifecycle: Awaiting Payment → Paid → Processing → Shipped → Delivered" size={11} />
+                    </span>
+                  </th>
+                  <th className={tableHead}>Action</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[var(--border-subtle)]">
                 {recentOrders.map((order) => {
                   const address = order.shippingAddress;
                   const who = address
                     ? `${address.firstName} ${address.lastName}`.trim()
-                    : order.email;
+                    : order.email || "Customer";
 
                   return (
-                    <tr key={order.id} className="border-b border-[var(--border-subtle)] last:border-0">
-                      <td className="px-2 py-3">
-                        <Link
-                          href={`/admin/orders/${order.id}`}
-                          className="text-sm font-medium text-[var(--accent)] underline underline-offset-4"
-                        >
+                    <tr key={order.id} className="hover:bg-[var(--surface-sunken)]/50 transition-colors">
+                      <td className="px-3 py-3 font-semibold text-[var(--accent)]">
+                        <Link href={`/admin/orders/${order.id}`} className="hover:underline">
                           {order.orderNumber}
                         </Link>
                       </td>
-                      <td className="px-2 py-3 text-sm text-[var(--text-secondary)]">
-                        {who}
+                      <td className="px-3 py-3 text-[var(--text-secondary)]">
+                        <span className="font-medium text-[var(--text-primary)]">{who}</span>
                         {address?.city ? (
-                          <span className="block text-sm text-[var(--text-muted)]">
+                          <span className="block text-[11px] text-[var(--text-muted)]">
                             {address.city}
                           </span>
                         ) : null}
                       </td>
-                      <td className="px-2 py-3 text-sm text-[var(--text-muted)]">
+                      <td className="px-3 py-3 text-[var(--text-muted)]">
                         {relativeTime(order.placedAt)}
                       </td>
-                      <td className="px-2 py-3 text-sm tabular-nums">
+                      <td className="px-3 py-3 font-medium tabular-nums text-[var(--text-primary)]">
                         {formatMoney(order.total)}
                       </td>
-                      <td className="px-2 py-3">
-                        <StatusBadge status={order.status} />
+                      <td className="px-3 py-3">
+                        <StatusBadge status={order.status} paymentStatus={order.paymentStatus} />
+                      </td>
+                      <td className="px-3 py-3">
+                        <Link
+                          href={`/admin/orders/${order.id}`}
+                          className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors shadow-xs"
+                        >
+                          View →
+                        </Link>
                       </td>
                     </tr>
                   );
@@ -308,31 +398,36 @@ export default async function AdminDashboard() {
         )}
       </Card>
 
-      {/* Stock + integrations */}
-      <div className="grid gap-4.5 lg:grid-cols-2">
-        <Card className="px-6 py-5.5">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <h2 className={cardTitle}>Low stock</h2>
-            <Link href="/admin/inventory" className="text-sm text-[var(--accent)]">
-              Manage inventory →
+      {/* Stock Alerts & Connected Integrations */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">Low Stock Alerts</h3>
+              <InfoTooltip content="Products at or below their reorder threshold that need restocking." />
+            </div>
+            <Link href="/admin/inventory" className="text-xs font-medium text-[var(--accent)] hover:underline">
+              Inventory →
             </Link>
           </div>
 
           {lowStock.length === 0 ? (
-            <div className="flex items-center gap-2 py-8 text-sm text-sage-600">
-              <CheckCircle2 className="h-4 w-4" aria-hidden />
-              Everything is above its reorder point.
+            <div className="flex items-center gap-2 py-6 text-xs text-emerald-800">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden />
+              <span>All inventory levels are healthy. Nothing needs restocking.</span>
             </div>
           ) : (
-            <ul className="divide-y divide-[var(--border-subtle)]">
+            <ul className="divide-y divide-[var(--border-subtle)] text-xs">
               {lowStock.map((item) => (
-                <li key={item.inventoryItemId} className="flex items-center gap-3 py-2.5">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{item.productTitle}</span>
-                    <span className="block font-mono text-sm text-[var(--text-muted)]">
-                      {item.sku}
+                <li key={item.inventoryItemId} className="flex items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-[var(--text-primary)]">
+                      {item.productTitle}
                     </span>
-                  </span>
+                    <span className="block font-mono text-[11px] text-[var(--text-muted)]">
+                      SKU: {item.sku}
+                    </span>
+                  </div>
                   <Badge tone={item.available <= 0 ? "danger" : "warning"}>
                     {item.available <= 0 ? "Out of stock" : `${item.available} left`}
                   </Badge>
@@ -342,43 +437,64 @@ export default async function AdminDashboard() {
           )}
         </Card>
 
-        <Card className="px-6 py-5.5">
-          <h2 className={cardTitle}>Integrations</h2>
-          <ul className="mt-4 grid gap-2.5 sm:grid-cols-2">
-            {integrations.map((integration) => (
-              <li key={integration.key} className="flex items-center gap-2 text-sm">
-                {integration.ready ? (
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-sage-600" aria-hidden />
+        <Card className="p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">Integrations</h3>
+              <InfoTooltip content="Connected payment gateways, SMS providers, and storage services." />
+            </div>
+            <Link href="/admin/settings" className="text-xs font-medium text-[var(--accent)] hover:underline">
+              Settings →
+            </Link>
+          </div>
+
+          <ul className="grid gap-2 sm:grid-cols-2 text-xs">
+            {integrations.map((i) => (
+              <li
+                key={i.key}
+                className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] p-2"
+              >
+                {i.ready ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
                 ) : (
-                  <Circle className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden />
+                  <Circle className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden />
                 )}
-                <span className={integration.ready ? "" : "text-[var(--text-muted)]"}>
-                  {integration.label}
+                <span className={`truncate font-medium ${i.ready ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}>
+                  {i.label}
                 </span>
               </li>
             ))}
           </ul>
         </Card>
       </div>
-
-      <p className="text-xs text-[var(--text-muted)]">
-        {metrics.customerCount} customers · {metrics.activeProducts} active products ·{" "}
-        {metrics.allOrders} orders all time · {metrics.abandonedCarts} carts abandoned this week ·
-        as of {formatDate(new Date(), true)}
-      </p>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: keyof typeof ORDER_STATUS_LABELS }) {
-  const tone =
-    status === "DELIVERED" || status === "SHIPPED"
-      ? "success"
-      : status === "CANCELLED" || status === "REFUNDED"
-        ? "danger"
-        : status === "PENDING"
-          ? "warning"
-          : "info";
-
-  return <Badge tone={tone}>{ORDER_STATUS_LABELS[status]}</Badge>;
+function StatusBadge({
+  status,
+  paymentStatus,
+}: {
+  status: string;
+  paymentStatus?: string;
+}) {
+  switch (status) {
+    case "PAID":
+      return <Badge tone="info">Paid</Badge>;
+    case "PROCESSING":
+      return <Badge tone="accent">Processing</Badge>;
+    case "SHIPPED":
+      return <Badge tone="info">Shipped</Badge>;
+    case "DELIVERED":
+      return <Badge tone="success">Delivered</Badge>;
+    case "CANCELLED":
+    case "REFUNDED":
+      return <Badge tone="danger">{ORDER_STATUS_LABELS[status as keyof typeof ORDER_STATUS_LABELS] ?? status}</Badge>;
+    case "PENDING":
+    default:
+      if (paymentStatus === "SUCCESS") {
+        return <Badge tone="info">Paid</Badge>;
+      }
+      return <Badge tone="warning">Awaiting Payment</Badge>;
+  }
 }

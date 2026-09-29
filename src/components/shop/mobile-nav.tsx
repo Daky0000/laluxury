@@ -77,6 +77,7 @@ export function MobileNav({
               ) : null}
               {categories.map((category) => {
                 const isPreorder = category.slug === "pre-order";
+                if (isPreorder && hidden.has("pre-order")) return null;
                 return (
                   <li key={category.slug}>
                     <Link
@@ -98,6 +99,20 @@ export function MobileNav({
                   </li>
                 );
               })}
+              {!hidden.has("pre-order") && !categories.some((c) => c.slug === "pre-order") ? (
+                <li>
+                  <Link
+                    href="/pre-order"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-2 py-2.5 text-xl font-medium text-[#8C6528]"
+                  >
+                    Pre-Order
+                    <span className="border border-amber-800/30 bg-amber-950/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-[#8C6528]">
+                      Made to order
+                    </span>
+                  </Link>
+                </li>
+              ) : null}
             </ul>
 
             <div className="mt-6 flex flex-col gap-0.5">

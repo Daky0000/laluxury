@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
+import { getNavCategories } from "@/lib/catalog";
 import { CookieSettingsLink } from "./cookie-consent";
 
 const LEGAL_LINKS = [
@@ -11,19 +11,17 @@ const LEGAL_LINKS = [
 
 export async function Footer() {
   // The rooms come from the database rather than a list here, so retiring one
-  // takes it out of the footer too. Hardcoding them meant the footer went on
-  // offering a room after it had been emptied and switched off.
+  // takes it out of the footer too. Cached in memory so the footer does not
+  // repeat the category query already made by the header.
   const [settings, rooms] = await Promise.all([
     getSettings(),
-    db.category.findMany({
-      where: { isActive: true, parentId: null },
-      orderBy: { position: "asc" },
-      select: { name: true, slug: true },
-    }),
+    getNavCategories(),
   ]);
 
   const year = new Date().getFullYear();
   const whatsapp = settings.whatsappNumber.replace(/[^\d]/g, "");
+  const hiddenStorefrontNav = new Set(settings.hiddenStorefrontNavItems ?? []);
+  const preOrderVisible = !hiddenStorefrontNav.has("pre-order");
   // Footer copy is independently editable in the visual website editor.
   // Store branding and the homepage tagline remain controlled by settings.
 
@@ -32,12 +30,14 @@ export async function Footer() {
       head: "Shop",
       links: [
         { label: "All products", href: "/shop" },
-        ...rooms.map((room) => ({
-          label: room.name,
-          href: `/shop?category=${room.slug}`,
-        })),
+        ...rooms
+          .filter((room) => room.slug !== "pre-order" || preOrderVisible)
+          .map((room) => ({
+            label: room.name,
+            href: `/shop?category=${room.slug}`,
+          })),
         { label: "New in", href: "/shop?sort=newest" },
-        { label: "Pre-Order & Bespoke", href: "/pre-order" },
+        ...(preOrderVisible ? [{ label: "Pre-Order & Bespoke", href: "/pre-order" }] : []),
       ],
     },
     {

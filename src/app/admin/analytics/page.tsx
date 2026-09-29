@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
-import { Card, Badge, SectionHeading, Stat } from "@/components/ui";
+import { Card, Badge, SectionHeading, Stat, InfoTooltip } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Financial & Margin Analytics" };
 export const dynamic = "force-dynamic";
@@ -89,47 +89,56 @@ export default async function AdminFinancialAnalyticsPage() {
     grossContractRevenue > 0 ? Math.round((grossProfit / grossContractRevenue) * 100) : 42;
 
   return (
-    <div className="flex flex-col gap-6">
-      <SectionHeading
-        title="Financial, Profit Margin & Receivables Report"
-        description="Executive CFO overview of gross contract revenue, collected cash vs. 50% Pre-Order balances receivable, COGS profit margin, and Trade channel contribution."
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <ExportLink
-              href="/api/admin/export?type=orders"
-              label="Export CFO Accounting Ledger (.CSV)"
-            />
-            <Link
-              href="/admin/products/bulk"
-              className="inline-flex items-center gap-1.5 rounded-(--radius-card) border border-[var(--border-subtle)] px-3.5 py-2 text-xs font-medium hover:bg-[var(--surface-sunken)]"
-            >
-              Edit Unit COGS &amp; Prices →
-            </Link>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">Sales &amp; Profits</h2>
+            <InfoTooltip content="Revenue, cash collected, balances owed, and estimated product margins." />
           </div>
-        }
-      />
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            Overview of total contract revenue, cash in bank, and profit margins.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportLink
+            href="/api/admin/export?type=orders"
+            label="Export CSV"
+          />
+          <Link
+            href="/admin/products/bulk"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)] shadow-xs"
+          >
+            Edit Product Costs →
+          </Link>
+        </div>
+      </div>
 
       {/* Primary Financial KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
-          label="Gross Contract Revenue"
+          label="Total Sales"
           value={formatMoney(grossContractRevenue)}
+          tooltip="Gross contract revenue from all active customer orders."
           hint={`${orders.length} active orders`}
         />
         <Stat
-          label="Cash Collected to Date"
+          label="Cash Collected"
           value={formatMoney(cashCollectedToDate)}
+          tooltip="Actual money received into your bank or Mobile Money account to date."
           hint="Full orders + 50% deposits"
         />
         <Stat
-          label="50% Balances Receivable"
+          label="Balances Receivable"
           value={formatMoney(balanceReceivableTotal)}
+          tooltip="Remaining 50% balances to collect from customers upon delivery."
           hint={`${receivableOrders.length} pre-orders awaiting arrival`}
         />
         <Stat
-          label="Estimated Gross Profit"
+          label="Estimated Profit"
           value={formatMoney(grossProfit)}
-          hint={`${grossMarginPercent}% gross margin after COGS`}
+          tooltip="Total sales minus estimated Cost of Goods Sold (wholesale/manufacturing costs)."
+          hint={`${grossMarginPercent}% gross margin`}
         />
       </div>
 

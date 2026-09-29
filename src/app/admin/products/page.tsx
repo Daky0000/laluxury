@@ -8,7 +8,7 @@ import { can } from "@/lib/auth/rbac";
 import { formatMoney } from "@/lib/money";
 import { availableOf } from "@/lib/inventory";
 import { buildQuery } from "@/lib/utils";
-import { Card, Badge, LinkButton, EmptyState, SectionHeading } from "@/components/ui";
+import { Card, Badge, LinkButton, EmptyState, SectionHeading, InfoTooltip } from "@/components/ui";
 import { ProductBulkBar } from "@/components/admin/product-bulk-bar";
 import type { Prisma, ProductStatus } from "@/generated/prisma";
 import { Thumb } from "@/components/shop/photo";
@@ -115,31 +115,36 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
   const filtered = Boolean(q || status || categoryId || stock || sort !== "updated");
 
   return (
-    <div className="flex flex-col gap-6">
-      <SectionHeading
-        title="Products"
-        description={`${total} matching ${total === 1 ? "product" : "products"}.`}
-        action={
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <LinkButton href="/admin/categories" variant="secondary" size="sm">
-              <FolderTree className="h-4 w-4" aria-hidden />
-              Categories
-            </LinkButton>
-            <ExportLink href="/api/admin/export/products" />
-            {canWrite ? (
-              <>
-                <LinkButton href="/admin/products/bulk" variant="secondary" size="sm">
-                  Bulk FX &amp; Pre-Order Matrix
-                </LinkButton>
-                <LinkButton href="/admin/products/new" size="sm">
-                  <Plus className="h-4 w-4" aria-hidden />
-                  New product
-                </LinkButton>
-              </>
-            ) : null}
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">Product Catalog</h2>
+            <InfoTooltip content="Active products are live in your shop for customers to purchase. Draft products are hidden while editing." />
           </div>
-        }
-      />
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            {total} {total === 1 ? "product" : "products"} in catalog · Manage pricing, variations, and images.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <LinkButton href="/admin/categories" variant="secondary" size="sm">
+            <FolderTree className="h-3.5 w-3.5" aria-hidden />
+            Categories
+          </LinkButton>
+          <ExportLink href="/api/admin/export/products" />
+          {canWrite ? (
+            <>
+              <LinkButton href="/admin/products/bulk" variant="secondary" size="sm">
+                Quick Price Editor
+              </LinkButton>
+              <LinkButton href="/admin/products/new" size="sm">
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+                Add Product
+              </LinkButton>
+            </>
+          ) : null}
+        </div>
+      </div>
 
       {/* Filters */}
       <Card className="p-4">

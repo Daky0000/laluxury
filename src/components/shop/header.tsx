@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { Search, User } from "lucide-react";
-import { db } from "@/lib/db";
 import { cartItemCount } from "@/lib/cart";
 import { currentUser } from "@/lib/auth";
 import { announcementItems, getSettings } from "@/lib/settings";
+import { getNavCategories } from "@/lib/catalog";
 import { isStaff } from "@/lib/auth/rbac";
 import { SearchDialog } from "./search-dialog";
 import { BagButton } from "./bag-button";
@@ -14,11 +14,7 @@ export async function Header() {
     getSettings(),
     cartItemCount(),
     currentUser(),
-    db.category.findMany({
-      where: { isActive: true, parentId: null },
-      orderBy: { position: "asc" },
-      select: { name: true, slug: true },
-    }),
+    getNavCategories(),
   ]);
 
   const announcements = announcementItems(settings);
