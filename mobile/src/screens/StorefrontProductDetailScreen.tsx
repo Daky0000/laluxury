@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Share,
+  Modal,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -47,6 +48,7 @@ export function StorefrontProductDetailScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addedToast, setAddedToast] = useState(false);
+  const [showOptionModal, setShowOptionModal] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -87,7 +89,14 @@ export function StorefrontProductDetailScreen({
     );
   }
 
-  const activeVariant = selectedVariant || product.variants[0];
+  // Filter out redundant "Default" variants if there is no actual variant choice
+  const availableVariants = (product.variants || []).filter(
+    (v) => v.title && v.title.trim().toLowerCase() !== "default",
+  );
+  const hasOptions = availableVariants.length > 1;
+
+  const activeVariant =
+    selectedVariant || (hasOptions ? availableVariants[0] : product.variants[0]);
   const price = activeVariant?.price ?? product.minPrice;
   const compareAt = activeVariant?.compareAtPrice ?? product.compareAtPrice;
   const hasDiscount = compareAt && compareAt > price;
@@ -243,35 +252,35 @@ export function StorefrontProductDetailScreen({
             )}
           </View>
 
-          {/* Variants Selector */}
-          {product.variants && product.variants.length > 1 && (
+          {/* Simple & Clean Options Selector */}
+          {hasOptions && (
             <View style={styles.variantSection}>
-              <Text style={styles.sectionHeading}>SELECT OPTION</Text>
-              <View style={styles.variantsRow}>
-                {product.variants.map((v) => {
-                  const isSelected = activeVariant?.id === v.id;
-                  return (
-                    <TouchableOpacity
-                      key={v.id}
-                      style={[
-                        styles.variantChip,
-                        isSelected && styles.variantChipSelected,
-                      ]}
-                      onPress={() => setSelectedVariant(v)}
-                      activeOpacity={0.8}
-                    >
-                      <Text
-                        style={[
-                          styles.variantChipText,
-                          isSelected && styles.variantChipTextSelected,
-                        ]}
-                      >
-                        {v.title}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+              <View style={styles.optionHeaderRow}>
+                <Text style={styles.sectionHeading}>SELECT OPTION</Text>
+                <Text style={styles.optionCountBadge}>
+                  {availableVariants.length} options available
+                </Text>
               </View>
+
+              <TouchableOpacity
+                style={styles.optionSelectCard}
+                onPress={() => setShowOptionModal(true)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.optionSelectLeft}>
+                  <Text style={styles.optionSelectTitle} numberOfLines={1}>
+                    {activeVariant?.title}
+                  </Text>
+                  <Text style={styles.optionSelectSubtitle}>
+                    {formatCurrency(price)}
+                    {activeVariant?.sku ? ` · ${activeVariant.sku}` : ""}
+                  </Text>
+                </View>
+                <View style={styles.optionSelectRight}>
+                  <Text style={styles.optionSelectAction}>Change</Text>
+                  <Feather name="chevron-down" size={16} color={colors.primary} />
+                </View>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -335,6 +344,72 @@ export function StorefrontProductDetailScreen({
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Simple Option Selection Modal */}
+      {hasOptions && (
+        <Modal visible={showOptionModal} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalTitle}>Select Option</Text>
+                  <Text style={styles.modalSubTitle}>Choose your preferred size or variation</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowOptionModal(false)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <Feather name="x" size={20} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+                {availableVariants.map((v) => {
+                  const isSelected = activeVariant?.id === v.id;
+                  return (
+                    <TouchableOpacity
+                      key={v.id}
+                      style={[
+                        styles.optionRow,
+                        isSelected && styles.optionRowSelected,
+                      ]}
+                      onPress={() => {
+                        setSelectedVariant(v);
+                        setShowOptionModal(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.optionRowTitle,
+                            isSelected && styles.optionRowTitleSelected,
+                          ]}
+                        >
+                          {v.title}
+                        </Text>
+                        <Text style={styles.optionRowPrice}>
+                          {formatCurrency(v.price)}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.optionRadio,
+                          isSelected && styles.optionRadioSelected,
+                        ]}
+                      >
+                        {isSelected ? (
+                          <Feather name="check" size={13} color="#FFFFFF" />
+                        ) : null}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -538,30 +613,121 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 10,
   },
-  variantsRow: {
+  optionHeaderRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
   },
-  variantChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
+  optionCountBadge: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.primary,
+  },
+  optionSelectCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: colors.surfaceWarm,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderLight,
   },
-  variantChipSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+  optionSelectLeft: {
+    flex: 1,
+    paddingRight: 10,
   },
-  variantChipText: {
+  optionSelectTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  optionSelectSubtitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  optionSelectRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  optionSelectAction: {
     fontSize: 11,
     fontWeight: "700",
-    color: colors.textSecondary,
+    color: colors.primary,
   },
-  variantChipTextSelected: {
-    color: "#FFFFFF",
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontFamily: "serif",
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  modalSubTitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceWarm,
+    marginVertical: 4,
+  },
+  optionRowSelected: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: "#F7F4EE",
+  },
+  optionRowTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  optionRowTitleSelected: {
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  optionRowPrice: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  optionRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  optionRadioSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   descriptionSection: {
     marginBottom: 20,

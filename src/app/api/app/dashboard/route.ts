@@ -1,30 +1,28 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireBearerPermission, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
+import { dashboardMetrics } from "@/lib/analytics";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export const OPTIONS = apiOptionsResponse;
 
 export const GET = withApiAuth(async () => {
   await requireBearerPermission("products:read");
 
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
   const [
+    webMetrics,
     totalProducts,
-    activeProducts,
     recentOrders,
-    paidOrders30d,
-    pendingFulfilmentCount,
     lowStockVariants,
   ] = await Promise.all([
+    dashboardMetrics(30),
     db.product.count(),
-    db.product.count({ where: { status: "ACTIVE" } }),
     db.order.findMany({
       orderBy: { placedAt: "desc" },
-      take: 8,
+      take: 12,
       select: {
         id: true,
         orderNumber: true,
@@ -41,20 +39,6 @@ export const GET = withApiAuth(async () => {
             city: true,
           },
         },
-      },
-    }),
-    db.order.aggregate({
-      where: {
-        paymentStatus: "SUCCESS",
-        placedAt: { gte: thirtyDaysAgo },
-      },
-      _sum: { total: true },
-      _count: { _all: true },
-    }),
-    db.order.count({
-      where: {
-        paymentStatus: "SUCCESS",
-        fulfillmentStatus: "UNFULFILLED",
       },
     }),
     db.variant.findMany({
@@ -91,16 +75,13 @@ export const GET = withApiAuth(async () => {
     }),
   ]);
 
-  const totalRevenueMinor = paidOrders30d._sum?.total ?? 0;
-  const ordersCount30d = paidOrders30d._count?._all ?? 0;
-
   return NextResponse.json({
     metrics: {
-      totalRevenue: totalRevenueMinor,
-      ordersCount: ordersCount30d,
-      pendingFulfilment: pendingFulfilmentCount,
+      totalRevenue: webMetrics.revenue,
+      ordersCount: webMetrics.orderCount,
+      pendingFulfilment: webMetrics.pendingFulfilment,
       totalProducts,
-      activeProducts,
+      activeProducts: webMetrics.activeProducts,
       lowStockCount: lowStockVariants.length,
     },
     recentOrders: recentOrders.map((o) => ({
@@ -128,3 +109,4 @@ export const GET = withApiAuth(async () => {
     })),
   });
 });
+

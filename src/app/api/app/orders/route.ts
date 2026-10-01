@@ -9,6 +9,8 @@ import { logOrderEvent } from "@/lib/orders";
 import { normalisePhone } from "@/lib/phone";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export const OPTIONS = apiOptionsResponse;
 

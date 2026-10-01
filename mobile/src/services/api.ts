@@ -36,7 +36,20 @@ class ApiService {
         let clean = savedUrl.trim().replace(/\/+$/, "");
         if (clean.startsWith("hhtps://")) clean = "https://" + clean.slice(8);
         if (clean.startsWith("hhtp://")) clean = "http://" + clean.slice(7);
-        this.baseUrl = clean;
+        // If an old development or LAN address was stored in cache, force production URL
+        if (
+          clean.includes("localhost") ||
+          clean.includes("127.0.0.1") ||
+          clean.includes("192.168.") ||
+          clean.includes("10.0.")
+        ) {
+          this.baseUrl = DEFAULT_URL;
+          AsyncStorage.setItem(STORAGE_KEY_URL, DEFAULT_URL).catch(() => null);
+        } else {
+          this.baseUrl = clean;
+        }
+      } else {
+        this.baseUrl = DEFAULT_URL;
       }
 
       const user = savedUser ? (JSON.parse(savedUser) as User) : null;
@@ -88,6 +101,8 @@ class ApiService {
     const url = `${this.baseUrl}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
     const headers: Record<string, string> = {
       Accept: "application/json",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      Pragma: "no-cache",
       ...(options.headers as Record<string, string>),
     };
 
@@ -101,7 +116,7 @@ class ApiService {
 
     let response: Response;
     try {
-      response = await fetch(url, { ...options, headers });
+      response = await fetch(url, { ...options, headers, cache: "no-store" });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Network request failed";
       throw new Error(`Unable to connect to Laluxury server (${this.baseUrl}). ${msg}`);

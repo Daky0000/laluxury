@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, View, SafeAreaView, StatusBar, Alert } from "react-native";
+import { StyleSheet, View, SafeAreaView, StatusBar, Alert, BackHandler, ToastAndroid } from "react-native";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { colors } from "./src/theme/colors";
 import { api } from "./src/services/api";
@@ -84,6 +84,69 @@ export default function App() {
     }
     init();
   }, []);
+
+  // Handle Android Hardware Back Button navigation
+  useEffect(() => {
+    let lastBackPressTime = 0;
+
+    const onHardwareBackPress = () => {
+      // 1. If viewing product detail, go back to previous view
+      if (selectedProductId) {
+        setSelectedProductId(null);
+        return true;
+      }
+
+      // 2. If order confirmation modal is open, close it
+      if (confirmedOrder) {
+        setConfirmedOrder(null);
+        setStorefrontTab("HOME");
+        return true;
+      }
+
+      // 3. Storefront mode navigation
+      if (mode === "STOREFRONT") {
+        if (storefrontTab !== "HOME") {
+          // If on BAG, SHOP, or ACCOUNT, return to HOME
+          setStorefrontTab("HOME");
+          return true;
+        }
+
+        // On HOME: double-press back to exit gracefully
+        const now = Date.now();
+        if (now - lastBackPressTime < 2000) {
+          BackHandler.exitApp();
+          return false;
+        }
+        lastBackPressTime = now;
+        if (ToastAndroid?.show) {
+          ToastAndroid.show("Press back again to exit", ToastAndroid.SHORT);
+        }
+        return true;
+      }
+
+      // 4. Backend mode navigation
+      if (mode === "BACKEND") {
+        if (backendTab !== "DASHBOARD") {
+          setBackendTab("DASHBOARD");
+          return true;
+        }
+
+        // If on DASHBOARD, return to Storefront
+        setMode("STOREFRONT");
+        setStorefrontTab("HOME");
+        return true;
+      }
+
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      onHardwareBackPress,
+    );
+
+    return () => subscription.remove();
+  }, [selectedProductId, confirmedOrder, mode, storefrontTab, backendTab]);
 
   // Sync Cart with Storage
   const updateCartState = (newCart: CartItem[]) => {
