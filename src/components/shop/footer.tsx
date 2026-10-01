@@ -55,6 +55,7 @@ export async function Footer() {
         { label: `About ${settings.storeName}`, href: "/contact" },
         { label: "Lookbook", href: "/lookbook" },
         { label: "Trade Program", href: "/trade" },
+        { label: "Mobile App", href: "/app" },
         {
           label: "WhatsApp us",
           href: whatsapp ? `https://wa.me/${whatsapp}` : "/contact",

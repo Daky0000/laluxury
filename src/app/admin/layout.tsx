@@ -165,6 +165,14 @@ const NAV: {
     description: "Payments, shipping fees & store info",
   },
   {
+    href: "/app",
+    label: "Mobile App",
+    icon: "smartphone",
+    permission: "dashboard:view",
+    group: "Settings & Tools",
+    description: "Download Android app for stock & showroom photos",
+  },
+  {
     href: "/admin/agent",
     label: "AI Store Assistant",
     icon: "agent",

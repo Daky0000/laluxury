@@ -33,6 +33,7 @@ import {
   Search,
   Sparkles,
   LogOut,
+  Smartphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOverlay } from "@/lib/use-overlay";
@@ -59,6 +60,7 @@ const ICONS = {
   users: UserCog,
   activity: ScrollText,
   settings: Settings,
+  smartphone: Smartphone,
 } as const;
 
 export type NavItem = {

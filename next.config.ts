@@ -33,6 +33,21 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: "12mb" },
   },
 
+  async redirects() {
+    return [
+      {
+        source: "/download",
+        destination: "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/LaLuxury-Management.apk",
+        permanent: false,
+      },
+      {
+        source: "/app/download",
+        destination: "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/LaLuxury-Management.apk",
+        permanent: false,
+      },
+    ];
+  },
+
   // The response headers every page carries. None of them changes what the
   // shop does; each closes a door a browser would otherwise leave open — being
   // framed by another site, sniffing a download into a script, sending the
