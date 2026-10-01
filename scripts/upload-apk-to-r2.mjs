@@ -44,8 +44,19 @@ async function uploadApk() {
     })
   );
 
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucketName,
+      Key: "downloads/LaLuxury-v1.2.2.apk",
+      Body: fileBuffer,
+      ContentType: "application/vnd.android.package-archive",
+      ContentDisposition: 'attachment; filename="LaLuxury-v1.2.2.apk"',
+    })
+  );
+
   console.log("Upload completed successfully!");
-  console.log(`Download link: ${publicUrl}/downloads/LaLuxury-Management.apk`);
+  console.log(`Download link 1: ${publicUrl}/downloads/LaLuxury-Management.apk`);
+  console.log(`Download link 2: ${publicUrl}/downloads/LaLuxury-v1.2.2.apk`);
 }
 
 uploadApk().catch((err) => {
