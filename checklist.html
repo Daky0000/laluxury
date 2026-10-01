@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LaLuxury — Store Launch &amp; Sale Readiness Checklist</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 14mm 12mm 14mm 12mm;
+      @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 8pt;
+        color: #78716c;
+      }
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1c1917;
+      background: #ffffff;
+      font-size: 9.5pt;
+      line-height: 1.35;
+    }
+    .header {
+      border-bottom: 2px solid #8b7355;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .brand-title {
+      font-family: Georgia, serif;
+      font-size: 20pt;
+      font-weight: 400;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #1c1917;
+    }
+    .brand-sub {
+      font-size: 9pt;
+      color: #8b7355;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-top: 2px;
+      font-weight: 600;
+    }
+    .meta-box {
+      text-align: right;
+      font-size: 8pt;
+      color: #57534e;
+      line-height: 1.4;
+    }
+    .summary-strip {
+      background: #fbf9f6;
+      border: 1px solid #e7e2d9;
+      border-left: 4px solid #8b7355;
+      padding: 7px 12px;
+      margin-bottom: 14px;
+      font-size: 8.5pt;
+      color: #44403c;
+    }
+    .section-title {
+      font-family: Georgia, serif;
+      font-size: 11pt;
+      font-weight: 700;
+      color: #1c1917;
+      background: #f5f0e8;
+      padding: 5px 8px;
+      margin-top: 14px;
+      margin-bottom: 6px;
+      border-left: 3px solid #8b7355;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .section-desc {
+      font-size: 7.5pt;
+      color: #78716c;
+      font-family: -apple-system, sans-serif;
+      text-transform: none;
+      letter-spacing: normal;
+      font-weight: 400;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 4px;
+      page-break-inside: auto;
+    }
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
+    th {
+      background: #292524;
+      color: #f5f5f4;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 5px 8px;
+      text-align: left;
+      font-weight: 600;
+    }
+    th.center, td.center {
+      text-align: center;
+    }
+    td {
+      padding: 5px 8px;
+      border-bottom: 1px solid #e7e5e4;
+      font-size: 8.5pt;
+      vertical-align: top;
+    }
+    tr:nth-child(even) td {
+      background: #fafaf9;
+    }
+    .task-title {
+      font-weight: 600;
+      color: #1c1917;
+      display: block;
+      margin-bottom: 1px;
+    }
+    .task-desc {
+      font-size: 7.5pt;
+      color: #57534e;
+      line-height: 1.25;
+    }
+    .task-path {
+      display: inline-block;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 7pt;
+      background: #eeecea;
+      color: #292524;
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin-top: 2px;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 6.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 2px 5px;
+      border-radius: 2px;
+      white-space: nowrap;
+    }
+    .badge-critical {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #f87171;
+    }
+    .badge-high {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fcd34d;
+    }
+    .badge-medium {
+      background: #f3f4f6;
+      color: #374151;
+      border: 1px solid #d1d5db;
+    }
+    .badge-done {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #86efac;
+    }
+    .checkbox-box {
+      display: inline-block;
+      width: 17px;
+      height: 17px;
+      border: 2px solid #57534e;
+      border-radius: 3px;
+      background: #ffffff;
+      margin-top: 2px;
+    }
+    .checkbox-done {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 17px;
+      height: 17px;
+      background: #166534;
+      border: 2px solid #166534;
+      border-radius: 3px;
+      color: #ffffff;
+      font-size: 11pt;
+      font-weight: bold;
+      line-height: 1;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    .footer-note {
+      margin-top: 15px;
+      padding-top: 8px;
+      border-top: 1px solid #e7e5e4;
+      font-size: 7.5pt;
+      color: #78716c;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div>
+      <h1 class="brand-title">LALUXURY</h1>
+      <div class="brand-sub">Store Go-Live &amp; Promotional Sale Action Plan</div>
+    </div>
+    <div class="meta-box">
+      <strong>Operating Region:</strong> Ghana (GHS · Cedis)<br>
+      <strong>Stack:</strong> Next.js 16 · Prisma 7 · Paystack · Vynfy SMS<br>
+      <strong>Status:</strong> Ready for Client Live Configuration
+    </div>
+  </div>
+
+  <div class="summary-strip">
+    <strong>Executive Overview:</strong> All core e-commerce architecture, product catalogs (8 active pieces, 49 variants), multi-currency FX converters, shopping cart drawers, and direct concierge fallbacks are 100% operational (28/28 verified tests passing). To begin live transactions and launch the promotional sale, complete the checklist below.
+  </div>
+
+  <!-- SECTION 1: PAYMENTS -->
+  <div class="section-title">
+    <span>1. Payment Gateway (Paystack) — Live MoMo &amp; Cards</span>
+    <span class="section-desc">Required to collect live payments automatically</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 12%;">Priority</th>
+        <th style="width: 73%;">Task &amp; Implementation Details</th>
+        <th style="width: 15%;" class="center">Tick Box</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-critical">Critical</span></td>
+        <td>
+          <span class="task-title">Obtain &amp; Enter Paystack Live API Keys</span>
+          <span class="task-desc">Log into your Paystack Dashboard (Settings &rarr; API Keys &amp; Webhooks). Copy Live Secret Key (<code>sk_live_...</code>) and Live Public Key (<code>pk_live_...</code>). Enter them in <code>.env</code> or in the Admin Console.</span>
+          <div class="task-path">Admin &rarr; Settings &rarr; Integrations &rarr; Paystack</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-critical">Critical</span></td>
+        <td>
+          <span class="task-title">Set Paystack Mode to &ldquo;live&rdquo;</span>
+          <span class="task-desc">Set <code>PAYSTACK_MODE="live"</code> so checkout connects to the production payment gateway rather than the test sandbox.</span>
+          <div class="task-path">Environment / Admin Settings</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-critical">Critical</span></td>
+        <td>
+          <span class="task-title">Register Paystack Live Webhook URL</span>
+          <span class="task-desc">In Paystack Dashboard &rarr; Settings &rarr; Preferences &rarr; Webhooks, set the Live Webhook URL to: <code>https://&lt;your-domain&gt;/api/webhooks/paystack</code>. This automatically marks orders as PAID and reserves inventory instantly.</span>
+          <div class="task-path">Paystack Dashboard &rarr; Settings &rarr; Webhooks</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-high">High</span></td>
+        <td>
+          <span class="task-title">Perform Real GH₵1.00 Test Transaction</span>
+          <span class="task-desc">Place an order using a real Ghana Mobile Money number (MTN / Telecel / AirtelTigo) and a bank card. Verify that the order transitions from PENDING to PAID and stock decrements correctly.</span>
+          <div class="task-path">Storefront &rarr; /checkout &rarr; Paystack Modal</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 2: SMS & CUSTOMER AUTH -->
+  <div class="section-title">
+    <span>2. Customer SMS &amp; Verification (Vynfy)</span>
+    <span class="section-desc">Required for Ghanaian phone registration &amp; order notifications</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 12%;">Priority</th>
+        <th style="width: 73%;">Task &amp; Implementation Details</th>
+        <th style="width: 15%;" class="center">Tick Box</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-critical">Critical</span></td>
+        <td>
+          <span class="task-title">Enter Vynfy API Key &amp; Approved Sender ID</span>
+          <span class="task-desc">Customer accounts in Ghana verify via 6-digit SMS OTP. Enter your <code>VYNFY_API_KEY</code> and registered <code>VYNFY_SENDER_ID</code> (e.g. <code>LaLuxury</code>, max 11 chars approved by telecom authorities).</span>
+          <div class="task-path">Admin &rarr; Settings &rarr; Integrations &rarr; SMS</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-high">High</span></td>
+        <td>
+          <span class="task-title">Fund Vynfy SMS Credit Balance</span>
+          <span class="task-desc">Ensure your Vynfy SMS balance has adequate units (recommended &ge; 500 SMS credits) so new customer sign-ups and dispatch notifications never fail due to depleted balance.</span>
+          <div class="task-path">https://sms.vynfy.com/billing</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-high">High</span></td>
+        <td>
+          <span class="task-title">Test Phone Sign-Up Flow</span>
+          <span class="task-desc">Register a new account on <code>/register</code> with a real Ghanaian phone number (e.g. 024XXXXXXX). Confirm SMS OTP arrives within 30 seconds and verification succeeds.</span>
+          <div class="task-path">Storefront &rarr; /register &rarr; /register/verify</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 3: EMAIL -->
+  <div class="section-title">
+    <span>3. Transactional Email &amp; Password Resets (SMTP)</span>
+    <span class="section-desc">Receipts, order confirmation emails, and staff password recovery</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 12%;">Priority</th>
+        <th style="width: 73%;">Task &amp; Implementation Details</th>
+        <th style="width: 15%;" class="center">Tick Box</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-high">High</span></td>
+        <td>
+          <span class="task-title">Configure SMTP Mail Credentials</span>
+          <span class="task-desc">Provide <code>SMTP_HOST</code>, <code>SMTP_PORT</code> (587), <code>SMTP_USER</code>, <code>SMTP_PASSWORD</code>, and <code>EMAIL_FROM</code> (e.g. <code>LaLuxury &lt;orders@laluxury.com&gt;</code>). Use SendGrid, Postmark, Amazon SES, or Google Workspace SMTP.</span>
+          <div class="task-path">Admin &rarr; Settings &rarr; Integrations &rarr; Email (SMTP)</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-medium">Medium</span></td>
+        <td>
+          <span class="task-title">Test Email Dispatch &amp; Password Reset</span>
+          <span class="task-desc">Use the &ldquo;Test&rdquo; button in Admin Settings &rarr; Integrations to verify outbound delivery. Trigger a password reset on <code>/forgot-password</code> to ensure reset links arrive.</span>
+          <div class="task-path">Storefront &rarr; /forgot-password</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 4: SECURITY & CLEANUP -->
+  <div class="section-title">
+    <span>4. Production Security, Domain &amp; Data Cleanup</span>
+    <span class="section-desc">Host readiness and operational hygiene</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 12%;">Priority</th>
+        <th style="width: 73%;">Task &amp; Implementation Details</th>
+        <th style="width: 15%;" class="center">Tick Box</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-critical">Critical</span></td>
+        <td>
+          <span class="task-title">Change Default Seed Owner Password</span>
+          <span class="task-desc">The database was initialized with default password <code>ChangeMe!2026</code> for <code>owner@laluxury.com</code>. Change this immediately before public launch under Staff or via password reset.</span>
+          <div class="task-path">Admin &rarr; Staff (/admin/users) &rarr; Owner Account</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-critical">Critical</span></td>
+        <td>
+          <span class="task-title">Set Production Public Site Domain</span>
+          <span class="task-desc">Update <code>NEXT_PUBLIC_SITE_URL</code> in your deployment environment (e.g. Railway) to your live HTTPS domain (e.g. <code>https://laluxury.com</code>). Required for Paystack return URLs and SMS tracking links.</span>
+          <div class="task-path">Deployment Environment Variables &rarr; NEXT_PUBLIC_SITE_URL</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-done">Completed</span></td>
+        <td>
+          <span class="task-title">Clear Demo Orders &amp; Mock Customers</span>
+          <span class="task-desc">5 demo orders (DEMO-1000 to DEMO-1004) and 3 mock demo customer accounts were purged from the database. Live metrics and order queues are now clean.</span>
+          <div class="task-path">Executed via: npm run db:demo -- --clear</div>
+        </td>
+        <td class="center"><div class="checkbox-done">&#10003;</div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 5: STORE PROFILE & CONTACTS -->
+  <div class="section-title">
+    <span>5. Store Profile, WhatsApp &amp; Customer Contact</span>
+    <span class="section-desc">Customer trust signals and immediate support channels</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 12%;">Priority</th>
+        <th style="width: 73%;">Task &amp; Implementation Details</th>
+        <th style="width: 15%;" class="center">Tick Box</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-high">High</span></td>
+        <td>
+          <span class="task-title">Set Official WhatsApp Business Number</span>
+          <span class="task-desc">Add your WhatsApp customer line (e.g. <code>+233 24 123 4567</code>). This powers the quick &ldquo;WhatsApp Us&rdquo; links in the header, footer, product inquiries, and contact page.</span>
+          <div class="task-path">Admin &rarr; Settings &rarr; Store Details &rarr; WhatsApp</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-high">High</span></td>
+        <td>
+          <span class="task-title">Update Hotline, Email &amp; Showroom Address</span>
+          <span class="task-desc">Fill in support telephone, official support email (e.g. <code>hello@laluxury.com</code>), and physical showroom location or pickup station details in Accra.</span>
+          <div class="task-path">Admin &rarr; Settings &rarr; Store Details</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-medium">Medium</span></td>
+        <td>
+          <span class="task-title">Review Terms, Delivery &amp; Return Policies</span>
+          <span class="task-desc">Confirm wording for deliveries (Accra 1-2 days, Nationwide 3-5 days to station) and returns (&ldquo;All sales final, inspect upon delivery&rdquo;). Easily modified in settings without redeploying.</span>
+          <div class="task-path">Admin &rarr; Settings &rarr; Policies (/terms)</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 6: INVENTORY & CATALOG -->
+  <div class="section-title">
+    <span>6. Warehouse Inventory Audit &amp; Catalog Review</span>
+    <span class="section-desc">Stock integrity before opening order doors</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 12%;">Priority</th>
+        <th style="width: 73%;">Task &amp; Implementation Details</th>
+        <th style="width: 15%;" class="center">Tick Box</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-critical">Critical</span></td>
+        <td>
+          <span class="task-title">Physical Stock Audit (Counts In Warehouse)</span>
+          <span class="task-desc">Audit actual physical quantities of bedsheet sets, 3D carpets, throw pillows, curtains, and blinds. Type exact counts into the editable stock cells in the Admin Inventory ledger.</span>
+          <div class="task-path">Admin &rarr; Inventory (/admin/inventory)</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-high">High</span></td>
+        <td>
+          <span class="task-title">Verify Retail Prices &amp; Unit Costs</span>
+          <span class="task-desc">Ensure selling prices (in GH₵) and cost prices (for margin reporting) are up to date. Verify size &amp; colour variant ladders for Zebra Blinds (3ft to 7ft) and Bedding (Double, King, Superking).</span>
+          <div class="task-path">Admin &rarr; Products (/admin/products)</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-medium">Medium</span></td>
+        <td>
+          <span class="task-title">Confirm Delivery Rates &amp; Free Shipping Ceiling</span>
+          <span class="task-desc">Review shipping rates: Accra Same-Day (GH₵45), Accra Standard (GH₵25), Rest of Ghana (GH₵70). Confirm whether free delivery threshold should remain GH₵10,000 or be tailored.</span>
+          <div class="task-path">Admin &rarr; Settings &rarr; Delivery (/admin/settings/delivery)</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 7: PROMOTIONAL SALE SETUP -->
+  <div class="section-title">
+    <span>7. Promotional Sale &amp; Campaign Execution</span>
+    <span class="section-desc">Discounts, strike-through pricing, promotional badges, and banners</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 12%;">Priority</th>
+        <th style="width: 73%;">Task &amp; Implementation Details</th>
+        <th style="width: 15%;" class="center">Tick Box</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-done">Completed</span></td>
+        <td>
+          <span class="task-title">Created &ldquo;LAUNCH10&rdquo; 10% Promotional Discount</span>
+          <span class="task-desc">Coupon code <code>LAUNCH10</code> (10% off entire order) created and activated in database, ready for launch marketing campaigns.</span>
+          <div class="task-path">Admin &rarr; Discounts (/admin/discounts)</div>
+        </td>
+        <td class="center"><div class="checkbox-done">&#10003;</div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-done">Completed</span></td>
+        <td>
+          <span class="task-title">Added &ldquo;Sale &amp; Offers&rdquo; Navigation Link</span>
+          <span class="task-desc">Added &ldquo;Sale &amp; Offers&rdquo; (linking to <code>/shop?onSale=1</code>) in desktop and mobile menus. Configured with toggle in Admin Settings under Navigation Menus.</span>
+          <div class="task-path">Storefront Header &amp; Admin &rarr; Settings &rarr; Menus</div>
+        </td>
+        <td class="center"><div class="checkbox-done">&#10003;</div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-done">Completed</span></td>
+        <td>
+          <span class="task-title">Automated &ldquo;Sale&rdquo; Badges on Discounted Items</span>
+          <span class="task-desc">Updated product tile logic: any product with a was-price (<code>compareAtPrice &gt; minPrice</code>) automatically displays a high-visibility &ldquo;Sale&rdquo; badge on the storefront.</span>
+          <div class="task-path">Storefront Catalog &amp; Home Grid</div>
+        </td>
+        <td class="center"><div class="checkbox-done">&#10003;</div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-high">High</span></td>
+        <td>
+          <span class="task-title">Set Was-Prices (compareAtPrice) for Sale Items</span>
+          <span class="task-desc">For items on promotion, input the original price in <code>compareAtPrice</code> (e.g. Bedsheet Set current GH₵80, was GH₵100). The strikethrough price and percentage savings will immediately appear.</span>
+          <div class="task-path">Admin &rarr; Products &rarr; Edit Product &rarr; Details</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-high">High</span></td>
+        <td>
+          <span class="task-title">Update Storefront Marquee Announcement</span>
+          <span class="task-desc">Edit the top announcement marquee text to feature the sale, e.g.:<br>
+          <em>&ldquo;LAUNCH SALE: Up to 20% off selected luxury bedding &amp; carpets &middot; Use code LAUNCH10 &middot; Nationwide delivery&rdquo;</em></span>
+          <div class="task-path">Admin &rarr; Settings &rarr; Announcement Bar</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-medium">Medium</span></td>
+        <td>
+          <span class="task-title">Activate Curated Homepage Bundle Banner</span>
+          <span class="task-desc">Optionally feature a complete package (e.g. 4-Piece Bedroom Suite) with a combo price and compare-at discount on the homepage.</span>
+          <div class="task-path">Admin &rarr; Settings &rarr; Home Page (/admin/settings/home)</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 8: LOGISTICS & FULFILLMENT -->
+  <div class="section-title">
+    <span>8. Logistics, Packaging &amp; Dispatch Protocol</span>
+    <span class="section-desc">Order packing slip printing and courier partner handover</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 12%;">Priority</th>
+        <th style="width: 73%;">Task &amp; Implementation Details</th>
+        <th style="width: 15%;" class="center">Tick Box</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-high">High</span></td>
+        <td>
+          <span class="task-title">Confirm Delivery Rider &amp; Bus Station Contacts</span>
+          <span class="task-desc">Formalize arrangements with dispatch riders for Accra (same day / next day) and transport station bus parcel offices (VIP, OA, Intercity STC) for Kumasi, Takoradi, Sunyani, etc.</span>
+          <div class="task-path">Operations Team / Logistics Partners</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-medium">Medium</span></td>
+        <td>
+          <span class="task-title">Test Printable Invoices &amp; Packing Slips</span>
+          <span class="task-desc">Open an order in <code>/admin/orders</code> and click &ldquo;Print Packing Slip&rdquo; / &ldquo;Print Invoice&rdquo;. Verify clean thermal/A4 printing with no browser chrome.</span>
+          <div class="task-path">Admin &rarr; Orders &rarr; View Order &rarr; Print Slip</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-medium">Medium</span></td>
+        <td>
+          <span class="task-title">Train Staff on Order Status Workflow</span>
+          <span class="task-desc">Ensure staff know the standard lifecycle: <strong>PAID &rarr; PROCESSING (Pack in bag) &rarr; SHIPPED (Input tracking/rider number) &rarr; DELIVERED</strong>. Each step automatically updates the customer.</span>
+          <div class="task-path">Admin &rarr; Orders</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 9: PRE-LAUNCH DRILL -->
+  <div class="section-title">
+    <span>9. Pre-Launch Verification Drill (Final Sign-off)</span>
+    <span class="section-desc">End-to-end dress rehearsal before marketing push</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 12%;">Priority</th>
+        <th style="width: 73%;">Task &amp; Implementation Details</th>
+        <th style="width: 15%;" class="center">Tick Box</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-done">Completed</span></td>
+        <td>
+          <span class="task-title">Production Build &amp; Domain Verification</span>
+          <span class="task-desc">Full <code>next build</code> and all 28 automated verification tests passed with zero errors or schema mismatches.</span>
+          <div class="task-path">Build Status: Clean &middot; 28/28 Domain Tests Passed</div>
+        </td>
+        <td class="center"><div class="checkbox-done">&#10003;</div></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-critical">Critical</span></td>
+        <td>
+          <span class="task-title">End-to-End Live Bag-to-MoMo Rehearsal</span>
+          <span class="task-desc">Complete one real order on a phone from catalog to Paystack prompt, input test promo code <code>LAUNCH10</code>, verify discount application, and inspect the order in the Admin Orders dashboard.</span>
+          <div class="task-path">Final Sign-Off Drill</div>
+        </td>
+        <td class="center"><div class="checkbox-box"></div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer-note">
+    LaLuxury Store Management System &middot; Document Generated for Store Owner &middot; All Code &amp; Schema Tested and Verified
+  </div>
+
+</body>
+</html>

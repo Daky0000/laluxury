@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "LaLuxury",
+    "slug": "danny",
+    "owner": "danny1999s-team",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#7a2e3c"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.laluxury.management"
+    },
+    "android": {
+      "package": "com.laluxury.management",
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "backgroundColor": "#7a2e3c",
+        "foregroundImage": "./assets/icon.png"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow LaLuxury to access your photos to attach product imagery.",
+          "cameraPermission": "Allow LaLuxury to capture inventory photos directly with camera."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9acc53b0-c45d-4274-88bf-65ff2dfde707"
+      }
+    }
+  }
+}

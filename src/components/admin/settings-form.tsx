@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import { updateSettingsAction } from "@/app/actions/admin/system";
 import type { AdminState } from "@/app/actions/admin/products";
@@ -22,6 +22,17 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
   // Tracked so the note under the picker describes the page being chosen
   // rather than the one that is live.
   const [landingPage, setLandingPage] = useState<LandingPage>(settings.landingPage);
+
+  // Group admin nav menu items by tab/section
+  const adminNavGroups = useMemo(() => {
+    const map = new Map<string, typeof ADMIN_NAV_MENU_ITEMS>();
+    for (const item of ADMIN_NAV_MENU_ITEMS) {
+      const g = item.group || "Other";
+      if (!map.has(g)) map.set(g, []);
+      map.get(g)!.push(item);
+    }
+    return Array.from(map.entries());
+  }, []);
 
   return (
     <form action={action} className="flex flex-col gap-6">
@@ -101,29 +112,56 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
           </p>
         </div>
 
-        <div className="border-t border-[var(--border-subtle)] pt-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
-            Admin Console Sidebar Menu Items
-          </h3>
-          <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
-            {ADMIN_NAV_MENU_ITEMS.map((item) => {
-              const isChecked = !settings.hiddenAdminNavItems?.includes(item.href);
-              return (
-                <label
-                  key={item.href}
-                  className="flex items-center gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] px-3 py-2 text-sm cursor-pointer hover:border-[var(--color-clay-700)] transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    name="visibleAdminNav"
-                    value={item.href}
-                    defaultChecked={isChecked}
-                    className="h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--color-clay-700)] focus:ring-[var(--color-clay-700)]"
-                  />
-                  <span className="font-medium text-[var(--text-primary)]">{item.label}</span>
-                </label>
-              );
-            })}
+        <div className="border-t border-[var(--border-subtle)] pt-4 space-y-4">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              Admin Console Sidebar Menu Items
+            </h3>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              Choose which menu tabs and items appear in the left admin sidebar rail. Checked items are visible; unchecked items remain hidden.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {adminNavGroups.map(([groupName, groupItems]) => (
+              <div
+                key={groupName}
+                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)]/40 p-3"
+              >
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                    {groupName} Tab
+                  </span>
+                  <span className="text-[10px] text-[var(--text-muted)]">
+                    {groupItems.length} {groupItems.length === 1 ? "item" : "items"}
+                  </span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                  {groupItems.map((item) => {
+                    const isChecked = !settings.hiddenAdminNavItems?.includes(item.href);
+                    return (
+                      <label
+                        key={item.href}
+                        className="flex items-center justify-between gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] px-3 py-2 text-sm cursor-pointer hover:border-[var(--color-clay-700)] transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <input
+                            type="checkbox"
+                            name="visibleAdminNav"
+                            value={item.href}
+                            defaultChecked={isChecked}
+                            className="h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--color-clay-700)] focus:ring-[var(--color-clay-700)] shrink-0"
+                          />
+                          <span className="font-medium text-[var(--text-primary)] truncate text-xs sm:text-sm">
+                            {item.label}
+                          </span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

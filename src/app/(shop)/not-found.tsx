@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { LinkButton } from "@/components/ui";
 
+import { isDbTemporarilyDown, checkDbConnection, recordDbFailure } from "@/lib/db-health";
+
 export const metadata: Metadata = {
   title: "Page not found",
   description: "That page has moved or sold out. Browse the rooms instead.",
@@ -21,6 +23,8 @@ export const metadata: Metadata = {
  * rather than a second error page.
  */
 async function rooms() {
+  if (isDbTemporarilyDown() || !(await checkDbConnection())) return [];
+
   try {
     return await db.category.findMany({
       where: { isActive: true, parentId: null },
@@ -29,6 +33,7 @@ async function rooms() {
       take: 4,
     });
   } catch {
+    recordDbFailure();
     return [];
   }
 }

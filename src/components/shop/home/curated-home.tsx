@@ -27,16 +27,20 @@ type Resolved =
   | { section: HomeSection; kind: "static" };
 
 async function resolve(section: HomeSection): Promise<Resolved> {
-  if (section.type === "rooms") {
-    return { section, kind: "rooms", cards: await roomCards(section) };
-  }
+  try {
+    if (section.type === "rooms") {
+      return { section, kind: "rooms", cards: await roomCards(section) };
+    }
 
-  if (section.type === "products") {
-    const [products, tabs] = await Promise.all([
-      sectionProducts(section),
-      section.layout === "tabs" ? sectionTabs(section) : Promise.resolve([]),
-    ]);
-    return { section, kind: "products", products, tabs };
+    if (section.type === "products") {
+      const [products, tabs] = await Promise.all([
+        sectionProducts(section),
+        section.layout === "tabs" ? sectionTabs(section) : Promise.resolve([]),
+      ]);
+      return { section, kind: "products", products, tabs };
+    }
+  } catch (error) {
+    console.warn(`[CuratedHome] Error resolving section "${section.id}":`, error);
   }
 
   return { section, kind: "static" };

@@ -1,23 +1,67 @@
 import { v2 as cloudinary } from "cloudinary";
 import { getIntegrations } from "./integrations";
+import { isR2Configured, uploadToR2, deleteFromR2 } from "./r2";
 
 /**
- * The Cloudinary side of image storage.
+ * Image storage & delivery via Cloudflare R2 or Cloudinary.
  *
- * Nothing here is required: when no CDN is configured the media library keeps
- * the bytes in Postgres instead (see lib/media.ts). What used to live here —
- * writing uploads to public/uploads — is gone, because a container filesystem
- * loses them on the next deploy and Next never served them in production.
+ * Prioritizes Cloudflare R2 ($0 egress fees, 10GB free tier).
+ * Falls back to Cloudinary if R2 is not configured.
+ * When neither is configured, the media library stores bytes in Postgres (see lib/media.ts).
  */
 
 export class UploadError extends Error {}
 
 export async function isCdnConfigured(): Promise<boolean> {
+  if (await isR2Configured()) return true;
   const { cloudinary: config } = await getIntegrations();
   return Boolean(config.cloudName && config.apiKey && config.apiSecret);
 }
 
-async function configure(): Promise<void> {
+export async function getActiveCdnProvider(): Promise<"r2" | "cloudinary" | null> {
+  if (await isR2Configured()) return "r2";
+  const { cloudinary: config } = await getIntegrations();
+  if (config.cloudName && config.apiKey && config.apiSecret) return "cloudinary";
+  return null;
+}
+
+export async function uploadToCdn(
+  bytes: Buffer,
+  options: { mimeType: string; folder: string; width?: number; height?: number },
+): Promise<{ url: string; publicId: string; width: number; height: number }> {
+  const provider = await getActiveCdnProvider();
+
+  if (provider === "r2") {
+    try {
+      const result = await uploadToR2(bytes, options);
+      return {
+        url: result.url,
+        publicId: result.publicId,
+        width: options.width || 0,
+        height: options.height || 0,
+      };
+    } catch (error) {
+      throw new UploadError(
+        error instanceof Error ? error.message : "Cloudflare R2 upload failed.",
+      );
+    }
+  }
+
+  if (provider === "cloudinary") {
+    return uploadToCloudinary(bytes, options);
+  }
+
+  throw new UploadError("No CDN or storage provider configured.");
+}
+
+export async function deleteFromCdn(publicId: string): Promise<void> {
+  if (await isR2Configured()) {
+    await deleteFromR2(publicId);
+  }
+  await deleteFromCloudinary(publicId);
+}
+
+async function configureCloudinary(): Promise<void> {
   const { cloudinary: config } = await getIntegrations();
   cloudinary.config({
     cloud_name: config.cloudName,
@@ -29,15 +73,12 @@ async function configure(): Promise<void> {
 
 /**
  * Sends bytes to Cloudinary and returns what was delivered.
- *
- * `f_auto,q_auto` rides along as an eager transform so the CDN serves WebP or
- * AVIF to browsers that take it.
  */
 export async function uploadToCloudinary(
   bytes: Buffer,
   options: { mimeType: string; folder: string },
 ): Promise<{ url: string; publicId: string; width: number; height: number }> {
-  await configure();
+  await configureCloudinary();
 
   const dataUri = `data:${options.mimeType};base64,${bytes.toString("base64")}`;
 
@@ -63,10 +104,11 @@ export async function uploadToCloudinary(
   }
 }
 
-/** Removes a CDN asset. Best-effort: a failure never blocks a delete. */
+/** Removes a Cloudinary asset. Best-effort. */
 export async function deleteFromCloudinary(publicId: string): Promise<void> {
-  if (!(await isCdnConfigured())) return;
-  await configure();
+  const { cloudinary: config } = await getIntegrations();
+  if (!config.cloudName || !config.apiSecret) return;
+  await configureCloudinary();
 
   try {
     await cloudinary.uploader.destroy(publicId);

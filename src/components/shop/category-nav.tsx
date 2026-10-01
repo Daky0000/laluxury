@@ -32,6 +32,14 @@ export function CategoryNav({
           Shop All
         </Link>
       ) : null}
+      {!hiddenSet.has("sale") ? (
+        <Link
+          href="/shop?onSale=1"
+          className="font-medium text-[var(--accent)] transition-colors hover:text-[var(--accent-hover)]"
+        >
+          Sale
+        </Link>
+      ) : null}
       {categories.map((category) => {
         const isPreorder = category.slug === "pre-order";
         if (isPreorder && hiddenSet.has("pre-order")) return null;

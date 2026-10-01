@@ -82,6 +82,22 @@ export const env = {
       Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_SECRET),
   },
 
+  r2: {
+    accountId: () => optional("R2_ACCOUNT_ID"),
+    accessKeyId: () => optional("R2_ACCESS_KEY_ID"),
+    secretAccessKey: () => optional("R2_SECRET_ACCESS_KEY"),
+    bucketName: () => optional("R2_BUCKET_NAME", "laluxurys-media"),
+    publicUrl: () => optional("R2_PUBLIC_URL"),
+    isConfigured: () =>
+      Boolean(
+        process.env.R2_ACCOUNT_ID &&
+          process.env.R2_ACCESS_KEY_ID &&
+          process.env.R2_SECRET_ACCESS_KEY &&
+          process.env.R2_BUCKET_NAME &&
+          process.env.R2_PUBLIC_URL,
+      ),
+  },
+
   isProduction: () => process.env.NODE_ENV === "production",
 } as const;
 

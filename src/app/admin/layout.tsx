@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { currentUser, displayName } from "@/lib/auth";
 import { can, isStaff, permissionsFor, ROLE_LABELS, type Permission } from "@/lib/auth/rbac";
@@ -26,7 +27,7 @@ const NAV: {
   group: string;
   description: string;
 }[] = [
-  // --- Overview & Reports ---
+  // --- Overview ---
   {
     href: "/admin",
     label: "Dashboard",
@@ -44,21 +45,29 @@ const NAV: {
     description: "Revenue, profit margins & financial reports",
   },
 
-  // --- Orders & Fulfillment ---
+  // --- Orders ---
   {
     href: "/admin/orders",
     label: "Orders",
     icon: "orders",
     permission: "orders:read",
-    group: "Orders & Sales",
+    group: "Orders",
     description: "Pack, ship & manage customer purchases",
+  },
+  {
+    href: "/admin/carts",
+    label: "Unfinished Orders",
+    icon: "carts",
+    permission: "orders:read",
+    group: "Orders",
+    description: "Abandoned shopping carts ready for follow-up",
   },
   {
     href: "/admin/orders/new",
     label: "In-Store Sale (POS)",
     icon: "pos",
     permission: "orders:write",
-    group: "Orders & Sales",
+    group: "Orders",
     description: "Cash register for showroom & walk-in sales",
   },
   {
@@ -66,7 +75,7 @@ const NAV: {
     label: "Pre-Orders & Sourcing",
     icon: "preorders",
     permission: "orders:read",
-    group: "Orders & Sales",
+    group: "Orders",
     description: "Custom orders, deposits & arrivals",
   },
   {
@@ -74,25 +83,17 @@ const NAV: {
     label: "Shipments & Freight",
     icon: "shipments",
     permission: "orders:read",
-    group: "Orders & Sales",
+    group: "Orders",
     description: "Shipping containers & delivery milestones",
   },
-  {
-    href: "/admin/carts",
-    label: "Unfinished Orders",
-    icon: "carts",
-    permission: "orders:read",
-    group: "Orders & Sales",
-    description: "Abandoned shopping carts ready for follow-up",
-  },
 
-  // --- Catalog & Stock ---
+  // --- Catalog & Inventory ---
   {
     href: "/admin/products",
     label: "Products",
     icon: "products",
     permission: "products:read",
-    group: "Catalog & Stock",
+    group: "Catalog & Inventory",
     description: "Manage products, prices & photos",
   },
   {
@@ -100,61 +101,69 @@ const NAV: {
     label: "Stock & Inventory",
     icon: "inventory",
     permission: "inventory:read",
-    group: "Catalog & Stock",
+    group: "Catalog & Inventory",
     description: "Track on-hand stock & low inventory alerts",
+  },
+  {
+    href: "/admin/categories",
+    label: "Categories",
+    icon: "categories",
+    permission: "products:read",
+    group: "Catalog & Inventory",
+    description: "Organize items into rooms & collections",
   },
   {
     href: "/admin/products/bulk",
     label: "Quick Price Editor",
     icon: "bulk",
     permission: "products:write",
-    group: "Catalog & Stock",
+    group: "Catalog & Inventory",
     description: "Bulk change prices or update stock levels",
-  },
-  {
-    href: "/admin/categories",
-    label: "Categories & Rooms",
-    icon: "categories",
-    permission: "products:read",
-    group: "Catalog & Stock",
-    description: "Organize items into rooms & collections",
   },
   {
     href: "/admin/media",
     label: "Photo Library",
     icon: "media",
     permission: "products:read",
-    group: "Catalog & Stock",
+    group: "Catalog & Inventory",
     description: "Upload & browse product images",
   },
 
-  // --- Customers & Marketing ---
+  // --- Customers ---
   {
     href: "/admin/customers",
     label: "Customers",
     icon: "customers",
     permission: "customers:read",
-    group: "Customers & Marketing",
+    group: "Customers",
     description: "Shopper directory & purchase history",
-  },
-  {
-    href: "/admin/discounts",
-    label: "Promo Codes & Deals",
-    icon: "discounts",
-    permission: "discounts:read",
-    group: "Customers & Marketing",
-    description: "Discount coupons & promotional offers",
   },
   {
     href: "/admin/reviews",
     label: "Customer Reviews",
     icon: "reviews",
     permission: "reviews:moderate",
-    group: "Customers & Marketing",
+    group: "Customers",
     description: "Check & approve customer ratings & feedback",
   },
+  {
+    href: "/admin/discounts",
+    label: "Promo Codes & Deals",
+    icon: "discounts",
+    permission: "discounts:read",
+    group: "Customers",
+    description: "Discount coupons & promotional offers",
+  },
 
-  // --- Store Setup & Tools ---
+  // --- Settings & Tools ---
+  {
+    href: "/admin/settings",
+    label: "Store Settings",
+    icon: "settings",
+    permission: "settings:manage",
+    group: "Settings & Tools",
+    description: "Payments, shipping fees & store info",
+  },
   {
     href: "/admin/agent",
     label: "AI Store Assistant",
@@ -178,14 +187,6 @@ const NAV: {
     permission: "settings:manage",
     group: "Settings & Tools",
     description: "Timeline of changes made to the store",
-  },
-  {
-    href: "/admin/settings",
-    label: "Store Settings",
-    icon: "settings",
-    permission: "settings:manage",
-    group: "Settings & Tools",
-    description: "Payments, shipping fees & store info",
   },
 ];
 
@@ -230,7 +231,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
       <div data-theme="admin" className="flex min-h-screen bg-[var(--surface)]">
         <AdminNav
           items={items}
-          user={{ name, role: ROLE_LABELS[user.role], initials: initials(name) }}
+          user={{ name, role: ROLE_LABELS[user.role], initials: initials(name), email: user.email }}
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -246,6 +247,12 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             </span>
 
             <div className="ml-auto flex items-center gap-4">
+              <Link
+                href="/admin/settings"
+                className="hover:text-[var(--text-primary)] transition-colors underline-offset-4 hover:underline"
+              >
+                Store Settings
+              </Link>
               <a
                 href="/"
                 target="_blank"

@@ -79,7 +79,13 @@ export function toTile(product: ProductCard): ProductTileData {
     maxPrice: product.maxPrice,
     compareAtPrice: product.compareAtPrice,
     hasRange: product.maxPrice > product.minPrice,
-    badge: isPreorder ? "Pre-Order" : badgeTag ? BADGES[badgeTag.toLowerCase()] : null,
+    badge: isPreorder
+      ? "Pre-Order"
+      : badgeTag
+        ? BADGES[badgeTag.toLowerCase()]
+        : product.compareAtPrice && product.compareAtPrice > product.minPrice
+          ? "Sale"
+          : null,
     isPreorder,
     preorderLeadTime: product.preorderLeadTime ?? (isPreorder ? "2–3 weeks" : null),
     preorderDepositPercent: product.preorderDepositPercent ?? null,

@@ -49,6 +49,13 @@ export type Integrations = {
   /** Vynfy — the SMS gateway that carries sign-up codes and order notices. */
   sms: { apiKey: string; senderId: string };
   cloudinary: { cloudName: string; apiKey: string; apiSecret: string };
+  r2: {
+    accountId: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    bucketName: string;
+    publicUrl: string;
+  };
 };
 
 /** Which fields are secret, so they are masked rather than echoed back. */
@@ -65,6 +72,7 @@ export const SECRET_FIELDS = new Set([
   "smtp.password",
   "sms.apiKey",
   "cloudinary.apiSecret",
+  "r2.secretAccessKey",
 ]);
 
 /** The environment is the floor: whatever the host already provides. */
@@ -113,6 +121,13 @@ function fromEnv(): Integrations {
       cloudName: env.cloudinary.cloudName(),
       apiKey: env.cloudinary.apiKey(),
       apiSecret: env.cloudinary.apiSecret(),
+    },
+    r2: {
+      accountId: env.r2.accountId(),
+      accessKeyId: env.r2.accessKeyId(),
+      secretAccessKey: env.r2.secretAccessKey(),
+      bucketName: env.r2.bucketName(),
+      publicUrl: env.r2.publicUrl(),
     },
   };
 }
@@ -266,6 +281,14 @@ export function isReady(config: Integrations, group: keyof Integrations): boolea
       return Boolean(config.sms.apiKey && config.sms.senderId);
     case "cloudinary":
       return Boolean(config.cloudinary.cloudName && config.cloudinary.apiSecret);
+    case "r2":
+      return Boolean(
+        config.r2.accountId &&
+          config.r2.accessKeyId &&
+          config.r2.secretAccessKey &&
+          config.r2.bucketName &&
+          config.r2.publicUrl,
+      );
   }
 }
 
@@ -380,6 +403,24 @@ export async function integrationsView(): Promise<IntegrationGroup[]> {
         field("cloudinary", "apiSecret", "API secret"),
       ],
     },
+    {
+      key: "r2",
+      label: "Cloudflare R2 Storage (Zero Egress)",
+      description: "Stores product photos with $0 egress fees on Cloudflare's global edge network.",
+      ready: isReady(config, "r2"),
+      fields: [
+        field("r2", "accountId", "Account ID"),
+        field("r2", "accessKeyId", "Access Key ID"),
+        field("r2", "secretAccessKey", "Secret Access Key"),
+        field("r2", "bucketName", "Bucket Name"),
+        field(
+          "r2",
+          "publicUrl",
+          "Public URL",
+          "e.g. https://pub-xxx.r2.dev or https://media.laluxurys.com",
+        ),
+      ],
+    },
   ];
 }
 
@@ -394,5 +435,6 @@ export async function integrationStatus() {
     { key: "smtp", label: "Transactional email", ready: isReady(config, "smtp") },
     { key: "sms", label: "SMS & one-time codes", ready: isReady(config, "sms") },
     { key: "cloudinary", label: "Image CDN", ready: isReady(config, "cloudinary") },
+    { key: "r2", label: "Cloudflare R2", ready: isReady(config, "r2") },
   ];
 }

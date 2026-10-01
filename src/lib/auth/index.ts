@@ -10,17 +10,26 @@ export * from "./rbac";
 export * from "./session";
 export * from "./password";
 
+import { isDbTemporarilyDown, recordDbFailure } from "@/lib/db-health";
+
 /**
  * Loads the signed-in user. Deduped per request by React cache so a page and
  * its nested layouts share one query.
  */
 export const currentUser = cache(async (): Promise<User | null> => {
-  const session = await getSession();
-  if (!session) return null;
+  if (isDbTemporarilyDown()) return null;
 
-  const user = await db.user.findUnique({ where: { id: session.userId } });
-  if (!user || !user.isActive) return null;
-  return user;
+  try {
+    const session = await getSession();
+    if (!session) return null;
+
+    const user = await db.user.findUnique({ where: { id: session.userId } });
+    if (!user || !user.isActive) return null;
+    return user;
+  } catch {
+    recordDbFailure();
+    return null;
+  }
 });
 
 export class AuthError extends Error {

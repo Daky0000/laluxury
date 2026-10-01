@@ -75,6 +75,17 @@ export function MobileNav({
                   </Link>
                 </li>
               ) : null}
+              {!hidden.has("sale") ? (
+                <li>
+                  <Link
+                    href="/shop?onSale=1"
+                    onClick={() => setOpen(false)}
+                    className="block py-2.5 text-xl font-medium text-[var(--accent)]"
+                  >
+                    Sale &amp; Offers
+                  </Link>
+                </li>
+              ) : null}
               {categories.map((category) => {
                 const isPreorder = category.slug === "pre-order";
                 if (isPreorder && hidden.has("pre-order")) return null;

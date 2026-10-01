@@ -259,6 +259,34 @@ export async function testIntegrationAction(
           ? { ok: true, message: "Cloudinary accepted the credentials." }
           : { ok: false, message: `Cloudinary rejected them (${response.status}).` };
       }
+
+      case "r2": {
+        const { isR2Configured, getR2Client } = await import("@/lib/r2");
+        if (!(await isR2Configured())) {
+          return { ok: false, message: "R2 details are not fully configured yet." };
+        }
+        const clientInfo = await getR2Client();
+        if (!clientInfo) {
+          return { ok: false, message: "Could not create R2 client." };
+        }
+        try {
+          const { HeadBucketCommand } = await import("@aws-sdk/client-s3");
+          await clientInfo.s3.send(new HeadBucketCommand({ Bucket: clientInfo.bucketName }));
+          return {
+            ok: true,
+            message: `Connected to Cloudflare R2 bucket '${clientInfo.bucketName}'.`,
+          };
+        } catch (err) {
+          return {
+            ok: false,
+            message: err instanceof Error ? err.message : "R2 check failed.",
+          };
+        }
+      }
+
+      default: {
+        return { ok: false, message: "Unknown integration provider." };
+      }
     }
   } catch (error) {
     return {

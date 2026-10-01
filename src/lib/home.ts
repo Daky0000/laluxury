@@ -2,6 +2,7 @@ import { db } from "./db";
 import { productCardSelect } from "./catalog";
 import { toTile, type ProductTileData } from "./product-view";
 import type { HomeSection } from "./home-sections";
+import { isDbTemporarilyDown, checkDbConnection, recordDbFailure } from "@/lib/db-health";
 
 /**
  * Reads for the storefront home page. Everything goes through the shared
@@ -45,78 +46,92 @@ function toRoomCard(row: {
  * picked cards, those are the cards — in their order, children included, and
  * with no limit applied over a list they chose by hand.
  */
-export async function roomCards(section: Pick<HomeSection, "categorySlugs" | "limit">) {
-  if (section.categorySlugs.length > 0) {
+export async function roomCards(section: Pick<HomeSection, "categorySlugs" | "limit">): Promise<RoomCard[]> {
+  if (isDbTemporarilyDown() || !(await checkDbConnection())) return [];
+
+  try {
+    if (section.categorySlugs.length > 0) {
+      const rows = await db.category.findMany({
+        where: { isActive: true, slug: { in: section.categorySlugs } },
+        select: roomSelect,
+      });
+
+      const bySlug = new Map(rows.map((row) => [row.slug, toRoomCard(row)]));
+      return section.categorySlugs
+        .map((slug) => bySlug.get(slug))
+        .filter((card): card is RoomCard => card !== undefined);
+    }
+
     const rows = await db.category.findMany({
-      where: { isActive: true, slug: { in: section.categorySlugs } },
+      where: { isActive: true, parentId: null },
+      orderBy: [{ position: "asc" }, { name: "asc" }],
+      take: section.limit,
       select: roomSelect,
     });
 
-    const bySlug = new Map(rows.map((row) => [row.slug, toRoomCard(row)]));
-    return section.categorySlugs
-      .map((slug) => bySlug.get(slug))
-      .filter((card): card is RoomCard => card !== undefined);
+    return rows.map(toRoomCard);
+  } catch (err) {
+    recordDbFailure();
+    return [];
   }
-
-  const rows = await db.category.findMany({
-    where: { isActive: true, parentId: null },
-    orderBy: [{ position: "asc" }, { name: "asc" }],
-    take: section.limit,
-    select: roomSelect,
-  });
-
-  return rows.map(toRoomCard);
 }
 
 /** The pieces a product section shows, in the order it shows them. */
 export async function sectionProducts(section: HomeSection): Promise<ProductTileData[]> {
-  if (section.source === "picked") {
-    if (section.productIds.length === 0) return [];
+  if (isDbTemporarilyDown() || !(await checkDbConnection())) return [];
 
-    const rows = await db.product.findMany({
-      where: { status: "ACTIVE", id: { in: section.productIds } },
-      select: productCardSelect,
-    });
+  try {
+    if (section.source === "picked") {
+      if (section.productIds.length === 0) return [];
 
-    // Hand-picked means hand-ordered too, so the rows come back in the order
-    // the owner dragged them into rather than the order the database found them.
-    const byId = new Map(rows.map((row) => [row.id, toTile(row)]));
-    return section.productIds
-      .map((id) => byId.get(id))
-      .filter((tile): tile is ProductTileData => tile !== undefined);
-  }
+      const rows = await db.product.findMany({
+        where: { status: "ACTIVE", id: { in: section.productIds } },
+        select: productCardSelect,
+      });
 
-  if (section.source === "category" && section.categorySlugs.length > 0) {
+      // Hand-picked means hand-ordered too, so the rows come back in the order
+      // the owner dragged them into rather than the order the database found them.
+      const byId = new Map(rows.map((row) => [row.id, toTile(row)]));
+      return section.productIds
+        .map((id) => byId.get(id))
+        .filter((tile): tile is ProductTileData => tile !== undefined);
+    }
+
+    if (section.source === "category" && section.categorySlugs.length > 0) {
+      const rows = await db.product.findMany({
+        where: {
+          status: "ACTIVE",
+          categories: { some: { category: { slug: { in: section.categorySlugs } } } },
+        },
+        select: productCardSelect,
+        orderBy: [{ isFeatured: "desc" }, { minPrice: "asc" }, { createdAt: "asc" }],
+        take: section.limit,
+      });
+
+      return rows.map(toTile);
+    }
+
+    // Automatic: everything on sale except the student-only range, which has its
+    // own section. A product may sit in both rooms (the sleep pillow does) and
+    // still belong here.
     const rows = await db.product.findMany({
       where: {
         status: "ACTIVE",
-        categories: { some: { category: { slug: { in: section.categorySlugs } } } },
+        OR: [
+          { categories: { none: {} } },
+          { categories: { some: { category: { slug: { not: "student" } } } } },
+        ],
       },
       select: productCardSelect,
-      orderBy: [{ isFeatured: "desc" }, { minPrice: "asc" }, { createdAt: "asc" }],
+      orderBy: [{ isFeatured: "desc" }, { createdAt: "asc" }],
       take: section.limit,
     });
 
     return rows.map(toTile);
+  } catch (err) {
+    recordDbFailure();
+    return [];
   }
-
-  // Automatic: everything on sale except the student-only range, which has its
-  // own section. A product may sit in both rooms (the sleep pillow does) and
-  // still belong here.
-  const rows = await db.product.findMany({
-    where: {
-      status: "ACTIVE",
-      OR: [
-        { categories: { none: {} } },
-        { categories: { some: { category: { slug: { not: "student" } } } } },
-      ],
-    },
-    select: productCardSelect,
-    orderBy: [{ isFeatured: "desc" }, { createdAt: "asc" }],
-    take: section.limit,
-  });
-
-  return rows.map(toTile);
 }
 
 /**
@@ -124,21 +139,28 @@ export async function sectionProducts(section: HomeSection): Promise<ProductTile
  * every top-level room bar the student range when they named none.
  */
 export async function sectionTabs(section: HomeSection) {
-  const rows = await db.category.findMany({
-    where:
-      section.categorySlugs.length > 0
-        ? { isActive: true, slug: { in: section.categorySlugs } }
-        : { isActive: true, parentId: null, slug: { not: "student" } },
-    orderBy: [{ position: "asc" }, { name: "asc" }],
-    select: { name: true, slug: true },
-  });
+  if (isDbTemporarilyDown() || !(await checkDbConnection())) return [];
 
-  if (section.categorySlugs.length === 0) {
-    return rows.map((row) => ({ label: row.name, slug: row.slug }));
+  try {
+    const rows = await db.category.findMany({
+      where:
+        section.categorySlugs.length > 0
+          ? { isActive: true, slug: { in: section.categorySlugs } }
+          : { isActive: true, parentId: null, slug: { not: "student" } },
+      orderBy: [{ position: "asc" }, { name: "asc" }],
+      select: { name: true, slug: true },
+    });
+
+    if (section.categorySlugs.length === 0) {
+      return rows.map((row) => ({ label: row.name, slug: row.slug }));
+    }
+
+    const bySlug = new Map(rows.map((row) => [row.slug, row.name]));
+    return section.categorySlugs
+      .filter((slug) => bySlug.has(slug))
+      .map((slug) => ({ label: bySlug.get(slug)!, slug }));
+  } catch (err) {
+    recordDbFailure();
+    return [];
   }
-
-  const bySlug = new Map(rows.map((row) => [row.slug, row.name]));
-  return section.categorySlugs
-    .filter((slug) => bySlug.has(slug))
-    .map((slug) => ({ label: bySlug.get(slug)!, slug }));
 }

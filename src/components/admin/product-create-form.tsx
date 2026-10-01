@@ -1,9 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
-import { Loader2 } from "lucide-react";
+import { useActionState, useState, useSyncExternalStore } from "react";
+import { Check, Copy, Link as LinkIcon, Loader2, RotateCcw } from "lucide-react";
 import { createProductAction, type AdminState } from "@/app/actions/admin/products";
 import { Card, Field, Alert } from "@/components/ui";
+import { slugify } from "@/lib/utils";
+
+const subscribeNoop = () => () => {};
+const getWindowOrigin = () => window.location.origin;
+const getServerOrigin = () => "";
 
 type Option = { id: string; name: string };
 
@@ -19,6 +24,45 @@ export function ProductCreateForm({
     null,
   );
 
+  const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
+  const [isSlugCustomized, setIsSlugCustomized] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const origin = useSyncExternalStore(subscribeNoop, getWindowOrigin, getServerOrigin);
+
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setTitle(val);
+    if (!isSlugCustomized) {
+      setSlug(slugify(val));
+    }
+  };
+
+  const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsSlugCustomized(true);
+    setSlug(slugify(e.target.value));
+  };
+
+  const resetSlugToTitle = () => {
+    setIsSlugCustomized(false);
+    setSlug(slugify(title));
+  };
+
+  const currentSlug = slug || (title ? slugify(title) : "product-url-slug");
+  const fullPermalink = `${origin || "https://laluxurys.com"}/product/${currentSlug}`;
+
+  const copyPermalink = async () => {
+    try {
+      await navigator.clipboard.writeText(fullPermalink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch {
+      // Fallback
+      setCopied(false);
+    }
+  };
+
   return (
     <form action={action} className="flex flex-col gap-6">
       {state?.message && !state.ok ? <Alert tone="danger">{state.message}</Alert> : null}
@@ -28,12 +72,73 @@ export function ProductCreateForm({
           <input
             id="title"
             name="title"
+            value={title}
+            onChange={handleTitleChange}
             required
             autoFocus
             placeholder="Adinkra Ceramic Table Lamp"
             className="lx-field"
           />
         </Field>
+
+        {/* Live Permalink & Handle */}
+        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-sunken)] p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              <LinkIcon className="h-3.5 w-3.5 text-[var(--accent)]" aria-hidden />
+              <span>Product Permalink</span>
+            </div>
+            <button
+              type="button"
+              onClick={copyPermalink}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-base)] transition-colors shadow-2xs"
+              title="Copy full product link to clipboard"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5 text-[var(--text-secondary)]" aria-hidden />
+                  <span>Copy Link</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 text-xs sm:text-sm font-mono text-[var(--text-primary)] bg-[var(--surface-raised)] rounded px-3 py-2 border border-[var(--border-subtle)] break-all select-all">
+            <span className="text-[var(--text-muted)]">{origin || "https://laluxurys.com"}/product/</span>
+            <span className="font-semibold text-[var(--accent)]">{slug || (title ? slugify(title) : "your-product-name")}</span>
+          </div>
+
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--border-subtle)]/60 text-xs">
+            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+              <span className="text-[var(--text-muted)] shrink-0">Handle:</span>
+              <input
+                id="slug"
+                name="slug"
+                value={slug}
+                onChange={handleSlugChange}
+                placeholder={title ? slugify(title) : "product-slug"}
+                className="lx-field py-1 text-xs font-mono flex-1 h-7"
+                spellCheck={false}
+              />
+            </div>
+            {isSlugCustomized && (
+              <button
+                type="button"
+                onClick={resetSlugToTitle}
+                className="inline-flex items-center gap-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] underline"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Reset to product name
+              </button>
+            )}
+          </div>
+        </div>
+
 
         <Field label="Short description" htmlFor="shortDescription" hint="One line, shown on cards.">
           <input

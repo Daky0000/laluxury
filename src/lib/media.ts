@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { db } from "./db";
-import { UploadError, deleteFromCloudinary, isCdnConfigured, uploadToCloudinary } from "./cdn";
+import { UploadError, deleteFromCdn, isCdnConfigured, uploadToCdn } from "./cdn";
 import {
   ALLOWED_IMAGE_TYPES,
   EXTENSION_FOR_TYPE,
@@ -167,7 +167,7 @@ export async function storeUpload(
   const filename = (file.name || "image").slice(0, 180);
 
   if (await isCdnConfigured()) {
-    const uploaded = await uploadToCloudinary(bytes, { mimeType: file.type, folder });
+    const uploaded = await uploadToCdn(bytes, { mimeType: file.type, folder, width, height });
 
     return db.mediaAsset.create({
       data: {
@@ -339,7 +339,7 @@ export async function deleteMedia(id: string): Promise<void> {
   if (!asset) return;
 
   if (asset.source === "CDN" && asset.publicId) {
-    await deleteFromCloudinary(asset.publicId);
+    await deleteFromCdn(asset.publicId);
   }
 
   await db.mediaAsset.delete({ where: { id } });

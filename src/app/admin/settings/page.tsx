@@ -125,7 +125,23 @@ export default async function AdminSettingsPage() {
         ) : null}
       </Card>
 
-      <SettingsForm settings={settings} />
+      {/* SMS & Email Message Templates */}
+      <Card className="px-6 py-5.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">SMS &amp; Email Notifications</h2>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              Customize wording and drafted default templates for purchases, receipts, abandoned carts, shipping notices, and direct concierge messages.
+            </p>
+          </div>
+          <Link
+            href="/admin/settings/messages"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--accent)] hover:underline"
+          >
+            Manage message templates <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        </div>
+      </Card>
 
       {/* Integrations */}
       <section className="flex flex-col gap-3">

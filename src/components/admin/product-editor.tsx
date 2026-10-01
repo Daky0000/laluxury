@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState, useTransition } from "react";
+import { useActionState, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -105,6 +105,25 @@ export function ProductEditor({
   collections: Ref[];
 }) {
   const [tab, setTab] = useState<Tab>("details");
+  const [copied, setCopied] = useState(false);
+  const origin = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => "",
+  );
+
+  const fullPermalink = `${origin || "https://laluxurys.com"}/product/${product.slug}`;
+
+
+  const copyPermalink = async () => {
+    try {
+      await navigator.clipboard.writeText(fullPermalink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "details", label: "Details" },
@@ -114,7 +133,7 @@ export function ProductEditor({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex gap-1 border-b border-[var(--border-subtle)]">
           {tabs.map((t) => (
             <button
@@ -137,18 +156,46 @@ export function ProductEditor({
           ))}
         </div>
 
-        <Link
-          href={`/product/${product.slug}`}
-          target="_blank"
-          className="flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-        >
-          View on site
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="hidden md:flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-sunken)] px-2.5 py-1 text-xs font-mono text-[var(--text-secondary)]">
+            <span className="text-[var(--text-muted)] truncate max-w-[240px]">{fullPermalink}</span>
+          </div>
+          <button
+            type="button"
+            onClick={copyPermalink}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-base)] transition-colors shadow-2xs"
+            title="Copy full product permalink to clipboard"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                <span className="text-emerald-700 dark:text-emerald-400 font-semibold">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-3.5 w-3.5 text-[var(--text-secondary)]" aria-hidden />
+                <span>Copy Permalink</span>
+              </>
+            )}
+          </button>
+          <Link
+            href={`/product/${product.slug}`}
+            target="_blank"
+            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-base)] transition-colors"
+          >
+            <span>View on site</span>
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        </div>
       </div>
 
       {tab === "details" ? (
-        <DetailsTab product={product} categories={categories} collections={collections} />
+        <DetailsTab
+          product={product}
+          categories={categories}
+          collections={collections}
+          origin={origin}
+        />
       ) : null}
       {tab === "variants" ? <VariantsTab product={product} /> : null}
       {tab === "images" ? <ImagesTab product={product} /> : null}
@@ -162,11 +209,28 @@ function DetailsTab({
   product,
   categories,
   collections,
+  origin,
 }: {
   product: EditorProduct;
   categories: Ref[];
   collections: Ref[];
+  origin?: string;
 }) {
+  const [slugValue, setSlugValue] = useState(product.slug);
+  const [copiedHandle, setCopiedHandle] = useState(false);
+
+  const fullPermalink = `${origin || "https://laluxurys.com"}/product/${slugValue || product.slug}`;
+
+  const copyPermalink = async () => {
+    try {
+      await navigator.clipboard.writeText(fullPermalink);
+      setCopiedHandle(true);
+      setTimeout(() => setCopiedHandle(false), 2200);
+    } catch {
+      setCopiedHandle(false);
+    }
+  };
+
   const [state, action, pending] = useActionState<AdminState | null, FormData>(
     updateProductAction.bind(null, product.id),
     null,
@@ -325,18 +389,58 @@ function DetailsTab({
             htmlFor="slug"
             hint="The address of the page: /product/handle. Leave it alone once the link has been shared."
           >
-            <div className="flex items-center gap-1">
-              <span className="shrink-0 text-sm text-[var(--text-muted)]">/product/</span>
-              <input
-                id="slug"
-                name="slug"
-                defaultValue={product.slug}
-                spellCheck={false}
-                className="lx-field font-mono text-sm"
-              />
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-1">
+                <span className="shrink-0 text-sm text-[var(--text-muted)]">/product/</span>
+                <input
+                  id="slug"
+                  name="slug"
+                  value={slugValue}
+                  onChange={(e) => setSlugValue(e.target.value)}
+                  spellCheck={false}
+                  className="lx-field font-mono text-sm"
+                />
+              </div>
+
+              {/* Full Permalink display and copy */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-sunken)] px-3 py-2 text-xs">
+                <div className="flex items-center gap-1.5 font-mono text-[var(--text-secondary)] min-w-0 flex-1 truncate">
+                  <span className="text-[var(--text-muted)] shrink-0">Permalink:</span>
+                  <span className="text-[var(--accent)] font-semibold truncate">{fullPermalink}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={copyPermalink}
+                    className="inline-flex items-center gap-1 rounded border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-2 py-0.5 text-xs font-medium hover:bg-[var(--surface-base)]"
+                    title="Copy full product link"
+                  >
+                    {copiedHandle ? (
+                      <>
+                        <Check className="h-3 w-3 text-emerald-600" />
+                        <span className="text-emerald-700 dark:text-emerald-400 font-semibold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3 text-[var(--text-secondary)]" />
+                        <span>Copy Link</span>
+                      </>
+                    )}
+                  </button>
+                  <a
+                    href={`/product/${slugValue || product.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </div>
             </div>
           </Field>
         </Card>
+
 
         <Card className="flex flex-col gap-4 p-5">
           <h3 className="lx-eyebrow">Pricing</h3>

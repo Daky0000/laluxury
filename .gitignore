@@ -46,3 +46,7 @@ next-env.d.ts
 
 # Locally uploaded images (when Cloudinary is not configured)
 /public/uploads
+
+# Binary builds & mobile
+*.apk
+.agents/

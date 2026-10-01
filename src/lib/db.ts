@@ -1,6 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma";
 import { env } from "./env";
+import { isDbTemporarilyDown, checkDbConnection, recordDbFailure } from "./db-health";
 
 /**
  * The database client, and the pool behind it.
@@ -19,7 +20,7 @@ import { env } from "./env";
  * headroom is worth more on the database's side of the connection.
  */
 const globalForPrisma = globalThis as unknown as {
-  prisma: ReturnType<typeof createClient> | undefined;
+  prisma: PrismaClient | undefined;
 };
 
 /**
@@ -32,14 +33,14 @@ function poolMax(): number {
   return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 3;
 }
 
-function createClient() {
+function createClient(): PrismaClient {
   const adapter = new PrismaPg({
     connectionString: env.databaseUrl(),
     max: poolMax(),
     // Waiting forever for a free connection turns a busy pool into a hung
     // request, which is indistinguishable from a broken site. Ten seconds and
     // then a real error.
-    connectionTimeoutMillis: 10_000,
+    connectionTimeoutMillis: env.isProduction() ? 10_000 : 1_500,
     // Release idle connections after 5s and allow the pool to go completely idle
     // so Railway Postgres can enter serverless sleep when there is no traffic.
     idleTimeoutMillis: 5_000,
@@ -49,15 +50,66 @@ function createClient() {
     application_name: "laluxury",
   });
 
-  return new PrismaClient({
+  const client = new PrismaClient({
     adapter,
     log: env.isProduction() ? ["error"] : ["error", "warn"],
     // Image bytes are megabytes each and are only ever wanted by the route
     // that serves them, which asks for them explicitly.
     omit: { mediaAsset: { data: true } },
   });
+
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      const orig = Reflect.get(target, prop, receiver);
+
+      // Guard top-level raw methods like $queryRaw and $transaction
+      if (typeof prop === "string" && prop.startsWith("$") && typeof orig === "function") {
+        return async (...args: unknown[]) => {
+          if (isDbTemporarilyDown() || !(await checkDbConnection())) {
+            throw new Error("Database is currently offline.");
+          }
+          try {
+            return await orig.apply(target, args);
+          } catch (err) {
+            recordDbFailure();
+            throw err;
+          }
+        };
+      }
+
+      // Guard model access (e.g., db.user, db.category, db.product)
+      if (
+        typeof prop === "string" &&
+        !prop.startsWith("$") &&
+        orig !== null &&
+        typeof orig === "object"
+      ) {
+        return new Proxy(orig, {
+          get(modelTarget, modelProp, modelReceiver) {
+            const method = Reflect.get(modelTarget, modelProp, modelReceiver);
+            if (typeof method === "function") {
+              return async (...args: unknown[]) => {
+                if (isDbTemporarilyDown() || !(await checkDbConnection())) {
+                  throw new Error("Database is currently offline.");
+                }
+                try {
+                  return await method.apply(modelTarget, args);
+                } catch (err) {
+                  recordDbFailure();
+                  throw err;
+                }
+              };
+            }
+            return method;
+          },
+        });
+      }
+
+      return orig;
+    },
+  }) as unknown as PrismaClient;
 }
 
-export const db = globalForPrisma.prisma ?? createClient();
+export const db: PrismaClient = globalForPrisma.prisma ?? createClient();
 
 globalForPrisma.prisma = db;

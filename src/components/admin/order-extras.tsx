@@ -1,8 +1,9 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Loader2, MapPin, Printer, Send } from "lucide-react";
+import { FileText, Loader2, MapPin, MessageSquare, Printer, Send, X } from "lucide-react";
 import { resendOrderNoticeAction, updateOrderAddressAction } from "@/app/actions/admin/orders";
+import { sendOrderReceiptAction, sendOrderCustomMessageAction } from "@/app/actions/admin/messages";
 import type { AdminState } from "@/app/actions/admin/products";
 import { GHANA_REGIONS } from "@/lib/constants";
 import { formatPhone } from "@/lib/phone";
@@ -10,43 +11,149 @@ import { Alert, Card, Field } from "@/components/ui";
 
 /**
  * The order-page tools that are not a status change: print it, tell the
- * customer again, and fix the address before the rider leaves.
+ * customer again, send an official receipt, send custom messages, and fix the address.
  */
 
 export function OrderToolbar({ orderId, orderNumber }: { orderId: string; orderNumber: string }) {
   const [resending, startResend] = useTransition();
+  const [sendingReceipt, startReceipt] = useTransition();
+  const [sendingCustom, startCustom] = useTransition();
+
   const [notice, setNotice] = useState<AdminState | null>(null);
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customText, setCustomText] = useState("");
+
+  const handleCustomSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customText.trim()) return;
+    setNotice(null);
+    startCustom(async () => {
+      const res = await sendOrderCustomMessageAction(orderId, customText);
+      setNotice(res);
+      if (res.ok) {
+        setCustomText("");
+        setShowCustomModal(false);
+      }
+    });
+  };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <a
-        href={`/print/orders/${orderId}`}
-        target="_blank"
-        rel="noopener"
-        className="inline-flex items-center gap-2 rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)]"
-      >
-        <Printer className="h-4 w-4" aria-hidden />
-        Print invoice
-      </a>
-      <button
-        type="button"
-        disabled={resending}
-        onClick={() => {
-          setNotice(null);
-          startResend(async () => setNotice(await resendOrderNoticeAction(orderId)));
-        }}
-        className="inline-flex items-center gap-2 rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)] disabled:opacity-50"
-        title={`Text and email the customer about ${orderNumber} again`}
-      >
-        {resending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
-        Resend notice
-      </button>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <a
+          href={`/print/orders/${orderId}`}
+          target="_blank"
+          rel="noopener"
+          className="inline-flex items-center gap-2 rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)] transition-colors"
+        >
+          <Printer className="h-4 w-4" aria-hidden />
+          Print invoice
+        </a>
+
+        {/* Send Receipt */}
+        <button
+          type="button"
+          disabled={sendingReceipt}
+          onClick={() => {
+            setNotice(null);
+            startReceipt(async () => setNotice(await sendOrderReceiptAction(orderId)));
+          }}
+          className="inline-flex items-center gap-1.5 rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)] disabled:opacity-50 transition-colors"
+          title={`Send official purchase receipt for ${orderNumber} via SMS and Email`}
+        >
+          {sendingReceipt ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <FileText className="h-4 w-4 text-[var(--accent)]" aria-hidden />}
+          Send receipt
+        </button>
+
+        {/* Custom Message */}
+        <button
+          type="button"
+          onClick={() => setShowCustomModal((prev) => !prev)}
+          className="inline-flex items-center gap-1.5 rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)] transition-colors"
+          title={`Send a direct custom SMS/email update for ${orderNumber}`}
+        >
+          <MessageSquare className="h-4 w-4 text-emerald-600" aria-hidden />
+          Custom message
+        </button>
+
+        {/* Resend Notice */}
+        <button
+          type="button"
+          disabled={resending}
+          onClick={() => {
+            setNotice(null);
+            startResend(async () => setNotice(await resendOrderNoticeAction(orderId)));
+          }}
+          className="inline-flex items-center gap-2 rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)] disabled:opacity-50 transition-colors"
+          title={`Text and email the customer about ${orderNumber} again`}
+        >
+          {resending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
+          Resend status
+        </button>
+      </div>
+
       {notice?.message ? (
-        <span className={`text-xs ${notice.ok ? "text-success" : "text-danger"}`}>{notice.message}</span>
+        <span className={`text-xs ${notice.ok ? "text-emerald-600 font-medium" : "text-danger"}`}>
+          {notice.message}
+        </span>
       ) : null}
+
+      {/* Custom Message Modal / Form */}
+      {showCustomModal && (
+        <Card className="flex flex-col gap-3 p-4 border-[var(--accent)]/40 bg-[var(--surface-sunken)] animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]">
+              <MessageSquare className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Send Direct Message to Customer (#{orderNumber})</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCustomModal(false)}
+              className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <form onSubmit={handleCustomSend} className="flex flex-col gap-3">
+            <textarea
+              rows={3}
+              value={customText}
+              onChange={(e) => setCustomText(e.target.value)}
+              placeholder="e.g. Your bespoke duvet set is ready for station delivery. Our rider will contact you upon dispatch..."
+              className="lx-field text-xs resize-y"
+              autoFocus
+              required
+            />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] text-[var(--text-muted)]">
+                Dispatches immediately via Vynfy SMS and SMTP Email.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCustomModal(false)}
+                  className="rounded-md border border-[var(--border-subtle)] px-2.5 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--surface-raised)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={sendingCustom || !customText.trim()}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1 text-xs font-medium text-[var(--accent-contrast)] hover:opacity-90 disabled:opacity-50"
+                >
+                  {sendingCustom ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  Send Message
+                </button>
+              </div>
+            </div>
+          </form>
+        </Card>
+      )}
     </div>
   );
 }
+
 
 export type EditableAddress = {
   firstName: string;

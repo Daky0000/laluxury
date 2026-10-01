@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3005",
-    "dev:local": "next dev -p 3005",
+    "dev": "next dev -H 0.0.0.0 -p 3005",
+    "dev:local": "next dev -H 0.0.0.0 -p 3005",
     "build": "next build",
     "start": "prisma migrate deploy && node scripts/seed-once.mjs && node --max-old-space-size=384 ./node_modules/next/dist/bin/next start",
     "start:lean": "node --max-old-space-size=384 ./node_modules/next/dist/bin/next start",
@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
+    "@aws-sdk/client-s3": "^3.1144.0",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "@slack/web-api": "^8.0.0",

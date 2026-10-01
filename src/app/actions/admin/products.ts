@@ -109,7 +109,7 @@ export async function createProductAction(
 
   const price = toMinorUnits(priceRaw);
   const tags = splitTags(data.tags);
-  const slug = await uniqueSlug("product", data.title);
+  const slug = await uniqueSlug("product", data.slug || data.title);
 
   // A "was" price is optional, and only means anything above the real one.
   let compareAtPrice: number | null = null;

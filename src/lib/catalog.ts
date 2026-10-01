@@ -205,33 +205,59 @@ export function isInStock(
   });
 }
 
+import { isDbTemporarilyDown, checkDbConnection, recordDbFailure } from "@/lib/db-health";
+
 export async function searchProducts(filters: CatalogFilters) {
   const page = Math.max(1, filters.page ?? 1);
-  // The grid loads more by growing its page rather than paging, so the ceiling
-  // is higher than a single screenful — but still bounded.
   const perPage = Math.min(240, Math.max(1, filters.perPage ?? 12));
   const where = buildWhere(filters);
 
-  const [items, total] = await Promise.all([
-    db.product.findMany({
-      where,
-      select: productCardSelect,
-      orderBy: orderBy(filters.sort),
-      skip: (page - 1) * perPage,
-      take: perPage,
-    }),
-    db.product.count({ where }),
-  ]);
+  if (isDbTemporarilyDown() || !(await checkDbConnection())) {
+    return {
+      items: [],
+      total: 0,
+      page,
+      perPage,
+      pageCount: 1,
+      hasNext: false,
+      hasPrevious: false,
+    };
+  }
 
-  return {
-    items,
-    total,
-    page,
-    perPage,
-    pageCount: Math.max(1, Math.ceil(total / perPage)),
-    hasNext: page * perPage < total,
-    hasPrevious: page > 1,
-  };
+  try {
+    const [items, total] = await Promise.all([
+      db.product.findMany({
+        where,
+        select: productCardSelect,
+        orderBy: orderBy(filters.sort),
+        skip: (page - 1) * perPage,
+        take: perPage,
+      }),
+      db.product.count({ where }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      perPage,
+      pageCount: Math.max(1, Math.ceil(total / perPage)),
+      hasNext: page * perPage < total,
+      hasPrevious: page > 1,
+    };
+  } catch (err) {
+    recordDbFailure();
+    console.error("searchProducts DB offline fallback:", err);
+    return {
+      items: [],
+      total: 0,
+      page,
+      perPage,
+      pageCount: 1,
+      hasNext: false,
+      hasPrevious: false,
+    };
+  }
 }
 
 export type NavCategory = { name: string; slug: string };
@@ -249,14 +275,22 @@ async function fetchNavCategories(): Promise<NavCategory[]> {
     return cachedNavCategories.data;
   }
 
-  const rows = await db.category.findMany({
-    where: { isActive: true, parentId: null },
-    orderBy: { position: "asc" },
-    select: { name: true, slug: true },
-  });
+  if (isDbTemporarilyDown() || !(await checkDbConnection())) return [];
 
-  cachedNavCategories = { data: rows, expiresAt: now + NAV_CATEGORIES_CACHE_TTL_MS };
-  return rows;
+  try {
+    const rows = await db.category.findMany({
+      where: { isActive: true, parentId: null },
+      orderBy: { position: "asc" },
+      select: { name: true, slug: true },
+    });
+
+    cachedNavCategories = { data: rows, expiresAt: now + NAV_CATEGORIES_CACHE_TTL_MS };
+    return rows;
+  } catch (err) {
+    recordDbFailure();
+    console.error("fetchNavCategories DB offline fallback:", err);
+    return [];
+  }
 }
 
 /** Top-level navigation categories for storefront header and footer. Cached in memory. */
@@ -295,77 +329,100 @@ async function fetchCatalogFacets(): Promise<CatalogFacetsResult> {
     return cachedFacets.data;
   }
 
-  const [categories, priceRange, tagRows, options, productTotal] = await Promise.all([
-    db.category.findMany({
-      where: { isActive: true },
-      orderBy: [{ position: "asc" }, { name: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        parentId: true,
-        _count: { select: { products: true } },
-      },
-    }),
-    db.product.aggregate({
-      where: { status: "ACTIVE" },
-      _min: { minPrice: true },
-      _max: { maxPrice: true },
-    }),
-    db.product.findMany({
-      where: { status: "ACTIVE" },
-      select: { tags: true },
-    }),
-    db.productOption.findMany({
-      where: { product: { status: "ACTIVE" } },
-      select: {
-        name: true,
-        values: { select: { value: true, hexColor: true }, orderBy: { position: "asc" } },
-      },
-    }),
-    // Counted rather than summed from the categories: a product can sit in
-    // several rooms, so the per-room counts add up to more than the catalog.
-    db.product.count({ where: { status: "ACTIVE" } }),
-  ]);
+  if (isDbTemporarilyDown() || !(await checkDbConnection())) {
+    return {
+      productTotal: 0,
+      categories: [],
+      priceMin: 0,
+      priceMax: 0,
+      tags: [],
+      options: [],
+    };
+  }
 
-  // Collapse duplicate option names across products into one facet group.
-  const optionMap = new Map<string, Map<string, string | null>>();
-  for (const option of options) {
-    const group = optionMap.get(option.name) ?? new Map<string, string | null>();
-    for (const v of option.values) {
-      if (!group.has(v.value)) group.set(v.value, v.hexColor);
+  try {
+    const [categories, priceRange, tagRows, options, productTotal] = await Promise.all([
+      db.category.findMany({
+        where: { isActive: true },
+        orderBy: [{ position: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          parentId: true,
+          _count: { select: { products: true } },
+        },
+      }),
+      db.product.aggregate({
+        where: { status: "ACTIVE" },
+        _min: { minPrice: true },
+        _max: { maxPrice: true },
+      }),
+      db.product.findMany({
+        where: { status: "ACTIVE" },
+        select: { tags: true },
+      }),
+      db.productOption.findMany({
+        where: { product: { status: "ACTIVE" } },
+        select: {
+          name: true,
+          values: { select: { value: true, hexColor: true }, orderBy: { position: "asc" } },
+        },
+      }),
+      // Counted rather than summed from the categories: a product can sit in
+      // several rooms, so the per-room counts add up to more than the catalog.
+      db.product.count({ where: { status: "ACTIVE" } }),
+    ]);
+
+    // Collapse duplicate option names across products into one facet group.
+    const optionMap = new Map<string, Map<string, string | null>>();
+    for (const option of options) {
+      const group = optionMap.get(option.name) ?? new Map<string, string | null>();
+      for (const v of option.values) {
+        if (!group.has(v.value)) group.set(v.value, v.hexColor);
+      }
+      optionMap.set(option.name, group);
     }
-    optionMap.set(option.name, group);
+
+    const tagCounts = new Map<string, number>();
+    for (const row of tagRows) {
+      for (const tag of row.tags) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+    }
+
+    const result: CatalogFacetsResult = {
+      productTotal,
+      categories: categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        parentId: c.parentId,
+        productCount: c._count.products,
+      })),
+      priceMin: priceRange._min.minPrice ?? 0,
+      priceMax: priceRange._max.maxPrice ?? 0,
+      tags: [...tagCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 24)
+        .map(([name, count]) => ({ name, count })),
+      options: [...optionMap.entries()].map(([name, values]) => ({
+        name,
+        values: [...values.entries()].map(([value, hexColor]) => ({ value, hexColor })),
+      })),
+    };
+
+    cachedFacets = { data: result, expiresAt: now + FACETS_CACHE_TTL_MS };
+    return result;
+  } catch (err) {
+    console.error("fetchCatalogFacets DB offline fallback:", err);
+    return {
+      productTotal: 0,
+      categories: [],
+      priceMin: 0,
+      priceMax: 0,
+      tags: [],
+      options: [],
+    };
   }
-
-  const tagCounts = new Map<string, number>();
-  for (const row of tagRows) {
-    for (const tag of row.tags) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
-  }
-
-  const result: CatalogFacetsResult = {
-    productTotal,
-    categories: categories.map((c) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      parentId: c.parentId,
-      productCount: c._count.products,
-    })),
-    priceMin: priceRange._min.minPrice ?? 0,
-    priceMax: priceRange._max.maxPrice ?? 0,
-    tags: [...tagCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 24)
-      .map(([name, count]) => ({ name, count })),
-    options: [...optionMap.entries()].map(([name, values]) => ({
-      name,
-      values: [...values.entries()].map(([value, hexColor]) => ({ value, hexColor })),
-    })),
-  };
-
-  cachedFacets = { data: result, expiresAt: now + FACETS_CACHE_TTL_MS };
-  return result;
 }
 
 export const catalogFacets = cache(fetchCatalogFacets);

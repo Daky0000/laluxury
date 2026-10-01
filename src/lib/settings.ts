@@ -71,6 +71,19 @@ export {
   type StorefrontNavMenuItem,
 } from "./nav-config";
 
+export const DEFAULT_HIDDEN_ADMIN_NAV_ITEMS: string[] = [
+  "/admin/orders/new",
+  "/admin/preorders",
+  "/admin/shipments",
+  "/admin/products/bulk",
+  "/admin/media",
+  "/admin/discounts",
+  "/admin/agent",
+  "/admin/users",
+  "/admin/activity",
+  "/admin/settings",
+];
+
 export const DEFAULT_SETTINGS: StoreSettings = {
   // The shop opens on the catalog: the owner would rather visitors see every
   // piece straight away than the built home page. Switch it back under
@@ -117,7 +130,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   agentRequiresApproval: true,
   hideStorefrontNav: false,
   hideAdminNav: false,
-  hiddenAdminNavItems: ["/admin/preorders"],
+  hiddenAdminNavItems: DEFAULT_HIDDEN_ADMIN_NAV_ITEMS,
   hiddenStorefrontNavItems: ["pre-order"],
 };
 
@@ -130,13 +143,27 @@ export function invalidateSettingsCache(): void {
   cachedSettings = null;
 }
 
+import { isDbTemporarilyDown, checkDbConnection, recordDbFailure } from "@/lib/db-health";
+const DB_COOLDOWN_MS = 30_000;
+
 async function fetchSettings(): Promise<StoreSettings> {
   const now = Date.now();
   if (cachedSettings && cachedSettings.expiresAt > now) {
     return cachedSettings.data;
   }
 
-  const row = await db.setting.findUnique({ where: { key: SETTINGS_KEY } });
+  if (isDbTemporarilyDown() || !(await checkDbConnection())) {
+    return DEFAULT_SETTINGS;
+  }
+
+  let row;
+  try {
+    row = await db.setting.findUnique({ where: { key: SETTINGS_KEY } });
+  } catch {
+    recordDbFailure();
+    cachedSettings = { data: DEFAULT_SETTINGS, expiresAt: now + DB_COOLDOWN_MS };
+    return DEFAULT_SETTINGS;
+  }
   if (!row) {
     cachedSettings = { data: DEFAULT_SETTINGS, expiresAt: now + SETTINGS_CACHE_TTL_MS };
     return DEFAULT_SETTINGS;

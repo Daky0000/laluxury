@@ -419,16 +419,25 @@ export async function computeCartTotals(cart: CartWithItems): Promise<CartTotals
   };
 }
 
+import { isDbTemporarilyDown, recordDbFailure } from "@/lib/db-health";
+
 /** Lightweight count for the header badge. */
 export async function cartItemCount(): Promise<number> {
-  const session = await getSession();
-  const token = await getCartToken();
-  if (!session && !token) return 0;
+  if (isDbTemporarilyDown()) return 0;
 
-  const cart = await db.cart.findFirst({
-    where: session ? { userId: session.userId, convertedOrderId: null } : { token: token! },
-    select: { items: { select: { quantity: true } } },
-  });
+  try {
+    const session = await getSession();
+    const token = await getCartToken();
+    if (!session && !token) return 0;
 
-  return cart?.items.reduce((sum, i) => sum + i.quantity, 0) ?? 0;
+    const cart = await db.cart.findFirst({
+      where: session ? { userId: session.userId, convertedOrderId: null } : { token: token! },
+      select: { items: { select: { quantity: true } } },
+    });
+
+    return cart?.items.reduce((sum, i) => sum + i.quantity, 0) ?? 0;
+  } catch {
+    recordDbFailure();
+    return 0;
+  }
 }

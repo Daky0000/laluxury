@@ -8,6 +8,7 @@ import { formatPhone } from "@/lib/phone";
 import { daysAgo, relativeTime } from "@/lib/utils";
 import { Card, EmptyState, SectionHeading, Stat } from "@/components/ui";
 import { Thumb } from "@/components/shop/photo";
+import { CartRecoveryButton } from "@/components/admin/cart-recovery-button";
 
 export const metadata: Metadata = { title: "Unfinished Orders (Abandoned Carts)" };
 
@@ -62,6 +63,7 @@ export default async function AbandonedCartsPage() {
     email: cart.user?.email ?? cart.email ?? null,
     phone: cart.user?.phone ?? null,
     customer: cart.user ? { id: cart.user.id, name: displayName(cart.user) } : null,
+    recoveryEmailSentAt: cart.recoveryEmailSentAt,
     items: cart.items.map((item) => ({
       id: item.id,
       title: item.variant.product.title,
@@ -157,16 +159,25 @@ export default async function AbandonedCartsPage() {
                     ))}
                   </ul>
 
-                  <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[var(--border-subtle)] pt-3">
-                    <span className="text-sm font-medium tabular-nums">{formatMoney(row.total)}</span>
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <div className="mt-auto flex flex-col gap-2 border-t border-[var(--border-subtle)] pt-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-medium tabular-nums">{formatMoney(row.total)}</span>
+                      <CartRecoveryButton
+                        cartId={row.id}
+                        phone={row.phone}
+                        email={row.email}
+                        lastSentAt={row.recoveryEmailSentAt}
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1 border-t border-[var(--border-subtle)]/40">
                       {row.phone ? (
                         <>
                           <a
                             href={`https://wa.me/${cleanPhone}?text=${message}`}
                             target="_blank"
                             rel="noopener"
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2.5 py-1.5 text-xs hover:bg-[var(--surface-sunken)]"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2.5 py-1 text-xs hover:bg-[var(--surface-sunken)]"
                           >
                             <MessageCircle className="h-3.5 w-3.5" aria-hidden />
                             WhatsApp Check-In
@@ -175,24 +186,25 @@ export default async function AbandonedCartsPage() {
                             href={`https://wa.me/${cleanPhone}?text=${vipMessage}`}
                             target="_blank"
                             rel="noopener"
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-[#25D366]/15 text-[#128C7E] border border-[#25D366]/30 px-2.5 py-1.5 text-xs font-medium hover:bg-[#25D366]/25"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-[#25D366]/15 text-[#128C7E] border border-[#25D366]/30 px-2.5 py-1 text-xs font-medium hover:bg-[#25D366]/25"
                           >
                             <MessageCircle className="h-3.5 w-3.5" aria-hidden />
-                            Send 5% VIP Code (BAG5)
+                            WhatsApp BAG5
                           </a>
                         </>
                       ) : null}
                       {row.email ? (
                         <a
                           href={`mailto:${row.email}?subject=${encodeURIComponent("Your reserved LaLuxury selection + 5% Courtesy Code (BAG5)")}&body=${vipMessage}`}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2.5 py-1.5 text-xs hover:bg-[var(--surface-sunken)]"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2.5 py-1 text-xs hover:bg-[var(--surface-sunken)]"
                         >
-                          Email 5% Offer
+                          Email Client
                         </a>
                       ) : null}
                     </div>
                   </div>
                 </Card>
+
               </li>
             );
           })}

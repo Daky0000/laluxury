@@ -74,6 +74,21 @@ function getSnapshot(defaultHidden = false): boolean {
   }
 }
 
+function getBeginnerModeSnapshot(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const stored = localStorage.getItem(BEGINNER_MODE_KEY);
+    if (stored !== null) return stored === "true";
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function getServerBeginnerModeSnapshot(): boolean {
+  return true;
+}
+
 export function AdminNavProvider({
   children,
   defaultHidden = false,
@@ -95,36 +110,28 @@ export function AdminNavProvider({
     getSnapshotWithDefault,
     getServerSnapshotWithDefault,
   );
+  const beginnerMode = useSyncExternalStore(
+    subscribe,
+    getBeginnerModeSnapshot,
+    getServerBeginnerModeSnapshot,
+  );
   const pathname = usePathname();
 
   const [helpOpen, setHelpOpen] = useState(false);
-  const [beginnerMode, setBeginnerModeState] = useState(true);
-
-  // Initialize beginner mode from localStorage on mount (defaults to true for friendly guidance)
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(BEGINNER_MODE_KEY);
-      if (stored !== null) {
-        setBeginnerModeState(stored === "true");
-      }
-    } catch {}
-  }, []);
 
   const setBeginnerMode = useCallback((enabled: boolean) => {
-    setBeginnerModeState(enabled);
     try {
       localStorage.setItem(BEGINNER_MODE_KEY, String(enabled));
+      window.dispatchEvent(new Event(NAV_CHANGE_EVENT));
     } catch {}
   }, []);
 
   const toggleBeginnerMode = useCallback(() => {
-    setBeginnerModeState((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(BEGINNER_MODE_KEY, String(next));
-      } catch {}
-      return next;
-    });
+    try {
+      const next = !getBeginnerModeSnapshot();
+      localStorage.setItem(BEGINNER_MODE_KEY, String(next));
+      window.dispatchEvent(new Event(NAV_CHANGE_EVENT));
+    } catch {}
   }, []);
 
   const toggleHelp = useCallback(() => {

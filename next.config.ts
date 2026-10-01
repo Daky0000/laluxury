@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
     root: __dirname,
   },
 
+  allowedDevOrigins: [
+    "192.168.3.225",
+    "192.168.3.225:3005",
+    "10.0.2.2",
+    "10.0.2.2:3005",
+    "localhost:3005",
+  ],
+
   // A single server action carries the whole upload, and the default cap is
   // 1 MB — less than one photo off a phone. The media library refuses anything
   // over 8 MB itself; the rest is multipart overhead.
