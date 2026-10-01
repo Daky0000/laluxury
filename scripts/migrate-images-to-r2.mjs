@@ -1,7 +1,4 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import pg from "pg";
 import "dotenv/config";
 
 const accountId = process.env.R2_ACCOUNT_ID;
@@ -24,10 +21,6 @@ const s3 = new S3Client({
   },
 });
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
-
 const EXTENSIONS = {
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -37,78 +30,69 @@ const EXTENSIONS = {
 };
 
 async function migrate() {
-  console.log("Searching for image assets stored in PostgreSQL...");
-  const assets = await prisma.mediaAsset.findMany({
-    where: {
-      source: "DATABASE",
-      data: { not: null },
-    },
-    select: {
-      id: true,
-      filename: true,
-      mimeType: true,
-      folder: true,
-      data: true,
-      size: true,
-    },
-  });
+  const { default: pg } = await import("pg");
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
-  console.log(`Found ${assets.length} image(s) stored in PostgreSQL.`);
-  if (assets.length === 0) {
-    console.log("No images to migrate! All images are already on CDN/external.");
-    await prisma.$disconnect();
-    await pool.end();
-    return;
-  }
+  try {
+    console.log("Searching for image assets stored in PostgreSQL...");
+    const res = await pool.query(
+      `SELECT id, filename, "mimeType", folder, data, size FROM "MediaAsset" WHERE source = 'DATABASE' AND data IS NOT NULL`
+    );
 
-  let totalBytesFreed = 0;
-  let successCount = 0;
+    const assets = res.rows;
+    console.log(`Found ${assets.length} image(s) stored in PostgreSQL.`);
+    if (assets.length === 0) {
+      console.log("No images to migrate! All images are already on CDN/external.");
+      await pool.end();
+      return;
+    }
 
-  for (let i = 0; i < assets.length; i++) {
-    const asset = assets[i];
-    const ext = EXTENSIONS[asset.mimeType] || "jpg";
-    const key = `${asset.folder}/${asset.id}.${ext}`;
-    const destinationUrl = `${publicUrl}/${key}`;
+    let totalBytesFreed = 0;
+    let successCount = 0;
 
-    process.stdout.write(`[${i + 1}/${assets.length}] Uploading ${asset.id} (${(asset.size / 1024).toFixed(1)} KB) to R2... `);
+    for (let i = 0; i < assets.length; i++) {
+      const asset = assets[i];
+      const ext = EXTENSIONS[asset.mimeType] || "jpg";
+      const key = `${asset.folder || "products"}/${asset.id}.${ext}`;
+      const destinationUrl = `${publicUrl}/${key}`;
 
-    try {
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucketName,
-          Key: key,
-          Body: asset.data,
-          ContentType: asset.mimeType,
-          CacheControl: "public, max-age=31536000, immutable",
-        }),
+      process.stdout.write(
+        `[${i + 1}/${assets.length}] Uploading ${asset.id} (${(asset.size / 1024).toFixed(1)} KB) to R2... `
       );
 
-      // Update database row: set source=CDN, new url, and null out binary bytes
-      await prisma.mediaAsset.update({
-        where: { id: asset.id },
-        data: {
-          source: "CDN",
-          url: destinationUrl,
-          publicId: key,
-          data: null,
-        },
-      });
+      try {
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucketName,
+            Key: key,
+            Body: asset.data,
+            ContentType: asset.mimeType,
+            CacheControl: "public, max-age=31536000, immutable",
+          })
+        );
 
-      totalBytesFreed += asset.size || asset.data.length;
-      successCount++;
-      console.log("OK!");
-    } catch (err) {
-      console.error(`FAILED: ${err.message}`);
+        await pool.query(
+          `UPDATE "MediaAsset" SET source = 'CDN', url = $1, "publicId" = $2, data = NULL WHERE id = $3`,
+          [destinationUrl, key, asset.id]
+        );
+
+        totalBytesFreed += asset.size || (asset.data ? asset.data.length : 0);
+        successCount++;
+        console.log("OK!");
+      } catch (err) {
+        console.error(`FAILED: ${err.message}`);
+      }
     }
+
+    console.log("\nMigration completed!");
+    console.log(`Successfully migrated: ${successCount}/${assets.length} images.`);
+    console.log(`Freed ~${(totalBytesFreed / 1024 / 1024).toFixed(2)} MB of binary data from PostgreSQL.`);
+    console.log("Future views will load directly from Cloudflare R2 edge with $0 Railway egress!");
+  } catch (err) {
+    console.error("Migration check encountered error:", err.message);
+  } finally {
+    await pool.end();
   }
-
-  console.log("\nMigration completed!");
-  console.log(`Successfully migrated: ${successCount}/${assets.length} images.`);
-  console.log(`Freed ~${(totalBytesFreed / 1024 / 1024).toFixed(2)} MB of binary data from PostgreSQL.`);
-  console.log("Future views will load directly from Cloudflare R2 edge with $0 Railway egress!");
-
-  await prisma.$disconnect();
-  await pool.end();
 }
 
 migrate().catch(console.error);
