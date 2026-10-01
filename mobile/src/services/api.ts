@@ -363,6 +363,7 @@ class ApiService {
       reference: string;
     };
     paymentUrl?: string | null;
+    isTestOrder?: boolean;
   }> {
     return this.request<{
       ok: boolean;
@@ -376,6 +377,7 @@ class ApiService {
         reference: string;
       };
       paymentUrl?: string | null;
+      isTestOrder?: boolean;
     }>("/api/app/orders", {
       method: "POST",
       body: JSON.stringify(orderData),
@@ -399,6 +401,27 @@ class ApiService {
     } catch {
       // Ignore storage error
     }
+  }
+
+  // --- App Config & Payment Mode --------------------------------------------
+
+  async getConfig(): Promise<{
+    ok: boolean;
+    storeName: string;
+    tagline: string;
+    currency: string;
+    paymentMode: "live" | "test";
+    isTestMode: boolean;
+    paystack: {
+      ready: boolean;
+      mode: "live" | "test";
+      publicKey: string | null;
+    };
+    supportEmail: string;
+    supportPhone: string;
+    freeShippingThreshold: number | null;
+  }> {
+    return this.request("/api/app/config");
   }
 
   // --- App Version & Update -------------------------------------------------

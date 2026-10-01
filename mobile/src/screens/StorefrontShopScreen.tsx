@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   TextInput,
+  Share,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -23,6 +24,12 @@ type Props = {
   onNavigateToBag: () => void;
   onSelectProduct: (productId: string) => void;
   onAddToCart: (product: Product) => void;
+  onNotify?: (notif: {
+    title: string;
+    message?: string;
+    type?: "success" | "info" | "warning" | "error";
+    icon?: keyof typeof Feather.glyphMap;
+  }) => void;
 };
 
 const FILTER_PILLS = [
@@ -41,6 +48,7 @@ export function StorefrontShopScreen({
   onNavigateToBag,
   onSelectProduct,
   onAddToCart,
+  onNotify,
 }: Props) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,6 +85,36 @@ export function StorefrontShopScreen({
     onAddToCart(product);
     setAddedToast(`Added ${product.title} to bag`);
     setTimeout(() => setAddedToast(null), 2200);
+    if (onNotify) {
+      onNotify({
+        title: "Added to Bag",
+        message: `${product.title} added to your bag.`,
+        type: "success",
+        icon: "shopping-bag",
+      });
+    }
+  };
+
+  const handleShare = async (product: Product) => {
+    try {
+      const url = `https://laluxurys.com/product/${product.slug}`;
+      const formattedPrice = formatCurrency(product.minPrice);
+      await Share.share({
+        title: product.title,
+        message: `Check out "${product.title}" (${formattedPrice}) from LaLuxury Atelier & Living:\n${url}`,
+        url,
+      });
+      if (onNotify) {
+        onNotify({
+          title: "Product Shared",
+          message: `Link for "${product.title}" ready to share.`,
+          type: "info",
+          icon: "share-2",
+        });
+      }
+    } catch {
+      // Ignored
+    }
   };
 
   // Filter products by selected pill
@@ -249,17 +287,30 @@ export function StorefrontShopScreen({
                   </Text>
                 </View>
 
-                {/* Quick Add Button (+) */}
-                <TouchableOpacity
-                  style={styles.addCircleBtn}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handleQuickAdd(product);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Feather name="plus" size={16} color="#FFFFFF" />
-                </TouchableOpacity>
+                {/* Action Buttons (Share & Add) */}
+                <View style={styles.cardActions}>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleShare(product);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="share-2" size={14} color={colors.primary} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.addCircleBtn]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleQuickAdd(product);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="plus" size={15} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -454,7 +505,7 @@ const styles = StyleSheet.create({
   productDetails: {
     flex: 1,
     marginLeft: 14,
-    paddingRight: 40,
+    paddingRight: 74,
   },
   productTitle: {
     fontSize: 13,
@@ -473,15 +524,26 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: colors.primary,
   },
-  addCircleBtn: {
+  cardActions: {
     position: "absolute",
-    right: 14,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary,
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  actionBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.surfaceWarm,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
     alignItems: "center",
     justifyContent: "center",
+  },
+  addCircleBtn: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   emptyState: {
     alignItems: "center",

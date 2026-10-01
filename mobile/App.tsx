@@ -23,6 +23,7 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { BottomNav, StorefrontTab, BackendTab } from "./src/components/BottomNav";
 import { SplashScreen } from "./src/components/SplashScreen";
 import { OrderConfirmationModal } from "./src/components/OrderConfirmationModal";
+import { PopNotification, PopNotificationData } from "./src/components/PopNotification";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -34,6 +35,11 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [confirmedOrder, setConfirmedOrder] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [notification, setNotification] = useState<PopNotificationData | null>(null);
+
+  const notify = (data: PopNotificationData) => {
+    setNotification(data);
+  };
 
   // Initialize Auth & Cart
   useEffect(() => {
@@ -116,6 +122,12 @@ export default function App() {
       nextCart = [...cart, { product, variant: activeVariant, quantity: qty }];
     }
     updateCartState(nextCart);
+    notify({
+      title: "Added to Bag",
+      message: `${qty}× ${product.title} added to your bag.`,
+      type: "success",
+      icon: "shopping-bag",
+    });
   };
 
   const handleUpdateCartQty = (variantId: string, delta: number) => {
@@ -132,12 +144,25 @@ export default function App() {
   };
 
   const handleRemoveCartItem = (variantId: string) => {
+    const itemToRemove = cart.find((i) => i.variant.id === variantId);
     const nextCart = cart.filter((item) => item.variant.id !== variantId);
     updateCartState(nextCart);
+    notify({
+      title: "Item Removed",
+      message: itemToRemove ? `${itemToRemove.product.title} removed from bag.` : "Item removed from bag.",
+      type: "info",
+      icon: "trash-2",
+    });
   };
 
   const handleClearCart = () => {
     updateCartState([]);
+    notify({
+      title: "Bag Cleared",
+      message: "All items have been removed.",
+      type: "info",
+      icon: "trash-2",
+    });
   };
 
   // Auth Handling
@@ -148,16 +173,23 @@ export default function App() {
     );
 
     if (isOwnerUser) {
-      // "so when i click on the account icon and login and the account is the owner user then it will take me to the store backended which will only be the dashboard and product managament for now."
       setMode("BACKEND");
       setBackendTab("DASHBOARD");
-      Alert.alert(
-        "Store Backend Active",
-        `Welcome ${signedInUser.firstName || "Owner"}. You are now accessing the management dashboard & catalog.`,
-      );
+      notify({
+        title: "Store Backend Active",
+        message: `Welcome ${signedInUser.firstName || "Owner"}. Catalog & orders ready.`,
+        type: "success",
+        icon: "shield",
+      });
     } else {
       setMode("STOREFRONT");
       setStorefrontTab("ACCOUNT");
+      notify({
+        title: "Welcome Back",
+        message: `Signed in as ${signedInUser.firstName || "Customer"}.`,
+        type: "success",
+        icon: "user-check",
+      });
     }
   };
 
@@ -167,6 +199,12 @@ export default function App() {
     setSelectedProductId(null);
     setMode("STOREFRONT");
     setStorefrontTab("HOME");
+    notify({
+      title: "Signed Out",
+      message: "You have been safely signed out.",
+      type: "info",
+      icon: "log-out",
+    });
   };
 
   const isOwnerStaff =
@@ -193,6 +231,11 @@ export default function App() {
           onAddToCart={(product, variant, qty) => {
             handleAddToCart(product, variant, qty);
           }}
+          onNotify={notify}
+        />
+        <PopNotification
+          notification={notification}
+          onDismiss={() => setNotification(null)}
         />
       </SafeAreaView>
     );
@@ -236,11 +279,18 @@ export default function App() {
                 onNavigateToAccount={() => setStorefrontTab("ACCOUNT")}
                 onSelectProduct={(id) => setSelectedProductId(id)}
                 onAddToCart={(prod) => handleAddToCart(prod)}
+                onNotify={notify}
                 onSwitchToBackend={
                   isOwnerStaff
                     ? () => {
                         setMode("BACKEND");
                         setBackendTab("DASHBOARD");
+                        notify({
+                          title: "Store Backend Active",
+                          message: "Switched to owner management mode.",
+                          type: "info",
+                          icon: "shield",
+                        });
                       }
                     : undefined
                 }
@@ -255,6 +305,7 @@ export default function App() {
                 onNavigateToBag={() => setStorefrontTab("BAG")}
                 onSelectProduct={(id) => setSelectedProductId(id)}
                 onAddToCart={(prod) => handleAddToCart(prod)}
+                onNotify={notify}
               />
             )}
 
@@ -268,6 +319,7 @@ export default function App() {
                 onClearCart={handleClearCart}
                 onOrderSuccess={(orderNum) => setConfirmedOrder(orderNum)}
                 onBrowseProducts={() => setStorefrontTab("SHOP")}
+                onNotify={notify}
               />
             )}
 
@@ -279,6 +331,12 @@ export default function App() {
                 onOpenBackend={() => {
                   setMode("BACKEND");
                   setBackendTab("DASHBOARD");
+                  notify({
+                    title: "Store Backend",
+                    message: "Switched to owner management mode.",
+                    type: "info",
+                    icon: "shield",
+                  });
                 }}
               />
             )}
@@ -299,6 +357,12 @@ export default function App() {
                 onSwitchToStorefront={() => {
                   setMode("STOREFRONT");
                   setStorefrontTab("HOME");
+                  notify({
+                    title: "Storefront View",
+                    message: "Viewing catalog as a customer.",
+                    type: "info",
+                    icon: "shopping-bag",
+                  });
                 }}
                 onLogout={handleLogout}
               />
@@ -347,9 +411,21 @@ export default function App() {
                 if (mode === "BACKEND") {
                   setMode("STOREFRONT");
                   setStorefrontTab("HOME");
+                  notify({
+                    title: "Storefront View",
+                    message: "Viewing store as customer.",
+                    type: "info",
+                    icon: "shopping-bag",
+                  });
                 } else {
                   setMode("BACKEND");
                   setBackendTab("DASHBOARD");
+                  notify({
+                    title: "Store Backend Active",
+                    message: "Management mode enabled.",
+                    type: "info",
+                    icon: "shield",
+                  });
                 }
               }
             : undefined
@@ -364,6 +440,12 @@ export default function App() {
           setConfirmedOrder(null);
           setStorefrontTab("HOME");
         }}
+      />
+
+      {/* Floating Pop Notifications */}
+      <PopNotification
+        notification={notification}
+        onDismiss={() => setNotification(null)}
       />
     </SafeAreaView>
   );

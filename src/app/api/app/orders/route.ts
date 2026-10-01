@@ -266,17 +266,57 @@ export const POST = withApiAuth(async (request: Request) => {
 
   const reference = `${order.orderNumber}-${Date.now().toString(36).toUpperCase()}`;
 
-  // Check Paystack integration
+  // Check Paystack integration & Payment Mode
   let paymentUrl: string | null = null;
+  let isTestOrder = false;
   const isDirectMethod =
     data.paymentMethod === "pay_on_delivery" || data.paymentMethod === "direct_momo";
 
-  try {
-    const { getIntegrations, isReady } = await import("@/lib/integrations");
-    const integrations = await getIntegrations();
-    const paystackReady = isReady(integrations, "paystack");
+  const { getSettings } = await import("@/lib/settings");
+  const { getIntegrations, isReady } = await import("@/lib/integrations");
+  const [settings, integrations] = await Promise.all([
+    getSettings().catch(() => null),
+    getIntegrations().catch(() => null),
+  ]);
 
+  const activeMode = settings?.paymentMode || integrations?.paystack?.mode || "live";
+  const paystackReady = integrations ? isReady(integrations, "paystack") : false;
+
+  if (activeMode === "test") {
+    isTestOrder = true;
     if (paystackReady && !isDirectMethod) {
+      try {
+        const { initializeTransaction } = await import("@/lib/paystack");
+        const { env } = await import("@/lib/env");
+        const init = await initializeTransaction({
+          email: data.customer.email.toLowerCase().trim(),
+          amount: order.total,
+          reference,
+          callbackUrl: `${env.siteUrl()}/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=test`,
+          currency: order.currency,
+          metadata: {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            source: "mobile_app",
+            isTest: true,
+          },
+        });
+        paymentUrl = init.authorization_url;
+      } catch (paystackErr) {
+        console.warn("Paystack test sandbox notice:", paystackErr);
+      }
+    }
+  } else if (!isDirectMethod) {
+    if (!paystackReady) {
+      return NextResponse.json(
+        {
+          error:
+            "Paystack is not yet configured for live payments. Please select Direct MoMo or Pay on Delivery, or switch to Test Mode in Settings.",
+        },
+        { status: 400 },
+      );
+    }
+    try {
       const { initializeTransaction } = await import("@/lib/paystack");
       const { env } = await import("@/lib/env");
       const init = await initializeTransaction({
@@ -292,29 +332,46 @@ export const POST = withApiAuth(async (request: Request) => {
         },
       });
       paymentUrl = init.authorization_url;
+    } catch (paystackErr) {
+      return NextResponse.json(
+        {
+          error:
+            paystackErr instanceof Error
+              ? paystackErr.message
+              : "Unable to initialize Paystack transaction.",
+        },
+        { status: 400 },
+      );
     }
-  } catch (paystackErr) {
-    console.warn("Paystack mobile init notice:", paystackErr);
   }
 
   // Create payment record
+  const initialPaymentStatus = isTestOrder && !paymentUrl ? "SUCCESS" : "PENDING";
   await db.payment.create({
     data: {
       orderId: order.id,
       reference,
-      provider: paymentUrl ? "paystack" : "direct",
-      channel: data.paymentMethod,
+      provider: paymentUrl ? "paystack" : isTestOrder ? "test_simulation" : "direct",
+      channel: isTestOrder && !paymentUrl ? "test_sandbox" : data.paymentMethod,
       amount: order.total,
       currency: order.currency,
-      status: "PENDING",
+      status: initialPaymentStatus,
     },
   });
+
+  // If in test mode with instant simulation, mark order paid
+  if (isTestOrder && !paymentUrl) {
+    await db.order.update({
+      where: { id: order.id },
+      data: { status: "PAID", paymentStatus: "SUCCESS", paidAt: new Date() },
+    });
+  }
 
   // Log order placed event
   await logOrderEvent({
     orderId: order.id,
     type: "order.placed",
-    message: `Mobile order ${order.orderNumber} placed via ${data.paymentMethod}. Total: ${total}.${paymentUrl ? " Paystack transaction initialized." : ""}`,
+    message: `Mobile order ${order.orderNumber} placed via ${data.paymentMethod}${isTestOrder ? " [TEST MODE]" : ""}. Total: ${total}.${paymentUrl ? " Paystack transaction initialized." : ""}`,
     actorId: userId,
   });
 
@@ -330,6 +387,7 @@ export const POST = withApiAuth(async (request: Request) => {
       itemCount: lineItemsData.length,
       reference,
     },
+    isTestOrder,
     paymentUrl,
   });
 });

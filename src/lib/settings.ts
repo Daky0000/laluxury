@@ -62,6 +62,8 @@ export type StoreSettings = {
   hiddenAdminNavItems: string[];
   /** Specific storefront nav item keys that are hidden from the menu. */
   hiddenStorefrontNavItems: string[];
+  /** Checkout and payment processing mode: "live" (real money) or "test" (simulated orders). */
+  paymentMode: "live" | "test";
 };
 
 export {
@@ -132,6 +134,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   hideAdminNav: false,
   hiddenAdminNavItems: DEFAULT_HIDDEN_ADMIN_NAV_ITEMS,
   hiddenStorefrontNavItems: ["pre-order"],
+  paymentMode: "live",
 };
 
 const SETTINGS_KEY = "store";

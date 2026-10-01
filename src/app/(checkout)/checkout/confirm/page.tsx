@@ -59,9 +59,24 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
 
   const order = payment.order;
   const isDirectPayment = payment.provider === "direct" || params.mode === "direct";
+  const isTestPayment = params.mode === "test";
 
-  // Verify with Paystack unless it is a direct/concierge order or already settled.
-  if (!isDirectPayment && payment.status !== "SUCCESS") {
+  if (isTestPayment && payment.status !== "SUCCESS") {
+    await markOrderPaid({
+      orderId: order.id,
+      reference,
+      amount: payment.amount,
+      channel: "test_simulation",
+      providerTransactionId: `TEST-${Date.now()}`,
+      cardLast4: "4242",
+      cardBrand: "Test Sandbox",
+      authCode: "TEST-SIMULATION",
+      raw: { test: true } as never,
+    });
+  }
+
+  // Verify with Paystack unless it is a direct/concierge/test order or already settled.
+  if (!isDirectPayment && !isTestPayment && payment.status !== "SUCCESS") {
     try {
       const transaction = await verifyTransaction(reference);
 

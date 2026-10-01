@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getIntegrations, isReady } from "@/lib/integrations";
+import { getSettings } from "@/lib/settings";
 import { clearCart, getOrCreateCart } from "@/lib/cart";
 import { createOrderFromCart, logOrderEvent } from "@/lib/orders";
 import { createSessionCookie, getSession } from "@/lib/auth/session";
@@ -84,7 +85,11 @@ export async function placeOrderAction(
     return { ok: false, fieldErrors };
   }
 
-  const integrations = await getIntegrations();
+  const [integrations, settings] = await Promise.all([
+    getIntegrations(),
+    getSettings(),
+  ]);
+  const isTestMode = settings.paymentMode === "test" || integrations.paystack.mode === "test";
   const paystackConfigured = isReady(integrations, "paystack");
 
   const data = parsed.data;
@@ -170,7 +175,7 @@ export async function placeOrderAction(
     paymentMethod === "pay_on_delivery";
   const depositPercent = data.preorderDepositOption === "deposit_50" ? 50 : null;
 
-  let redirectUrl: string;
+  let redirectUrl = "";
 
   try {
     const order = await createOrderFromCart({
@@ -240,27 +245,48 @@ export async function placeOrderAction(
 
       redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=direct`;
     } else {
-      const init = await initializeTransaction({
-        email,
-        amount: chargeAmount,
-        reference,
-        callbackUrl: `${env.siteUrl()}/checkout/confirm`,
-        channels: channels.length ? channels : undefined,
-        metadata: {
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          depositAmount: order.depositAmount,
-          custom_fields: [
-            {
-              display_name: "Order",
-              variable_name: "order_number",
-              value: order.orderNumber,
+      let init = null;
+      try {
+        if (!paystackConfigured && isTestMode) {
+          redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=test`;
+        } else {
+          init = await initializeTransaction({
+            email,
+            amount: chargeAmount,
+            reference,
+            callbackUrl: `${env.siteUrl()}/checkout/confirm`,
+            channels: channels.length ? channels : undefined,
+            metadata: {
+              orderId: order.id,
+              orderNumber: order.orderNumber,
+              depositAmount: order.depositAmount,
+              custom_fields: [
+                {
+                  display_name: "Order",
+                  variable_name: "order_number",
+                  value: order.orderNumber,
+                },
+              ],
             },
-          ],
-        },
-      });
+          });
+        }
+      } catch (err) {
+        if (isTestMode) {
+          redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=test`;
+        } else {
+          throw err;
+        }
+      }
 
-      redirectUrl = init.authorization_url;
+      if (init?.authorization_url) {
+        redirectUrl = init.authorization_url;
+      } else if (!redirectUrl) {
+        if (isTestMode) {
+          redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=test`;
+        } else {
+          throw new Error("Unable to obtain payment authorization URL from Paystack.");
+        }
+      }
     }
   } catch (error) {
     if (error instanceof InsufficientStockError) {

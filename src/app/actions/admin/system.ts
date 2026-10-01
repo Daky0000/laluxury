@@ -58,6 +58,7 @@ export async function updateSettingsAction(
     agentRequiresApproval: formData.get("agentRequiresApproval") === "on",
     hideStorefrontNav: formData.get("hideStorefrontNav") === "on",
     hideAdminNav: formData.get("hideAdminNav") === "on",
+    paymentMode: formData.get("paymentMode") === "test" ? "test" : "live",
 
     // Home page content
     heroEyebrow: text("heroEyebrow"),
@@ -86,6 +87,15 @@ export async function updateSettingsAction(
   }
 
   await updateSettings(patch);
+
+  if (patch.paymentMode) {
+    try {
+      const { updateIntegrations } = await import("@/lib/integrations");
+      await updateIntegrations({ paystack: { mode: patch.paymentMode } });
+    } catch {
+      // Ignore if integrations table cannot be patched
+    }
+  }
   await recordAudit({
     actorId: actor.id,
     action: "settings.update",

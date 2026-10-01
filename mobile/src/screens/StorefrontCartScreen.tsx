@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -27,6 +27,12 @@ type Props = {
   onClearCart: () => void;
   onOrderSuccess: (orderNumber: string) => void;
   onBrowseProducts: () => void;
+  onNotify?: (notif: {
+    title: string;
+    message?: string;
+    type?: "success" | "info" | "warning" | "error";
+    icon?: keyof typeof Feather.glyphMap;
+  }) => void;
 };
 
 const PAYMENT_METHODS = [
@@ -59,11 +65,22 @@ export function StorefrontCartScreen({
   onClearCart,
   onOrderSuccess,
   onBrowseProducts,
+  onNotify,
 }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(PAYMENT_METHODS[0].id);
+  const [isTestMode, setIsTestMode] = useState(false);
+
+  useEffect(() => {
+    api
+      .getConfig()
+      .then((cfg) => {
+        setIsTestMode(Boolean(cfg.isTestMode));
+      })
+      .catch(() => {});
+  }, []);
 
   // Default Ghanaian delivery address
   const [shippingAddress, setShippingAddress] = useState<ShippingAddress>({
@@ -87,12 +104,28 @@ export function StorefrontCartScreen({
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) {
-      Alert.alert("Your Bag is Empty", "Add some handcrafted pieces before checking out.");
+      if (onNotify) {
+        onNotify({
+          title: "Bag is Empty",
+          message: "Add some handcrafted pieces before checking out.",
+          type: "warning",
+          icon: "shopping-bag",
+        });
+      } else {
+        Alert.alert("Your Bag is Empty", "Add some handcrafted pieces before checking out.");
+      }
       return;
     }
 
     if (!shippingAddress.line1 || !shippingAddress.city) {
-      Alert.alert("Shipping Address Required", "Please enter your street address.");
+      if (onNotify) {
+        onNotify({
+          title: "Address Required",
+          message: "Please enter your delivery street address.",
+          type: "warning",
+          icon: "map-pin",
+        });
+      }
       setShowAddressModal(true);
       return;
     }
@@ -127,14 +160,39 @@ export function StorefrontCartScreen({
       if (res.ok) {
         onClearCart();
 
-        // If Paystack returned a live authorization URL, open it in browser!
-        if (res.paymentUrl) {
+        if (res.isTestOrder) {
+          if (onNotify) {
+            onNotify({
+              title: "🧪 Test Order Placed!",
+              message: `Order #${res.order.orderNumber} placed in test mode. No real money charged.`,
+              type: "warning",
+              icon: "check-circle",
+            });
+          }
+        } else if (res.paymentUrl) {
+          if (onNotify) {
+            onNotify({
+              title: "Redirecting to Paystack",
+              message: `Opening Paystack secure checkout for Order #${res.order.orderNumber}...`,
+              type: "info",
+              icon: "credit-card",
+            });
+          }
           Linking.openURL(res.paymentUrl).catch(() => {
             Alert.alert(
               "Payment Initialized",
               `Order #${res.order.orderNumber} created. Paystack gateway link: ${res.paymentUrl}`,
             );
           });
+        } else {
+          if (onNotify) {
+            onNotify({
+              title: "Order Placed Successfully",
+              message: `Order #${res.order.orderNumber} received. Thank you for your order!`,
+              type: "success",
+              icon: "shopping-bag",
+            });
+          }
         }
 
         onOrderSuccess(res.order.orderNumber);
@@ -143,7 +201,16 @@ export function StorefrontCartScreen({
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to place order.";
-      Alert.alert("Order Error", msg);
+      if (onNotify) {
+        onNotify({
+          title: "Order Could Not Be Placed",
+          message: msg,
+          type: "error",
+          icon: "alert-circle",
+        });
+      } else {
+        Alert.alert("Order Error", msg);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -204,6 +271,19 @@ export function StorefrontCartScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Test Mode Banner */}
+        {isTestMode ? (
+          <View style={styles.testModeBanner}>
+            <Feather name="shield" size={16} color="#B45309" />
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text style={styles.testModeBannerTitle}>🧪 TEST MODE ACTIVE</Text>
+              <Text style={styles.testModeBannerSub}>
+                Purchases are simulated for testing. No real money will be charged.
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         {/* Title */}
         <Text style={styles.checkoutTitle}>CHECKOUT & PAYMENT</Text>
 
@@ -850,5 +930,28 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  testModeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF3C7",
+    borderColor: "#F59E0B",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+  testModeBannerTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#92400E",
+    letterSpacing: 0.5,
+  },
+  testModeBannerSub: {
+    fontSize: 10,
+    color: "#B45309",
+    marginTop: 2,
+    lineHeight: 14,
   },
 });

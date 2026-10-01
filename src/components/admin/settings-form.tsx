@@ -13,6 +13,7 @@ import { LANDING_PAGES, type LandingPage } from "@/lib/landing";
 import { Card, Field, Alert } from "@/components/ui";
 import { ImageUrlField } from "./image-url-field";
 import { toMajorUnits } from "@/lib/money";
+import { cn } from "@/lib/utils";
 
 export function SettingsForm({ settings }: { settings: StoreSettings }) {
   const [state, action, pending] = useActionState<AdminState | null, FormData>(
@@ -22,6 +23,7 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
   // Tracked so the note under the picker describes the page being chosen
   // rather than the one that is live.
   const [landingPage, setLandingPage] = useState<LandingPage>(settings.landingPage);
+  const [paymentMode, setPaymentMode] = useState<"live" | "test">(settings.paymentMode || "live");
 
   // Group admin nav menu items by tab/section
   const adminNavGroups = useMemo(() => {
@@ -39,6 +41,81 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
       {state?.message ? (
         <Alert tone={state.ok ? "success" : "danger"}>{state.message}</Alert>
       ) : null}
+
+      <Card className="flex flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="lx-eyebrow">Payment & Checkout Mode</h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              Control whether the website and mobile app process real payments or run in simulated test mode.
+            </p>
+          </div>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider",
+              paymentMode === "live"
+                ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                : "bg-amber-500/10 text-amber-600 border border-amber-500/20",
+            )}
+          >
+            {paymentMode === "live" ? "● Live Mode Active" : "🧪 Test Mode Active"}
+          </span>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label
+            className={cn(
+              "flex flex-col gap-2 rounded-xl border p-4 cursor-pointer transition-all",
+              paymentMode === "live"
+                ? "border-[var(--accent)] bg-[var(--surface-raised)] shadow-xs"
+                : "border-[var(--border-subtle)] bg-[var(--surface)] hover:border-[var(--border-strong)]",
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-sm text-[var(--text-primary)]">
+                Live Mode (Real Money)
+              </span>
+              <input
+                type="radio"
+                name="paymentMode"
+                value="live"
+                checked={paymentMode === "live"}
+                onChange={() => setPaymentMode("live")}
+                className="h-4 w-4 text-[var(--accent)]"
+              />
+            </div>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Customers pay real money in GH₵ using Paystack (MTN MoMo, Telecel, Card). Settled into your bank.
+            </p>
+          </label>
+
+          <label
+            className={cn(
+              "flex flex-col gap-2 rounded-xl border p-4 cursor-pointer transition-all",
+              paymentMode === "test"
+                ? "border-amber-500 bg-amber-500/5 shadow-xs"
+                : "border-[var(--border-subtle)] bg-[var(--surface)] hover:border-[var(--border-strong)]",
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-sm text-amber-700 dark:text-amber-400">
+                🧪 Test Mode (Simulated Purchases)
+              </span>
+              <input
+                type="radio"
+                name="paymentMode"
+                value="test"
+                checked={paymentMode === "test"}
+                onChange={() => setPaymentMode("test")}
+                className="h-4 w-4 text-amber-600"
+              />
+            </div>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              All checkout purchases on both web & mobile app are simulated. No real money moves. Perfect for testing orders, invoices, and workflows.
+            </p>
+          </label>
+        </div>
+      </Card>
 
       <Card className="flex flex-col gap-4 p-5">
         <h2 className="lx-eyebrow">Front page</h2>

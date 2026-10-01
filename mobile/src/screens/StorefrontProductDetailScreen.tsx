@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Dimensions,
+  Share,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -21,6 +22,12 @@ type Props = {
   onBack: () => void;
   onNavigateToBag: () => void;
   onAddToCart: (product: Product, variant: Variant, quantity: number) => void;
+  onNotify?: (notif: {
+    title: string;
+    message?: string;
+    type?: "success" | "info" | "warning" | "error";
+    icon?: keyof typeof Feather.glyphMap;
+  }) => void;
 };
 
 const { width } = Dimensions.get("window");
@@ -31,6 +38,7 @@ export function StorefrontProductDetailScreen({
   onBack,
   onNavigateToBag,
   onAddToCart,
+  onNotify,
 }: Props) {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
@@ -89,6 +97,36 @@ export function StorefrontProductDetailScreen({
     onAddToCart(product, activeVariant, quantity);
     setAddedToast(true);
     setTimeout(() => setAddedToast(false), 2200);
+    if (onNotify) {
+      onNotify({
+        title: "Added to Bag",
+        message: `${quantity}× ${product.title} (${activeVariant.title}) added to your bag.`,
+        type: "success",
+        icon: "shopping-bag",
+      });
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      const url = `https://laluxurys.com/product/${product.slug}`;
+      const formattedPrice = formatCurrency(price);
+      await Share.share({
+        title: product.title,
+        message: `Check out "${product.title}" (${formattedPrice}) from LaLuxury Atelier & Living:\n${url}`,
+        url,
+      });
+      if (onNotify) {
+        onNotify({
+          title: "Product Shared",
+          message: `Shared link for ${product.title}`,
+          type: "info",
+          icon: "share-2",
+        });
+      }
+    } catch {
+      // User cancelled
+    }
   };
 
   return (
@@ -104,18 +142,29 @@ export function StorefrontProductDetailScreen({
           <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.iconBtn}
-          onPress={onNavigateToBag}
-          activeOpacity={0.7}
-        >
-          <Feather name="shopping-bag" size={22} color={colors.text} />
-          {cartCount > 0 && (
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{cartCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={handleShare}
+            activeOpacity={0.7}
+            accessibilityLabel="Share Product"
+          >
+            <Feather name="share-2" size={20} color={colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={onNavigateToBag}
+            activeOpacity={0.7}
+          >
+            <Feather name="shopping-bag" size={22} color={colors.text} />
+            {cartCount > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{cartCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Added Toast */}
@@ -250,6 +299,15 @@ export function StorefrontProductDetailScreen({
 
       {/* Sticky Bottom Purchase Bar */}
       <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={styles.bottomShareBtn}
+          onPress={handleShare}
+          activeOpacity={0.7}
+          accessibilityLabel="Share piece"
+        >
+          <Feather name="share-2" size={18} color={colors.text} />
+        </TouchableOpacity>
+
         <View style={styles.bottomQtyGroup}>
           <TouchableOpacity
             style={styles.qtyBtn}
@@ -546,6 +604,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+  bottomShareBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceWarm,
   },
   bottomQtyGroup: {
     flexDirection: "row",
