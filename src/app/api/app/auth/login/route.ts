@@ -12,10 +12,16 @@ export const runtime = "nodejs";
 
 export const OPTIONS = apiOptionsResponse;
 
-const loginSchema = z.object({
-  identifier: z.string().min(1, "Enter your email or phone number."),
-  password: z.string().min(1, "Enter your password."),
-});
+const loginSchema = z
+  .object({
+    identifier: z.string().optional(),
+    email: z.string().optional(),
+    password: z.string().min(1, "Enter your password."),
+  })
+  .refine((data) => !!(data.identifier || data.email), {
+    message: "Enter your email or phone number.",
+    path: ["identifier"],
+  });
 
 export async function POST(request: Request) {
   try {
@@ -29,8 +35,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const { identifier, password } = parsed.data;
-    const clean = identifier.trim();
+    const { identifier, email, password } = parsed.data;
+    const clean = (identifier || email || "").trim();
 
     // Check if it's a phone number or an email
     const asPhone = normalisePhone(clean);
