@@ -3,9 +3,50 @@ import { StyleSheet, View, SafeAreaView, StatusBar, Alert, BackHandler, ToastAnd
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { colors } from "./src/theme/colors";
 import { api } from "./src/services/api";
-import { User, Product, Variant, CartItem } from "./src/types";
+import { User, Product, Variant, CartItem, ServerCartItem } from "./src/types";
+
+// Helper to convert server cart line items into mobile CartItem format
+function serverCartToLocalCart(items: ServerCartItem[]): CartItem[] {
+  return items.map((item) => ({
+    product: {
+      id: item.variant.productId,
+      title: item.variant.product.title,
+      slug: item.variant.product.slug,
+      status: "ACTIVE" as const,
+      minPrice: item.variant.price,
+      maxPrice: item.variant.price,
+      compareAtPrice: item.variant.compareAtPrice,
+      brand: null,
+      material: null,
+      isFeatured: false,
+      isPreorder: Boolean(item.variant.product.isPreorder),
+      tags: [],
+      totalStock: item.availableStock ?? 10,
+      variantCount: 1,
+      imageCount: item.variant.product.imageUrl ? 1 : 0,
+      images: item.variant.product.imageUrl
+        ? [{ id: "img-1", url: item.variant.product.imageUrl, alt: null, position: 0 }]
+        : [],
+      categories: [],
+      collections: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    variant: {
+      id: item.variant.id,
+      title: item.variant.title,
+      sku: item.variant.sku,
+      price: item.variant.price,
+      compareAtPrice: item.variant.compareAtPrice,
+      costPrice: null,
+      isActive: true,
+    },
+    quantity: item.quantity,
+  }));
+}
 
 // Storefront Screens
+
 import { StorefrontHomeScreen } from "./src/screens/StorefrontHomeScreen";
 import { StorefrontShopScreen } from "./src/screens/StorefrontShopScreen";
 import { StorefrontCartScreen } from "./src/screens/StorefrontCartScreen";
@@ -72,10 +113,38 @@ export default function App() {
             .catch(() => {
               // Retain cached session
             });
+
+          // Server-side cart synchronization for authenticated user
+          if (savedCart && savedCart.length > 0) {
+            api
+              .mergeGuestCartWithServer(
+                savedCart.map((i) => ({ variantId: i.variant.id, quantity: i.quantity })),
+              )
+              .then((res) => {
+                if (res.ok && res.cart?.items) {
+                  const synced = serverCartToLocalCart(res.cart.items);
+                  setCart(synced);
+                  api.saveCart(synced);
+                }
+              })
+              .catch(() => null);
+          } else {
+            api
+              .getServerCart()
+              .then((res) => {
+                if (res.ok && res.cart?.items && res.cart.items.length > 0) {
+                  const synced = serverCartToLocalCart(res.cart.items);
+                  setCart(synced);
+                  api.saveCart(synced);
+                }
+              })
+              .catch(() => null);
+          }
         }
       } catch {
         setUser(null);
       } finally {
+
         // Keep splash screen visible for a moment for smooth branded intro
         setTimeout(() => {
           setInitializing(false);
@@ -185,6 +254,11 @@ export default function App() {
       nextCart = [...cart, { product, variant: activeVariant, quantity: qty }];
     }
     updateCartState(nextCart);
+
+    if (user) {
+      api.addToServerCart(activeVariant.id, qty).catch(() => null);
+    }
+
     notify({
       title: "Added to Bag",
       message: `${qty}× ${product.title} added to your bag.`,
@@ -194,22 +268,32 @@ export default function App() {
   };
 
   const handleUpdateCartQty = (variantId: string, delta: number) => {
+    let nextQty = 0;
     const nextCart = cart
       .map((item) => {
         if (item.variant.id === variantId) {
-          const newQty = item.quantity + delta;
-          return newQty > 0 ? { ...item, quantity: newQty } : null;
+          nextQty = item.quantity + delta;
+          return nextQty > 0 ? { ...item, quantity: nextQty } : null;
         }
         return item;
       })
       .filter(Boolean) as CartItem[];
     updateCartState(nextCart);
+
+    if (user) {
+      api.updateServerCartItem(variantId, nextQty).catch(() => null);
+    }
   };
 
   const handleRemoveCartItem = (variantId: string) => {
     const itemToRemove = cart.find((i) => i.variant.id === variantId);
     const nextCart = cart.filter((item) => item.variant.id !== variantId);
     updateCartState(nextCart);
+
+    if (user) {
+      api.removeServerCartItem(variantId).catch(() => null);
+    }
+
     notify({
       title: "Item Removed",
       message: itemToRemove ? `${itemToRemove.product.title} removed from bag.` : "Item removed from bag.",
@@ -220,6 +304,11 @@ export default function App() {
 
   const handleClearCart = () => {
     updateCartState([]);
+
+    if (user) {
+      api.removeServerCartItem().catch(() => null);
+    }
+
     notify({
       title: "Bag Cleared",
       message: "All items have been removed.",
@@ -234,6 +323,33 @@ export default function App() {
     const isOwnerUser = ["OWNER", "ADMIN", "MANAGER", "STAFF"].includes(
       signedInUser.role,
     );
+
+    // Merge local guest cart or pull active server cart upon login
+    if (cart.length > 0) {
+      api
+        .mergeGuestCartWithServer(
+          cart.map((i) => ({ variantId: i.variant.id, quantity: i.quantity })),
+        )
+        .then((res) => {
+          if (res.ok && res.cart?.items) {
+            const synced = serverCartToLocalCart(res.cart.items);
+            setCart(synced);
+            api.saveCart(synced);
+          }
+        })
+        .catch(() => null);
+    } else {
+      api
+        .getServerCart()
+        .then((res) => {
+          if (res.ok && res.cart?.items && res.cart.items.length > 0) {
+            const synced = serverCartToLocalCart(res.cart.items);
+            setCart(synced);
+            api.saveCart(synced);
+          }
+        })
+        .catch(() => null);
+    }
 
     if (isOwnerUser) {
       setMode("BACKEND");
@@ -255,6 +371,7 @@ export default function App() {
       });
     }
   };
+
 
   const handleLogout = async () => {
     await api.clearSession();

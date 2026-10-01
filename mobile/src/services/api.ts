@@ -9,7 +9,11 @@ import {
   DashboardData,
   CartItem,
   ShippingAddress,
+  ShippingRate,
+  AppConfig,
+  ServerCart,
 } from "../types";
+
 
 // Default to live store URL, with support for local LAN and emulator endpoints
 const DEFAULT_URL = "https://laluxurys.com";
@@ -35,19 +39,10 @@ class ApiService {
       if (savedUrl) {
         let clean = savedUrl.trim().replace(/\/+$/, "");
         if (clean.startsWith("hhtps://")) clean = "https://" + clean.slice(8);
-        if (clean.startsWith("hhtp://")) clean = "http://" + clean.slice(7);
-        // If an old development or LAN address was stored in cache, force production URL
-        if (
-          clean.includes("localhost") ||
-          clean.includes("127.0.0.1") ||
-          clean.includes("192.168.") ||
-          clean.includes("10.0.")
-        ) {
-          this.baseUrl = DEFAULT_URL;
-          AsyncStorage.setItem(STORAGE_KEY_URL, DEFAULT_URL).catch(() => null);
-        } else {
-          this.baseUrl = clean;
+        if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
+          clean = `https://${clean}`;
         }
+        this.baseUrl = clean;
       } else {
         this.baseUrl = DEFAULT_URL;
       }
@@ -349,6 +344,87 @@ class ApiService {
     return this.request<DashboardData>("/api/app/dashboard");
   }
 
+  // --- Shipping & Delivery -------------------------------------------------
+
+  async getShippingRates(params: {
+    region?: string;
+    subtotal: number;
+    weight?: number;
+  }): Promise<{
+    ok: boolean;
+    region?: string;
+    subtotal: number;
+    rates: ShippingRate[];
+    freeShippingThreshold: number | null;
+    freeShippingQualified: boolean;
+  }> {
+    const searchParams = new URLSearchParams();
+    if (params.region) searchParams.set("region", params.region);
+    searchParams.set("subtotal", String(params.subtotal));
+    if (params.weight) searchParams.set("weight", String(params.weight));
+
+    try {
+      const res = await this.request<{
+        ok: boolean;
+        region?: string;
+        subtotal: number;
+        rates: ShippingRate[];
+        freeShippingThreshold: number | null;
+        freeShippingQualified: boolean;
+      }>(`/api/app/shipping/rates?${searchParams.toString()}`);
+      if (res && Array.isArray(res.rates)) {
+        return res;
+      }
+    } catch {
+      // Endpoint may not be deployed yet on live server; fall back to web quote endpoint
+    }
+
+    try {
+      const quoteUrl = `/api/shipping/quote?region=${encodeURIComponent(params.region || "Greater Accra")}`;
+      const webQuote = await this.request<{
+        rates: Array<{
+          id: string;
+          name: string;
+          price: number;
+          zoneName: string;
+          estimatedDaysMin: number | null;
+          estimatedDaysMax: number | null;
+          isFree: boolean;
+        }>;
+        subtotal: number;
+      }>(quoteUrl);
+
+      const rates: ShippingRate[] = (webQuote.rates || []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        price: r.price,
+        zoneName: r.zoneName,
+        estimatedDaysMin: r.estimatedDaysMin,
+        estimatedDaysMax: r.estimatedDaysMax,
+        isFree: Boolean(r.isFree || r.price === 0),
+      }));
+
+      return {
+        ok: true,
+        region: params.region || "Greater Accra",
+        subtotal: params.subtotal,
+        rates,
+        freeShippingThreshold: null,
+        freeShippingQualified: rates.some((r) => r.isFree || r.price === 0),
+      };
+    } catch (fallbackErr) {
+      console.warn("Failed to fetch shipping rates:", fallbackErr);
+      return {
+        ok: false,
+        region: params.region,
+        subtotal: params.subtotal,
+        rates: [],
+        freeShippingThreshold: null,
+        freeShippingQualified: false,
+      };
+    }
+  }
+
   // --- Orders & Checkout ----------------------------------------------------
 
   async getOrders(): Promise<{ orders: Order[] }> {
@@ -364,14 +440,22 @@ class ApiService {
       phone: string;
     };
     shippingAddress: ShippingAddress;
+    shippingRateId?: string | null;
+    discountCode?: string | null;
+    preorderDepositOption?: "full" | "deposit_50" | null;
     paymentMethod: string;
     customerNote?: string | null;
+    idempotencyKey?: string | null;
   }): Promise<{
     ok: boolean;
     order: {
       id: string;
       orderNumber: string;
+      subtotal?: number;
+      discountTotal?: number;
+      shippingTotal?: number;
       total: number;
+      depositAmount?: number | null;
       currency: string;
       status: string;
       placedAt: string;
@@ -380,26 +464,13 @@ class ApiService {
     paymentUrl?: string | null;
     isTestOrder?: boolean;
   }> {
-    return this.request<{
-      ok: boolean;
-      order: {
-        id: string;
-        orderNumber: string;
-        total: number;
-        currency: string;
-        status: string;
-        placedAt: string;
-        reference: string;
-      };
-      paymentUrl?: string | null;
-      isTestOrder?: boolean;
-    }>("/api/app/orders", {
+    return this.request("/api/app/orders", {
       method: "POST",
       body: JSON.stringify(orderData),
     });
   }
 
-  // --- Local Cart Storage ---------------------------------------------------
+  // --- Cart Continuity (Server & Local) -------------------------------------
 
   async getSavedCart(): Promise<CartItem[]> {
     try {
@@ -418,25 +489,42 @@ class ApiService {
     }
   }
 
+  async getServerCart(): Promise<{ ok: boolean; authenticated: boolean; cart: ServerCart }> {
+    return this.request("/api/app/cart");
+  }
+
+  async addToServerCart(variantId: string, quantity = 1): Promise<{ ok: boolean; cart: ServerCart }> {
+    return this.request("/api/app/cart", {
+      method: "POST",
+      body: JSON.stringify({ variantId, quantity }),
+    });
+  }
+
+  async updateServerCartItem(variantId: string, quantity: number): Promise<{ ok: boolean; cart: ServerCart }> {
+    return this.request("/api/app/cart", {
+      method: "PATCH",
+      body: JSON.stringify({ variantId, quantity }),
+    });
+  }
+
+  async removeServerCartItem(variantId?: string): Promise<{ ok: boolean; cart: ServerCart }> {
+    const url = variantId ? `/api/app/cart?variantId=${encodeURIComponent(variantId)}` : "/api/app/cart";
+    return this.request(url, { method: "DELETE" });
+  }
+
+  async mergeGuestCartWithServer(
+    items: Array<{ variantId: string; quantity: number }>,
+  ): Promise<{ ok: boolean; cart: ServerCart }> {
+    return this.request("/api/app/cart/merge", {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    });
+  }
+
   // --- App Config & Payment Mode --------------------------------------------
 
-  async getConfig(): Promise<{
-    ok: boolean;
-    storeName: string;
-    tagline: string;
-    currency: string;
-    paymentMode: "live" | "test";
-    isTestMode: boolean;
-    paystack: {
-      ready: boolean;
-      mode: "live" | "test";
-      publicKey: string | null;
-    };
-    supportEmail: string;
-    supportPhone: string;
-    freeShippingThreshold: number | null;
-  }> {
-    return this.request("/api/app/config");
+  async getConfig(): Promise<AppConfig> {
+    return this.request<AppConfig>("/api/app/config");
   }
 
   // --- App Version & Update -------------------------------------------------
@@ -460,5 +548,5 @@ class ApiService {
   }
 }
 
-
 export const api = new ApiService();
+

@@ -7,6 +7,10 @@ import { generateOrderNumber } from "@/lib/slug";
 import { reserveStock } from "@/lib/inventory";
 import { logOrderEvent } from "@/lib/orders";
 import { normalisePhone } from "@/lib/phone";
+import { quoteShipping } from "@/lib/shipping";
+import { validateDiscount, type DiscountLine } from "@/lib/discounts";
+import { getSettings } from "@/lib/settings";
+import { getIntegrations, isReady } from "@/lib/integrations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,9 +44,14 @@ const checkoutSchema = z.object({
     postalCode: z.string().trim().optional().nullable(),
     country: z.string().trim().optional().default("GH"),
   }),
+  shippingRateId: z.string().optional().nullable(),
+  discountCode: z.string().trim().optional().nullable(),
+  preorderDepositOption: z.enum(["full", "deposit_50"]).optional().nullable(),
   paymentMethod: z.string().optional().default("pay_on_delivery"),
   customerNote: z.string().trim().optional().nullable(),
+  idempotencyKey: z.string().trim().optional().nullable(),
 });
+
 
 // ---------------------------------------------------------------------------
 // GET /api/app/orders - List customer orders or staff recent store orders
@@ -130,6 +139,57 @@ export const POST = withApiAuth(async (request: Request) => {
   const data = parsed.data;
   const cleanPhone = normalisePhone(data.customer.phone) || data.customer.phone;
 
+  // Determine user id if authenticated or matching customer email/phone
+  let userId = user?.id ?? null;
+  if (!userId) {
+    const existing = await db.user.findFirst({
+      where: {
+        OR: [
+          { email: { equals: data.customer.email.toLowerCase(), mode: "insensitive" } },
+          ...(cleanPhone ? [{ phone: cleanPhone }] : []),
+        ],
+      },
+      select: { id: true },
+    });
+    if (existing) userId = existing.id;
+  }
+
+  // Idempotency protection: prevent duplicate orders if client retries
+  const idempotencyKey =
+    request.headers.get("x-idempotency-key") ||
+    data.idempotencyKey ||
+    null;
+
+  if (idempotencyKey) {
+    const recentDuplicate = await db.order.findFirst({
+      where: {
+        email: data.customer.email.toLowerCase().trim(),
+        customerNote: { contains: `[idempotency:${idempotencyKey}]` },
+        createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+      },
+      include: {
+        items: true,
+        payments: { take: 1, orderBy: { createdAt: "desc" } },
+      },
+    });
+
+    if (recentDuplicate) {
+      return NextResponse.json({
+        ok: true,
+        order: {
+          id: recentDuplicate.id,
+          orderNumber: recentDuplicate.orderNumber,
+          total: recentDuplicate.total,
+          currency: recentDuplicate.currency,
+          status: recentDuplicate.status,
+          placedAt: recentDuplicate.createdAt.toISOString(),
+          reference: recentDuplicate.payments[0]?.reference || `${recentDuplicate.orderNumber}-REF`,
+        },
+        message: "Order already placed (idempotent replay).",
+      });
+    }
+  }
+
   // Resolve variants from database
   const variantIds = data.items.map((i) => i.variantId);
   const variants = await db.variant.findMany({
@@ -138,6 +198,7 @@ export const POST = withApiAuth(async (request: Request) => {
       product: {
         include: {
           images: { take: 1, orderBy: { position: "asc" } },
+          categories: { select: { categoryId: true } },
         },
       },
       inventory: true,
@@ -166,12 +227,99 @@ export const POST = withApiAuth(async (request: Request) => {
     }
   }
 
-  // Calculate pricing
+  // Calculate Subtotal
   let subtotal = 0;
-  const lineItemsData = data.items.map((item) => {
+  for (const item of data.items) {
+    const v = variantMap.get(item.variantId)!;
+    subtotal += v.price * item.quantity;
+  }
+
+  // Authoritative shipping calculation via unified shipping engine
+  const region = data.shippingAddress.region || "Greater Accra";
+  const [shippingQuotes, settings, integrations] = await Promise.all([
+    quoteShipping({ region, subtotal, totalWeightGrams: 0 }).catch(() => []),
+    getSettings().catch(() => null),
+    getIntegrations().catch(() => null),
+  ]);
+
+  const storeFreeThreshold = settings?.freeShippingThreshold;
+  const storeFreeApplies =
+    storeFreeThreshold !== null &&
+    storeFreeThreshold !== undefined &&
+    subtotal >= storeFreeThreshold;
+
+  let shippingTotal = 0;
+  let appliedShippingRateId: string | null = null;
+
+  if (storeFreeApplies) {
+    shippingTotal = 0;
+  } else if (data.shippingRateId) {
+    const matched = shippingQuotes.find((q) => q.id === data.shippingRateId);
+    if (matched) {
+      shippingTotal = matched.price;
+      appliedShippingRateId = matched.id;
+    } else {
+      const rate = await db.shippingRate.findUnique({
+        where: { id: data.shippingRateId },
+      }).catch(() => null);
+      if (rate && rate.isActive) {
+        shippingTotal =
+          rate.freeAboveSubtotal && subtotal >= rate.freeAboveSubtotal ? 0 : rate.price;
+        appliedShippingRateId = rate.id;
+      } else {
+        shippingTotal = shippingQuotes[0]?.price ?? 0;
+        appliedShippingRateId = shippingQuotes[0]?.id ?? null;
+      }
+    }
+  } else if (shippingQuotes.length > 0) {
+    shippingTotal = shippingQuotes[0].price;
+    appliedShippingRateId = shippingQuotes[0].id;
+  } else {
+    shippingTotal = 0;
+  }
+
+  // Calculate discount if promo code was provided
+  let discountTotal = 0;
+  let allocation: number[] = data.items.map(() => 0);
+  let discountRecordId: string | null = null;
+
+  if (data.discountCode) {
+    const discountLines: DiscountLine[] = data.items.map((item) => {
+      const v = variantMap.get(item.variantId)!;
+      return {
+        variantId: v.id,
+        productId: v.productId,
+        categoryIds: v.product.categories.map((c) => c.categoryId),
+        quantity: item.quantity,
+        unitPrice: v.price,
+      };
+    });
+
+    const val = await validateDiscount(data.discountCode, {
+      lines: discountLines,
+      subtotal,
+      shippingTotal,
+      userId,
+      email: data.customer.email.toLowerCase().trim(),
+    });
+
+    if (!val.ok) {
+      return NextResponse.json({ error: val.reason }, { status: 400 });
+    }
+
+    discountTotal = val.result.amount;
+    allocation = val.result.allocation;
+    if (val.result.freeShipping) {
+      shippingTotal = 0;
+    }
+    discountRecordId = val.result.discount.id;
+  }
+
+  // Prepare line items
+  const lineItemsData = data.items.map((item, idx) => {
     const v = variantMap.get(item.variantId)!;
     const lineTotal = v.price * item.quantity;
-    subtotal += lineTotal;
+    const allocated = allocation[idx] || 0;
     return {
       variantId: v.id,
       productId: v.productId,
@@ -183,30 +331,23 @@ export const POST = withApiAuth(async (request: Request) => {
       preorderLeadTime: v.product.preorderLeadTime ?? null,
       quantity: item.quantity,
       unitPrice: v.price,
-      discountAllocated: 0,
-      total: lineTotal,
+      discountAllocated: allocated,
+      total: lineTotal - allocated,
     };
   });
 
-  // Flat shipping for mobile (or free if over threshold)
-  const shippingTotal = 2500; // standard delivery (minor units)
-  const total = subtotal + shippingTotal;
-  const orderNumber = generateOrderNumber();
+  const grandTotal = Math.max(0, subtotal - discountTotal) + shippingTotal;
+  const hasPreorderItems = variants.some((v) => Boolean(v.product.isPreorder));
+  const is50PercentDeposit = hasPreorderItems && data.preorderDepositOption === "deposit_50";
+  const depositAmount = is50PercentDeposit ? Math.round(grandTotal * 0.5) : null;
+  const chargeAmount = depositAmount ?? grandTotal;
 
-  // Determine user id if authenticated or matching customer email/phone
-  let userId = user?.id ?? null;
-  if (!userId) {
-    const existing = await db.user.findFirst({
-      where: {
-        OR: [
-          { email: { equals: data.customer.email.toLowerCase(), mode: "insensitive" } },
-          ...(cleanPhone ? [{ phone: cleanPhone }] : []),
-        ],
-      },
-      select: { id: true },
-    });
-    if (existing) userId = existing.id;
+  const orderNumber = generateOrderNumber();
+  const noteParts = [data.customerNote?.trim()];
+  if (idempotencyKey) {
+    noteParts.push(`[idempotency:${idempotencyKey}]`);
   }
+  const combinedCustomerNote = noteParts.filter(Boolean).join(" ") || null;
 
   const order = await db.$transaction(async (tx) => {
     const shipping = await tx.address.create({
@@ -232,16 +373,18 @@ export const POST = withApiAuth(async (request: Request) => {
         phone: cleanPhone,
         status: "PENDING",
         paymentStatus: "PENDING",
-        hasPreorderItems: variants.some((v) => Boolean(v.product.isPreorder)),
+        hasPreorderItems,
         paymentMethod: data.paymentMethod,
+        depositAmount,
         subtotal,
-        discountTotal: 0,
+        discountTotal,
         shippingTotal,
         taxTotal: 0,
-        total,
+        total: grandTotal,
         shippingAddressId: shipping.id,
         billingAddressId: shipping.id,
-        customerNote: data.customerNote ?? null,
+        shippingRateId: appliedShippingRateId,
+        customerNote: combinedCustomerNote,
         items: {
           create: lineItemsData,
         },
@@ -266,6 +409,37 @@ export const POST = withApiAuth(async (request: Request) => {
     console.warn("Stock reservation warning:", stockErr);
   }
 
+  // Increment discount usage if promo code applied
+  if (discountRecordId) {
+    await db.discount.update({
+      where: { id: discountRecordId },
+      data: { timesUsed: { increment: 1 } },
+    }).catch(() => {});
+
+    await db.discountRedemption.create({
+      data: {
+        discountId: discountRecordId,
+        orderId: order.id,
+        userId,
+        amount: discountTotal,
+      },
+    }).catch(() => {});
+  }
+
+
+  // Clear or convert user's active server cart on successful order
+  if (userId) {
+    const activeCart = await db.cart.findFirst({
+      where: { userId, convertedOrderId: null },
+    });
+    if (activeCart) {
+      await db.cart.update({
+        where: { id: activeCart.id },
+        data: { convertedOrderId: order.id },
+      }).catch(() => {});
+    }
+  }
+
   const reference = `${order.orderNumber}-${Date.now().toString(36).toUpperCase()}`;
 
   // Check Paystack integration & Payment Mode
@@ -273,13 +447,6 @@ export const POST = withApiAuth(async (request: Request) => {
   let isTestOrder = false;
   const isDirectMethod =
     data.paymentMethod === "pay_on_delivery" || data.paymentMethod === "direct_momo";
-
-  const { getSettings } = await import("@/lib/settings");
-  const { getIntegrations, isReady } = await import("@/lib/integrations");
-  const [settings, integrations] = await Promise.all([
-    getSettings().catch(() => null),
-    getIntegrations().catch(() => null),
-  ]);
 
   const activeMode = settings?.paymentMode || integrations?.paystack?.mode || "live";
   const paystackReady = integrations ? isReady(integrations, "paystack") : false;
@@ -292,7 +459,7 @@ export const POST = withApiAuth(async (request: Request) => {
         const { env } = await import("@/lib/env");
         const init = await initializeTransaction({
           email: data.customer.email.toLowerCase().trim(),
-          amount: order.total,
+          amount: chargeAmount,
           reference,
           callbackUrl: `${env.siteUrl()}/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=test`,
           currency: order.currency,
@@ -323,7 +490,7 @@ export const POST = withApiAuth(async (request: Request) => {
       const { env } = await import("@/lib/env");
       const init = await initializeTransaction({
         email: data.customer.email.toLowerCase().trim(),
-        amount: order.total,
+        amount: chargeAmount,
         reference,
         callbackUrl: `${env.siteUrl()}/checkout/confirm?reference=${encodeURIComponent(reference)}`,
         currency: order.currency,
@@ -347,7 +514,7 @@ export const POST = withApiAuth(async (request: Request) => {
     }
   }
 
-  // Create payment record
+  // Create payment record for the charge amount (full or 50% deposit)
   const initialPaymentStatus = isTestOrder && !paymentUrl ? "SUCCESS" : "PENDING";
   await db.payment.create({
     data: {
@@ -355,7 +522,7 @@ export const POST = withApiAuth(async (request: Request) => {
       reference,
       provider: paymentUrl ? "paystack" : isTestOrder ? "test_simulation" : "direct",
       channel: isTestOrder && !paymentUrl ? "test_sandbox" : data.paymentMethod,
-      amount: order.total,
+      amount: chargeAmount,
       currency: order.currency,
       status: initialPaymentStatus,
     },
@@ -373,7 +540,7 @@ export const POST = withApiAuth(async (request: Request) => {
   await logOrderEvent({
     orderId: order.id,
     type: "order.placed",
-    message: `Mobile order ${order.orderNumber} placed via ${data.paymentMethod}${isTestOrder ? " [TEST MODE]" : ""}. Total: ${total}.${paymentUrl ? " Paystack transaction initialized." : ""}`,
+    message: `Mobile order ${order.orderNumber} placed via ${data.paymentMethod}${isTestOrder ? " [TEST MODE]" : ""}. Total: ${grandTotal}${depositAmount ? ` (50% deposit: ${depositAmount})` : ""}.${paymentUrl ? " Paystack transaction initialized." : ""}`,
     actorId: userId,
   });
 
@@ -382,7 +549,11 @@ export const POST = withApiAuth(async (request: Request) => {
     order: {
       id: order.id,
       orderNumber: order.orderNumber,
+      subtotal: order.subtotal,
+      discountTotal: order.discountTotal,
+      shippingTotal: order.shippingTotal,
       total: order.total,
+      depositAmount: order.depositAmount,
       currency: order.currency,
       status: order.status,
       placedAt: order.placedAt.toISOString(),
@@ -393,3 +564,4 @@ export const POST = withApiAuth(async (request: Request) => {
     paymentUrl,
   });
 });
+

@@ -15,8 +15,9 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
-import { CartItem, User, ShippingAddress } from "../types";
+import { CartItem, User, ShippingAddress, ShippingRate, GHANA_REGIONS } from "../types";
 import { formatCurrency } from "../utils/format";
+
 
 type Props = {
   cart: CartItem[];
@@ -72,12 +73,22 @@ export function StorefrontCartScreen({
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(PAYMENT_METHODS[0].id);
   const [isTestMode, setIsTestMode] = useState(false);
+  const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
+  const [selectedRateId, setSelectedRateId] = useState<string | null>(null);
+  const [loadingRates, setLoadingRates] = useState(false);
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState<number | null>(null);
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
+  const [preorderDepositOption, setPreorderDepositOption] = useState<"full" | "deposit_50">("full");
 
   useEffect(() => {
     api
       .getConfig()
       .then((cfg) => {
         setIsTestMode(Boolean(cfg.isTestMode));
+        if (cfg.freeShippingThreshold !== undefined) {
+          setFreeShippingThreshold(cfg.freeShippingThreshold);
+        }
       })
       .catch(() => {});
   }, []);
@@ -99,8 +110,46 @@ export function StorefrontCartScreen({
     return acc + item.variant.price * item.quantity;
   }, 0);
 
-  const shippingFee = cart.length > 0 ? 2500 : 0; // GH₵ 25.00 (in minor units)
+  // Dynamically quote shipping rates whenever region or subtotal changes
+  useEffect(() => {
+    if (cart.length === 0) {
+      setShippingRates([]);
+      return;
+    }
+    setLoadingRates(true);
+    api
+      .getShippingRates({
+        region: shippingAddress.region,
+        subtotal,
+      })
+      .then((res) => {
+        if (res.ok) {
+          setShippingRates(res.rates || []);
+          if (res.freeShippingThreshold !== undefined) {
+            setFreeShippingThreshold(res.freeShippingThreshold);
+          }
+          if (res.rates && res.rates.length > 0) {
+            setSelectedRateId((curr) => {
+              const stillExists = res.rates.some((r) => r.id === curr);
+              return stillExists ? curr : res.rates[0].id;
+            });
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingRates(false));
+  }, [shippingAddress.region, subtotal, cart.length]);
+
+  const selectedRate = shippingRates.find((r) => r.id === selectedRateId) || shippingRates[0];
+  const isFreeDelivery =
+    Boolean(selectedRate?.isFree) ||
+    (freeShippingThreshold !== null && subtotal >= freeShippingThreshold);
+  const shippingFee = cart.length > 0 ? (isFreeDelivery ? 0 : (selectedRate?.price ?? 0)) : 0;
   const total = subtotal + shippingFee;
+
+  const hasPreorderItems = cart.some((item) => Boolean(item.product.isPreorder));
+  const is50PercentDeposit = hasPreorderItems && preorderDepositOption === "deposit_50";
+  const amountDueNow = is50PercentDeposit ? Math.round(total * 0.5) : total;
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) {
@@ -153,7 +202,11 @@ export function StorefrontCartScreen({
           region: shippingAddress.region,
           country: shippingAddress.country,
         },
+        shippingRateId: selectedRate?.id || null,
+        discountCode: appliedPromo || null,
+        preorderDepositOption: hasPreorderItems ? preorderDepositOption : null,
         paymentMethod: selectedPayment,
+        idempotencyKey: `mob-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
       };
 
       const res = await api.checkout(orderPayload);
@@ -162,6 +215,7 @@ export function StorefrontCartScreen({
 
         if (res.isTestOrder) {
           if (onNotify) {
+
             onNotify({
               title: "🧪 Test Order Placed!",
               message: `Order #${res.order.orderNumber} placed in test mode. No real money charged.`,
@@ -351,6 +405,85 @@ export function StorefrontCartScreen({
           ))}
         </View>
 
+        {/* Free Shipping Qualification Banner */}
+        {freeShippingThreshold !== null && (
+          <View
+            style={[
+              styles.freeShippingNotice,
+              isFreeDelivery ? styles.freeShippingNoticeActive : null,
+            ]}
+          >
+            <Feather
+              name={isFreeDelivery ? "check-circle" : "truck"}
+              size={14}
+              color={isFreeDelivery ? "#2E7D32" : colors.primary}
+            />
+            <Text
+              style={[
+                styles.freeShippingNoticeText,
+                isFreeDelivery ? styles.freeShippingNoticeTextActive : null,
+              ]}
+            >
+              {isFreeDelivery
+                ? "Free Nationwide Delivery qualified on this order!"
+                : `Add ${formatCurrency(Math.max(0, freeShippingThreshold - subtotal))} more for Free Delivery`}
+            </Text>
+          </View>
+        )}
+
+        {/* Pre-order Deposit Option if cart contains pre-order items */}
+        {hasPreorderItems && (
+          <View style={styles.preorderDepositCard}>
+            <View style={styles.preorderDepositHeader}>
+              <Feather name="clock" size={15} color={colors.primary} />
+              <Text style={styles.preorderDepositTitle}>Pre-Order Deposit Option</Text>
+            </View>
+            <Text style={styles.preorderDepositSubtitle}>
+              Your bag contains bespoke handcrafted pieces made to order.
+            </Text>
+            <View style={styles.preorderDepositTabs}>
+              <TouchableOpacity
+                style={[
+                  styles.depositTab,
+                  preorderDepositOption === "deposit_50" && styles.depositTabActive,
+                ]}
+                onPress={() => setPreorderDepositOption("deposit_50")}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.depositTabText,
+                    preorderDepositOption === "deposit_50" && styles.depositTabTextActive,
+                  ]}
+                >
+                  50% Deposit Now
+                </Text>
+                <Text style={styles.depositTabAmount}>
+                  {formatCurrency(Math.round(total * 0.5))}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.depositTab,
+                  preorderDepositOption === "full" && styles.depositTabActive,
+                ]}
+                onPress={() => setPreorderDepositOption("full")}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.depositTabText,
+                    preorderDepositOption === "full" && styles.depositTabTextActive,
+                  ]}
+                >
+                  Pay in Full
+                </Text>
+                <Text style={styles.depositTabAmount}>{formatCurrency(total)}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Cost Summary Breakdown */}
         <View style={styles.summaryBox}>
           <View style={styles.summaryRow}>
@@ -358,13 +491,33 @@ export function StorefrontCartScreen({
             <Text style={styles.summaryValue}>{formatCurrency(subtotal)}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>DELIVERY (STANDARD)</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(shippingFee)}</Text>
+            <Text style={styles.summaryLabel}>
+              DELIVERY ({selectedRate ? selectedRate.name.toUpperCase() : "STANDARD"})
+            </Text>
+            <Text style={styles.summaryValue}>
+              {loadingRates ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : isFreeDelivery ? (
+                "FREE"
+              ) : (
+                formatCurrency(shippingFee)
+              )}
+            </Text>
           </View>
           <View style={[styles.summaryRow, styles.summaryTotalRow]}>
             <Text style={styles.totalLabel}>TOTAL</Text>
             <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
           </View>
+          {is50PercentDeposit && (
+            <View style={[styles.summaryRow, { marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: "#EAD5D9" }]}>
+              <Text style={[styles.summaryLabel, { color: colors.primary, fontWeight: "700" }]}>
+                DUE TODAY (50% DEPOSIT)
+              </Text>
+              <Text style={[styles.summaryValue, { color: colors.primary, fontWeight: "800", fontSize: 16 }]}>
+                {formatCurrency(amountDueNow)}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Shipping Address Card */}
@@ -385,6 +538,72 @@ export function StorefrontCartScreen({
             </View>
             <Feather name="chevron-right" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
+        </View>
+
+        {/* Delivery Method Selector */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionHeaderLabel}>DELIVERY METHOD</Text>
+          {loadingRates ? (
+            <View style={[styles.cardSelectable, { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 14 }]}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={{ marginLeft: 8, fontSize: 13, color: colors.textSecondary }}>
+                Quoting delivery rates...
+              </Text>
+            </View>
+          ) : shippingRates.length === 0 ? (
+            <View style={styles.cardSelectable}>
+              <View style={styles.cardContentLeft}>
+                <Text style={styles.paymentMethodText}>Standard Delivery</Text>
+                <Text style={styles.paymentMethodSub}>{shippingAddress.region} · Calculated at checkout</Text>
+              </View>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: colors.primary }}>
+                {isFreeDelivery ? "FREE" : "—"}
+              </Text>
+            </View>
+          ) : (
+            <View style={{ gap: 8 }}>
+              {shippingRates.map((rate) => {
+                const isSelected = selectedRate?.id === rate.id;
+                const ratePrice = isFreeDelivery || rate.isFree ? 0 : rate.price;
+                return (
+                  <TouchableOpacity
+                    key={rate.id}
+                    style={[
+                      styles.cardSelectable,
+                      isSelected && {
+                        borderColor: colors.primary,
+                        borderWidth: 1.5,
+                        backgroundColor: "#FAF7F5",
+                      },
+                    ]}
+                    onPress={() => setSelectedRateId(rate.id)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.cardContentLeft}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={[styles.paymentMethodText, isSelected && { color: colors.primary, fontWeight: "700" }]}>
+                          {rate.name}
+                        </Text>
+                        {(rate.isFree || ratePrice === 0) && (
+                          <View style={{ backgroundColor: "#E6F4EA", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                            <Text style={{ color: "#137333", fontSize: 11, fontWeight: "700" }}>FREE</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.paymentMethodSub}>
+                        {rate.estimatedDaysMin !== null && rate.estimatedDaysMax !== null
+                          ? `${rate.estimatedDaysMin === rate.estimatedDaysMax ? rate.estimatedDaysMin : `${rate.estimatedDaysMin}–${rate.estimatedDaysMax}`} business days · ${rate.zoneName}`
+                          : rate.zoneName}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: isSelected ? colors.primary : colors.text }}>
+                      {ratePrice === 0 ? "FREE" : formatCurrency(ratePrice)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* Payment Method Card */}
@@ -415,10 +634,11 @@ export function StorefrontCartScreen({
           ) : (
             <Text style={styles.placeOrderText}>
               {selectedPayment === "paystack" ? "PROCEED TO PAYSTACK · " : "PLACE ORDER · "}
-              {formatCurrency(total)}
+              {formatCurrency(amountDueNow)}
             </Text>
           )}
         </TouchableOpacity>
+
 
         {/* Secure Checkout Sub-label */}
         <View style={styles.secureFooter}>
@@ -476,19 +696,50 @@ export function StorefrontCartScreen({
                 }
               />
 
-              <Text style={styles.inputLabel}>City & Region</Text>
+              <Text style={styles.inputLabel}>City / Town</Text>
               <TextInput
                 style={styles.input}
-                value={`${shippingAddress.city}, ${shippingAddress.region}`}
-                onChangeText={(val) => {
-                  const parts = val.split(",");
-                  setShippingAddress((prev) => ({
-                    ...prev,
-                    city: parts[0]?.trim() || "Accra",
-                    region: parts[1]?.trim() || "Greater Accra",
-                  }));
-                }}
+                value={shippingAddress.city}
+                onChangeText={(val) =>
+                  setShippingAddress((prev) => ({ ...prev, city: val }))
+                }
               />
+
+              <Text style={styles.inputLabel}>Region (Ghana)</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingVertical: 6 }}
+              >
+                {GHANA_REGIONS.map((reg) => {
+                  const isSelected = shippingAddress.region === reg;
+                  return (
+                    <TouchableOpacity
+                      key={reg}
+                      onPress={() => setShippingAddress((prev) => ({ ...prev, region: reg }))}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 7,
+                        borderRadius: 8,
+                        backgroundColor: isSelected ? colors.primary : "#F3F1EC",
+                        borderWidth: 1,
+                        borderColor: isSelected ? colors.primary : "#E5E1D8",
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: isSelected ? "700" : "500",
+                          color: isSelected ? "#FFFFFF" : colors.text,
+                        }}
+                      >
+                        {reg}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </ScrollView>
 
             <TouchableOpacity
@@ -698,7 +949,92 @@ const styles = StyleSheet.create({
   deleteBtn: {
     padding: 4,
   },
+  freeShippingNotice: {
+
+    backgroundColor: "#FBF5F6",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#EAD5D9",
+    marginBottom: 8,
+  },
+  freeShippingNoticeActive: {
+    backgroundColor: "#EDF7ED",
+    borderColor: "#C8E6C9",
+  },
+  freeShippingNoticeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.primary,
+    flex: 1,
+  },
+  freeShippingNoticeTextActive: {
+    color: "#2E7D32",
+  },
+  preorderDepositCard: {
+    backgroundColor: colors.surfaceWarm,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#EAD5D9",
+    marginBottom: 10,
+  },
+  preorderDepositHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 3,
+  },
+  preorderDepositTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primary,
+    letterSpacing: 0.3,
+  },
+  preorderDepositSubtitle: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginBottom: 10,
+  },
+  preorderDepositTabs: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  depositTab: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    alignItems: "center",
+    backgroundColor: colors.surface,
+  },
+  depositTabActive: {
+    borderColor: colors.primary,
+    backgroundColor: "#FBF5F6",
+  },
+  depositTabText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  depositTabTextActive: {
+    color: colors.primary,
+    fontWeight: "700",
+  },
+  depositTabAmount: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: colors.text,
+  },
   summaryBox: {
+
     backgroundColor: colors.surfaceWarm,
     borderRadius: 16,
     padding: 16,

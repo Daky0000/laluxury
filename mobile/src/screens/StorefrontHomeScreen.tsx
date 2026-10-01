@@ -13,8 +13,9 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
-import { Product, User, Category } from "../types";
+import { Product, User, Category, AppConfig } from "../types";
 import { formatCurrency } from "../utils/format";
+
 
 type Props = {
   user: User | null;
@@ -46,6 +47,7 @@ export function StorefrontHomeScreen({
 }: Props) {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [addedNotice, setAddedNotice] = useState<string | null>(null);
@@ -55,13 +57,15 @@ export function StorefrontHomeScreen({
 
   const loadData = useCallback(async () => {
     try {
-      const [prodRes, catRes] = await Promise.all([
+      const [prodRes, catRes, cfgRes] = await Promise.all([
         api.getProducts({ limit: 12 }),
         api.getCategories().catch(() => ({ categories: [] })),
+        api.getConfig().catch(() => null),
       ]);
 
       setProducts(prodRes.products || []);
       setCategories(catRes.categories || []);
+      if (cfgRes) setConfig(cfgRes);
     } catch {
       // Graceful fallback
     } finally {
@@ -69,6 +73,7 @@ export function StorefrontHomeScreen({
       setRefreshing(false);
     }
   }, []);
+
 
   useEffect(() => {
     loadData();
@@ -149,6 +154,16 @@ export function StorefrontHomeScreen({
         </TouchableOpacity>
       </View>
 
+      {/* Dynamic Store Announcement Bar from Settings */}
+      {config?.announcementBar ? (
+        <View style={styles.announcementBar}>
+          <Feather name="bell" size={12} color="#FFFFFF" style={{ marginRight: 6 }} />
+          <Text style={styles.announcementBarText} numberOfLines={1}>
+            {config.announcementBar}
+          </Text>
+        </View>
+      ) : null}
+
       {/* Owner Access Quick Banner (When logged in as owner/admin) */}
       {isOwnerOrStaff && onSwitchToBackend && (
         <TouchableOpacity
@@ -192,14 +207,22 @@ export function StorefrontHomeScreen({
           <Text style={styles.greetingTitle}>
             Welcome, {greetingName}.
           </Text>
-          <Text style={styles.greetingSub}>Curated elegance for mindful spaces.</Text>
+          <Text style={styles.greetingSub}>
+            {config?.tagline || "Curated elegance for mindful spaces."}
+          </Text>
         </View>
 
         {/* Hero Showcase Card */}
         <View style={styles.heroCard}>
           <View style={styles.heroContent}>
-            <Text style={styles.heroTag}>THE ATELIER COLLECTION</Text>
-            <Text style={styles.heroSubTag}>BESPOKE LIVING & SEATING</Text>
+            <Text style={styles.heroTag}>
+              {(config?.hero?.eyebrow || "THE ATELIER COLLECTION").toUpperCase()}
+            </Text>
+            <Text style={styles.heroSubTag}>
+              {config?.hero
+                ? `${config.hero.title} ${config.hero.titleAccent}`.toUpperCase()
+                : "BESPOKE LIVING & SEATING"}
+            </Text>
             <TouchableOpacity
               style={styles.heroButton}
               onPress={() => {
@@ -244,13 +267,20 @@ export function StorefrontHomeScreen({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.collectionScroll}
         >
-          {[
-            { id: "living", name: "LIVING ROOM", icon: "home" },
-            { id: "bedroom", name: "BEDROOM", icon: "moon" },
-            { id: "dining", name: "DINING", icon: "coffee" },
-            { id: "lighting", name: "LIGHTING", icon: "sun" },
-            { id: "decor", name: "DECOR", icon: "award" },
-          ].map((cat) => (
+          {(categories.length > 0
+            ? categories.map((cat, idx) => ({
+                id: cat.id,
+                name: cat.name.toUpperCase(),
+                icon: (["home", "moon", "coffee", "sun", "award", "feather", "box"][idx % 7]) as any,
+              }))
+            : [
+                { id: "living", name: "LIVING ROOM", icon: "home" },
+                { id: "bedroom", name: "BEDROOM", icon: "moon" },
+                { id: "dining", name: "DINING", icon: "coffee" },
+                { id: "lighting", name: "LIGHTING", icon: "sun" },
+                { id: "decor", name: "DECOR", icon: "award" },
+              ]
+          ).map((cat) => (
             <TouchableOpacity
               key={cat.id}
               style={styles.collectionItem}
@@ -266,6 +296,7 @@ export function StorefrontHomeScreen({
         </ScrollView>
 
         {/* Editorial Craftsmanship Banner */}
+
         <TouchableOpacity
           style={styles.editorialBanner}
           onPress={() => onNavigateToShop()}
@@ -390,10 +421,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
   },
+  announcementBar: {
+    backgroundColor: "#5C1D29",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+  },
+  announcementBarText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+  },
   brandContainer: {
     alignItems: "center",
     justifyContent: "center",
   },
+
   brandTitle: {
     fontFamily: "serif",
     fontSize: 22,

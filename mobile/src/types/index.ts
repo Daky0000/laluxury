@@ -159,3 +159,105 @@ export type DashboardData = {
     imageUrl?: string | null;
   }>;
 };
+
+export type ShippingRate = {
+
+  id: string;
+  name: string;
+  price: number;
+  zoneName: string;
+  estimatedDaysMin: number | null;
+  estimatedDaysMax: number | null;
+  isFree: boolean;
+};
+
+export type AppConfig = {
+  ok: boolean;
+  apiVersion?: string;
+  revision?: number;
+  storeName: string;
+  tagline: string;
+  currency: string;
+  paymentMode: "live" | "test";
+  isTestMode: boolean;
+  paystack: {
+    ready: boolean;
+    mode: "live" | "test";
+    publicKey: string | null;
+  };
+  supportEmail: string;
+  supportPhone: string;
+  whatsappNumber: string;
+  addressLine?: string;
+  instagramUrl?: string;
+  freeShippingThreshold: number | null;
+  lowStockThreshold?: number;
+  announcementBar?: string;
+  announcements?: string[];
+  hero?: {
+    eyebrow: string;
+    title: string;
+    titleAccent: string;
+    body: string;
+    imageUrl: string;
+  };
+  policies?: {
+    returnsPolicy: string;
+    shippingPolicy: string;
+  };
+};
+
+export type ServerCartItem = {
+  id: string;
+  variantId: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  availableStock?: number | null;
+  isPreorder?: boolean;
+  variant: {
+    id: string;
+    productId: string;
+    title: string;
+    sku: string;
+    price: number;
+    compareAtPrice: number | null;
+    product: {
+      id: string;
+      title: string;
+      slug: string;
+      isPreorder: boolean;
+      imageUrl: string | null;
+    };
+  };
+};
+
+export type ServerCart = {
+  cartId?: string;
+  items: ServerCartItem[];
+  subtotal: number;
+  itemCount: number;
+  discountCode?: string | null;
+};
+
+export const GHANA_REGIONS = [
+  "Greater Accra",
+  "Ashanti",
+  "Western",
+  "Western North",
+  "Central",
+  "Eastern",
+  "Volta",
+  "Oti",
+  "Northern",
+  "Savannah",
+  "North East",
+  "Upper East",
+  "Upper West",
+  "Bono",
+  "Bono East",
+  "Ahafo",
+] as const;
+
+export type GhanaRegion = (typeof GHANA_REGIONS)[number];
+
