@@ -30,7 +30,7 @@ export async function dashboardMetrics(windowDays = 30) {
         where: { paymentStatus: "SUCCESS", paidAt: { gte: priorSince, lt: since } },
         select: { total: true },
       }),
-      db.$transaction([
+      Promise.all([
         db.product.count({ where: { status: "ACTIVE" } }),
         db.user.count({ where: { role: "CUSTOMER" } }),
         db.order.count(),

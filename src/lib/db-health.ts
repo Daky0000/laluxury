@@ -16,7 +16,7 @@ function parseHostAndPort(urlStr: string): { host: string; port: number } {
   }
 }
 
-function probeTcp(host: string, port: number, timeoutMs = 250): Promise<boolean> {
+function probeTcp(host: string, port: number, timeoutMs = 3000): Promise<boolean> {
   return new Promise((resolve) => {
     let resolved = false;
     const socket = net.createConnection({ host, port });
@@ -37,6 +37,12 @@ function probeTcp(host: string, port: number, timeoutMs = 250): Promise<boolean>
 }
 
 export async function checkDbConnection(): Promise<boolean> {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    isDbReachable = false;
+    return false;
+  }
+
   const now = Date.now();
   if (isDbReachable !== null && now - lastCheck < CHECK_INTERVAL_MS) {
     return isDbReachable;
@@ -46,15 +52,9 @@ export async function checkDbConnection(): Promise<boolean> {
     return inFlightProbe;
   }
 
-  const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl) {
-    isDbReachable = false;
-    return false;
-  }
-
   const { host, port } = parseHostAndPort(dbUrl);
 
-  inFlightProbe = probeTcp(host, port, 250)
+  inFlightProbe = probeTcp(host, port, 3000)
     .then((ok) => {
       isDbReachable = ok;
       lastCheck = Date.now();
@@ -62,24 +62,21 @@ export async function checkDbConnection(): Promise<boolean> {
       return ok;
     })
     .catch(() => {
-      isDbReachable = false;
+      // Do not hard-block queries if probe had an isolated error
+      isDbReachable = true;
       lastCheck = Date.now();
       inFlightProbe = null;
-      return false;
+      return true;
     });
 
   return inFlightProbe;
 }
 
 export function isDbTemporarilyDown(): boolean {
-  if (isDbReachable === false && Date.now() - lastCheck < CHECK_INTERVAL_MS) {
-    return true;
-  }
   return false;
 }
 
 export function recordDbFailure(): void {
-  isDbReachable = false;
   lastCheck = Date.now();
 }
 
@@ -90,3 +87,4 @@ export function recordDbSuccess(): void {
 
 // Initial probe
 checkDbConnection().catch(() => {});
+

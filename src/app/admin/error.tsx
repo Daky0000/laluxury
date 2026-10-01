@@ -32,11 +32,14 @@ export default function AdminError({
             Database Offline or Reconnecting
           </h1>
           <p className="mt-2 text-sm text-[var(--text-secondary)] leading-relaxed">
-            The database connection was interrupted. If you are developing locally, please ensure <strong>Docker Desktop</strong> is open and your <code>laluxury-pg</code> PostgreSQL container is started.
+            The service is temporarily reconnecting to the database. Please click <strong>Retry Connection</strong> below.
           </p>
-          <div className="mt-4 rounded-lg bg-[var(--surface-sunken)] p-3 text-left font-mono text-xs text-[var(--text-muted)]">
-            <code>docker start laluxury-pg</code>
-          </div>
+          {process.env.NODE_ENV !== "production" ? (
+            <div className="mt-4 rounded-lg bg-[var(--surface-sunken)] p-3 text-left font-mono text-xs text-[var(--text-muted)]">
+              <span className="block text-[10px] text-[var(--text-muted)] mb-1">Local dev command:</span>
+              <code>docker start laluxury-pg</code>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-2 flex gap-3">

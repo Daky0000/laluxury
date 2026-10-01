@@ -1,7 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma";
 import { env } from "./env";
-import { isDbTemporarilyDown, checkDbConnection, recordDbFailure } from "./db-health";
 
 /**
  * The database client, and the pool behind it.
@@ -20,7 +19,7 @@ import { isDbTemporarilyDown, checkDbConnection, recordDbFailure } from "./db-he
  * headroom is worth more on the database's side of the connection.
  */
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
+  prisma: ReturnType<typeof createClient> | undefined;
 };
 
 /**
@@ -33,7 +32,7 @@ function poolMax(): number {
   return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 3;
 }
 
-function createClient(): PrismaClient {
+function createClient() {
   const adapter = new PrismaPg({
     connectionString: env.databaseUrl(),
     max: poolMax(),
@@ -58,58 +57,9 @@ function createClient(): PrismaClient {
     omit: { mediaAsset: { data: true } },
   });
 
-  return new Proxy(client, {
-    get(target, prop, receiver) {
-      const orig = Reflect.get(target, prop, receiver);
-
-      // Guard top-level raw methods like $queryRaw and $transaction
-      if (typeof prop === "string" && prop.startsWith("$") && typeof orig === "function") {
-        return async (...args: unknown[]) => {
-          if (isDbTemporarilyDown() || !(await checkDbConnection())) {
-            throw new Error("Database is currently offline.");
-          }
-          try {
-            return await orig.apply(target, args);
-          } catch (err) {
-            recordDbFailure();
-            throw err;
-          }
-        };
-      }
-
-      // Guard model access (e.g., db.user, db.category, db.product)
-      if (
-        typeof prop === "string" &&
-        !prop.startsWith("$") &&
-        orig !== null &&
-        typeof orig === "object"
-      ) {
-        return new Proxy(orig, {
-          get(modelTarget, modelProp, modelReceiver) {
-            const method = Reflect.get(modelTarget, modelProp, modelReceiver);
-            if (typeof method === "function") {
-              return async (...args: unknown[]) => {
-                if (isDbTemporarilyDown() || !(await checkDbConnection())) {
-                  throw new Error("Database is currently offline.");
-                }
-                try {
-                  return await method.apply(modelTarget, args);
-                } catch (err) {
-                  recordDbFailure();
-                  throw err;
-                }
-              };
-            }
-            return method;
-          },
-        });
-      }
-
-      return orig;
-    },
-  }) as unknown as PrismaClient;
+  return client;
 }
 
-export const db: PrismaClient = globalForPrisma.prisma ?? createClient();
+export const db = globalForPrisma.prisma ?? createClient();
 
 globalForPrisma.prisma = db;

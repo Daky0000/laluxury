@@ -68,7 +68,7 @@ export default function GlobalError({
               margin: "0 0 24px",
             }}
           >
-            The service is reconnecting. If running locally, please ensure Docker Desktop is open and your database is running.
+            The service is temporarily reconnecting. Please click retry below.
           </p>
           <button
             type="button"
