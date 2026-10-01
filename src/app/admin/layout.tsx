@@ -199,24 +199,34 @@ const NAV: {
 ];
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
-  const user = await currentUser();
+  let user = null;
+  try {
+    user = await currentUser();
+  } catch {
+    user = null;
+  }
 
   if (!user) redirect("/login");
   if (!isStaff(user.role)) redirect("/account");
 
-  // Counts of action items waiting for staff attention
-  const [openOrders, pendingReviews, openPreorderRequests, openPreorderOrders, settings] = await Promise.all([
-    db.order.count({ where: { status: { in: ["PAID", "PROCESSING"] } } }),
-    db.review.count({ where: { isApproved: false } }),
-    db.preorderRequest.count({ where: { status: { in: ["NEW", "QUOTED", "SOURCING"] } } }),
-    db.order.count({
-      where: {
-        hasPreorderItems: true,
-        status: { in: ["PENDING", "PAID", "PROCESSING"] },
-      },
-    }),
-    getSettings(),
-  ]);
+  // Counts of action items waiting for staff attention (safe against DB hiccups)
+  const [openOrders, pendingReviews, openPreorderRequests, openPreorderOrders, settings] =
+    await Promise.all([
+      db.order.count({ where: { status: { in: ["PAID", "PROCESSING"] } } }).catch(() => 0),
+      db.review.count({ where: { isApproved: false } }).catch(() => 0),
+      db.preorderRequest
+        .count({ where: { status: { in: ["NEW", "QUOTED", "SOURCING"] } } })
+        .catch(() => 0),
+      db.order
+        .count({
+          where: {
+            hasPreorderItems: true,
+            status: { in: ["PENDING", "PAID", "PROCESSING"] },
+          },
+        })
+        .catch(() => 0),
+      getSettings().catch(() => ({})),
+    ]);
 
   const badges: Record<string, number> = {
     "/admin/orders": openOrders,
