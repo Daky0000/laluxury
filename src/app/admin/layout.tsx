@@ -8,7 +8,7 @@ import { AdminNav, type NavItem } from "@/components/admin/nav";
 import { AdminTopbar } from "@/components/admin/topbar";
 import { AdminNavProvider } from "@/components/admin/admin-nav-context";
 import { AdminHelpModal } from "@/components/admin/admin-help-modal";
-import { getSettings } from "@/lib/settings";
+import { getSettings, DEFAULT_SETTINGS } from "@/lib/settings";
 import { initials } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -225,7 +225,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           },
         })
         .catch(() => 0),
-      getSettings().catch(() => ({})),
+      getSettings().catch(() => DEFAULT_SETTINGS),
     ]);
 
   const badges: Record<string, number> = {
