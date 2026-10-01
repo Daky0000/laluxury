@@ -444,6 +444,8 @@ class ApiService {
     discountCode?: string | null;
     preorderDepositOption?: "full" | "deposit_50" | null;
     paymentMethod: string;
+    momoPhone?: string | null;
+    momoProvider?: "mtn" | "vod" | "tgo" | null;
     customerNote?: string | null;
     idempotencyKey?: string | null;
   }): Promise<{
@@ -463,10 +465,53 @@ class ApiService {
     };
     paymentUrl?: string | null;
     isTestOrder?: boolean;
+    momoPush?: {
+      status: string;
+      reference: string;
+      phone: string;
+      provider: string;
+      providerLabel: string;
+      amountFormatted: string;
+      displayText: string;
+    } | null;
+    token?: string | null;
+    user?: User | null;
   }> {
     return this.request("/api/app/orders", {
       method: "POST",
       body: JSON.stringify(orderData),
+    });
+  }
+
+  async verifyOrderPayment(reference: string, simulate = false): Promise<{
+    ok: boolean;
+    paid: boolean;
+    status?: string;
+    message?: string;
+    error?: string;
+    channel?: string;
+    simulated?: boolean;
+    order?: Order;
+  }> {
+    return this.request(`/api/app/orders/verify?reference=${encodeURIComponent(reference)}${simulate ? "&simulate=true" : ""}`);
+  }
+
+  async submitOrderOtp(reference: string, otp: string): Promise<{
+    ok: boolean;
+    paid?: boolean;
+    status?: string;
+    displayText?: string;
+    error?: string;
+  }> {
+    return this.request("/api/app/orders/verify", {
+      method: "POST",
+      body: JSON.stringify({ reference, otp }),
+    });
+  }
+
+  async resendOrderReceipt(orderNumber: string): Promise<{ ok: boolean; message: string }> {
+    return this.request(`/api/app/orders/${encodeURIComponent(orderNumber)}/receipt`, {
+      method: "POST",
     });
   }
 

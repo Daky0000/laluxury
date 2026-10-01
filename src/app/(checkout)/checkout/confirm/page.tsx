@@ -198,9 +198,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
           </h1>
           <p className="mx-auto mt-3.5 max-w-[500px] text-base font-light leading-relaxed text-[var(--text-secondary)]">
             Your order <strong className="font-medium text-[var(--text-primary)]">{fresh.orderNumber}</strong> is
-            confirmed. We have recorded your details under {fresh.email} and our concierge team will
-            reach you on {formatPhone(fresh.phone ?? fresh.shippingAddress?.phone ?? "")} to finalize
-            dispatch.
+            confirmed. An official receipt has been dispatched via SMS to {formatPhone(fresh.phone ?? fresh.shippingAddress?.phone ?? "")} and emailed to {fresh.email}. Our concierge team will reach you to finalize dispatch.
           </p>
 
           <dl className="mt-7 inline-flex flex-wrap justify-center gap-x-9 gap-y-4 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-8 py-4.5 text-left">
@@ -350,14 +348,20 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
 
         {/* CTAs */}
         <section className="lx-container flex flex-wrap justify-center gap-3.5 pb-8">
-          <Link href="/shop" className="lx-cta">
-            Continue shopping
+          <Link
+            href={`/orders/${fresh.orderNumber}/invoice`}
+            className="inline-flex items-center justify-center gap-2 border border-[var(--accent)] bg-[var(--accent)] px-8 py-4 text-sm font-medium uppercase tracking-[0.12em] text-[var(--accent-contrast)] transition-colors hover:bg-ink-800"
+          >
+            Download Receipt / Tax Invoice (PDF)
           </Link>
           <Link
             href={`/orders/track?order=${fresh.orderNumber}`}
             className="inline-flex items-center justify-center border border-[var(--border-strong)] px-8 py-4 text-sm font-medium uppercase tracking-[0.12em] transition-colors hover:bg-[var(--surface-sunken)]"
           >
             Track this order
+          </Link>
+          <Link href="/shop" className="inline-flex items-center justify-center border border-[var(--border-subtle)] px-8 py-4 text-sm font-medium uppercase tracking-[0.12em] text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-sunken)]">
+            Continue shopping
           </Link>
         </section>
 

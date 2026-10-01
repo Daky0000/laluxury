@@ -70,6 +70,10 @@ Classification:
 | Pre-order 50% Deposit | `src/lib/orders.ts` | Supported | Supported in checkout API & cart | User selection | **Shared (Parity Achieved)** | Allows 50% advance for bespoke items |
 | Discount Codes | `src/lib/discounts.ts` | Supported | Supported in checkout API & cart | User coupon entry | **Shared (Parity Achieved)** | Validated on backend against order subtotal |
 | Payment Channels | Paystack + Direct MoMo + Concierge | Supported | Supported | Checkout modal | **Shared (Parity Achieved)** | Paystack redirect or instant settlement |
+| Direct MoMo Prompt (`momo_push`) | Paystack Direct Charge API | Web & API | Native in-app USSD prompt + polling | Checkout submission | **Shared (Parity Achieved)** | Sends USSD prompt to phone for instant 4-digit PIN |
+| SMS & Email Purchase Receipts | `src/lib/notify.ts:notifyOrder` | Sent on payment | Sent on app order placement & MoMo approval | Order creation / payment | **Shared (Parity Achieved)** | Dispatches SMS via Vynfy & Email receipt |
+| PDF Invoice Download | `/orders/[orderNumber]/invoice` | Confirmation page | OrderConfirmationModal & share action | Post-checkout | **Shared (Parity Achieved)** | Official tax invoice download link |
+| Guest Auto-Account Creation | `db.user` from customer phone | Web registration | Auto-created in `/api/app/orders` | Checkout | **Shared (Parity Achieved)** | Phone links account & issues bearer token |
 | Idempotency Protection | `db.order` unique reference | Supported | `Idempotency-Key` / unique order | Network request | **Shared (Parity Achieved)** | Blocks double order creation |
 
 ---

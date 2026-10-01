@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,6 @@ import { api } from "../services/api";
 import { CartItem, User, ShippingAddress, ShippingRate, GHANA_REGIONS } from "../types";
 import { formatCurrency } from "../utils/format";
 
-
 type Props = {
   cart: CartItem[];
   user: User | null;
@@ -26,7 +25,7 @@ type Props = {
   onUpdateQuantity: (variantId: string, delta: number) => void;
   onRemoveItem: (variantId: string) => void;
   onClearCart: () => void;
-  onOrderSuccess: (orderNumber: string) => void;
+  onOrderSuccess: (orderNumber: string, customerPhone?: string, customerEmail?: string) => void;
   onBrowseProducts: () => void;
   onNotify?: (notif: {
     title: string;
@@ -34,20 +33,28 @@ type Props = {
     type?: "success" | "info" | "warning" | "error";
     icon?: keyof typeof Feather.glyphMap;
   }) => void;
+  onAuthSuccess?: (user: User, token: string) => void;
 };
 
 const PAYMENT_METHODS = [
   {
+    id: "momo_push",
+    label: "Mobile Money (Instant Phone Prompt)",
+    subtitle: "Prompt sent to phone — enter 4-digit PIN to pay instantly",
+    icon: "smartphone" as const,
+    badge: "POPULAR IN GHANA",
+  },
+  {
     id: "paystack",
-    label: "Paystack (Card & Mobile Money)",
-    subtitle: "Instant settlement via MTN, Telecel, AT & Visa/Mastercard",
+    label: "Paystack (Debit/Credit Card)",
+    subtitle: "Instant settlement via Visa, Mastercard & web gateway",
     icon: "credit-card" as const,
   },
   {
     id: "direct_momo",
     label: "Direct MoMo / Bank Transfer",
-    subtitle: "Manual transfer to official store account with verification",
-    icon: "smartphone" as const,
+    subtitle: "Manual transfer to official merchant account with verification",
+    icon: "send" as const,
   },
   {
     id: "pay_on_delivery",
@@ -56,6 +63,34 @@ const PAYMENT_METHODS = [
     icon: "truck" as const,
   },
 ];
+
+const NETWORKS: Array<{
+  id: "mtn" | "vod" | "tgo";
+  name: string;
+  badgeColor: string;
+  badgeTextColor: string;
+}> = [
+  { id: "mtn", name: "MTN Mobile Money", badgeColor: "#FFCC00", badgeTextColor: "#000000" },
+  { id: "vod", name: "Telecel (Vodafone)", badgeColor: "#E60000", badgeTextColor: "#FFFFFF" },
+  { id: "tgo", name: "AT Money (AirtelTigo)", badgeColor: "#003399", badgeTextColor: "#FFFFFF" },
+];
+
+function detectMoMoProvider(phone: string): "mtn" | "vod" | "tgo" {
+  const clean = phone.replace(/[^0-9]/g, "");
+  let prefix = "";
+  if (clean.startsWith("233")) {
+    prefix = clean.substring(3, 5);
+  } else if (clean.startsWith("0")) {
+    prefix = clean.substring(1, 3);
+  } else {
+    prefix = clean.substring(0, 2);
+  }
+
+  if (["24", "54", "55", "59", "53"].includes(prefix)) return "mtn";
+  if (["20", "50"].includes(prefix)) return "vod";
+  if (["27", "57", "26", "56"].includes(prefix)) return "tgo";
+  return "mtn";
+}
 
 export function StorefrontCartScreen({
   cart,
@@ -67,6 +102,7 @@ export function StorefrontCartScreen({
   onOrderSuccess,
   onBrowseProducts,
   onNotify,
+  onAuthSuccess,
 }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
@@ -80,6 +116,42 @@ export function StorefrontCartScreen({
   const [promoCodeInput, setPromoCodeInput] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [preorderDepositOption, setPreorderDepositOption] = useState<"full" | "deposit_50">("full");
+
+  // Customer contact states for instant MoMo and receipt delivery
+  const [momoPhone, setMomoPhone] = useState(user?.phone || "0241234567");
+  const [momoProvider, setMomoProvider] = useState<"mtn" | "vod" | "tgo">(
+    detectMoMoProvider(user?.phone || "0241234567")
+  );
+  const [customerEmail, setCustomerEmail] = useState(user?.email || "");
+
+  // MoMo Authorization Prompt Modal states
+  const [showMoMoPromptModal, setShowMoMoPromptModal] = useState(false);
+  const [momoPushData, setMomoPushData] = useState<{
+    status: string;
+    reference: string;
+    phone: string;
+    provider: string;
+    providerLabel: string;
+    amountFormatted: string;
+    displayText: string;
+  } | null>(null);
+  const [pendingOrderNumber, setPendingOrderNumber] = useState<string | null>(null);
+  const [momoPolling, setMomoPolling] = useState(false);
+  const [momoVerified, setMomoVerified] = useState(false);
+  const [momoErrorMessage, setMomoErrorMessage] = useState<string | null>(null);
+  const [otpInput, setOtpInput] = useState("");
+  const [submittingOtp, setSubmittingOtp] = useState(false);
+  const [verifyingManual, setVerifyingManual] = useState(false);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clean up interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     api
@@ -151,6 +223,138 @@ export function StorefrontCartScreen({
   const is50PercentDeposit = hasPreorderItems && preorderDepositOption === "deposit_50";
   const amountDueNow = is50PercentDeposit ? Math.round(total * 0.5) : total;
 
+  const startMoMoPolling = (
+    reference: string,
+    orderNum: string,
+    phone: string,
+    token?: string | null,
+    loggedUser?: User | null,
+  ) => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    setMomoPolling(true);
+    let attempts = 0;
+    const maxAttempts = 35; // ~105 seconds
+
+    pollingIntervalRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const verifyRes = await api.verifyOrderPayment(reference);
+        if (verifyRes.ok && verifyRes.paid) {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          setMomoPolling(false);
+          setMomoVerified(true);
+
+          if (token && loggedUser) {
+            await api.setSession(token, loggedUser);
+            onAuthSuccess?.(loggedUser, token);
+          }
+
+          setTimeout(() => {
+            setShowMoMoPromptModal(false);
+            onClearCart();
+            onOrderSuccess(
+              orderNum,
+              phone,
+              customerEmail.trim() || user?.email || undefined
+            );
+          }, 1500);
+        } else if (attempts >= maxAttempts) {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          setMomoPolling(false);
+        }
+      } catch {
+        // Continue polling silently
+      }
+    }, 3000);
+  };
+
+  const handleManualVerifyMoMo = async (simulate = false) => {
+    if (!momoPushData?.reference || !pendingOrderNumber) return;
+    setVerifyingManual(true);
+    setMomoErrorMessage(null);
+
+    try {
+      const verifyRes = await api.verifyOrderPayment(momoPushData.reference, simulate);
+      if (verifyRes.ok && verifyRes.paid) {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+        setMomoPolling(false);
+        setMomoVerified(true);
+
+        setTimeout(() => {
+          setShowMoMoPromptModal(false);
+          onClearCart();
+          onOrderSuccess(
+            pendingOrderNumber,
+            momoPushData.phone,
+            customerEmail.trim() || user?.email || undefined
+          );
+        }, 1200);
+      } else if (verifyRes.status === "failed") {
+        setMomoErrorMessage(verifyRes.error || "Payment was declined or cancelled on your handset.");
+      } else {
+        if (onNotify) {
+          onNotify({
+            title: "Awaiting Confirmation",
+            message: "Payment prompt is still pending. Please authorize on your phone.",
+            type: "info",
+            icon: "smartphone",
+          });
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Verification check failed";
+      setMomoErrorMessage(msg);
+    } finally {
+      setVerifyingManual(false);
+    }
+  };
+
+  const handleSubmitMoMoOtp = async () => {
+    if (!momoPushData?.reference || !otpInput.trim()) return;
+    setSubmittingOtp(true);
+    setMomoErrorMessage(null);
+
+    try {
+      const res = await api.submitOrderOtp(momoPushData.reference, otpInput.trim());
+      if (res.ok && res.paid) {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+        setMomoPolling(false);
+        setMomoVerified(true);
+        setTimeout(() => {
+          setShowMoMoPromptModal(false);
+          onClearCart();
+          onOrderSuccess(
+            pendingOrderNumber || "ORDER",
+            momoPushData.phone,
+            customerEmail.trim() || user?.email || undefined
+          );
+        }, 1200);
+      } else {
+        handleManualVerifyMoMo();
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Invalid voucher code or OTP.";
+      setMomoErrorMessage(msg);
+    } finally {
+      setSubmittingOtp(false);
+    }
+  };
+
   const handlePlaceOrder = async () => {
     if (cart.length === 0) {
       if (onNotify) {
@@ -179,6 +383,23 @@ export function StorefrontCartScreen({
       return;
     }
 
+    if (selectedPayment === "momo_push") {
+      const cleanMomo = (momoPhone || shippingAddress.phone || "").replace(/[^0-9]/g, "");
+      if (cleanMomo.length < 9) {
+        if (onNotify) {
+          onNotify({
+            title: "MoMo Number Required",
+            message: "Please enter a valid Ghana Mobile Money phone number to receive the prompt.",
+            type: "warning",
+            icon: "smartphone",
+          });
+        } else {
+          Alert.alert("Phone Required", "Please enter a valid Ghana Mobile Money phone number.");
+        }
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const orderPayload = {
@@ -189,7 +410,10 @@ export function StorefrontCartScreen({
         customer: {
           firstName: shippingAddress.firstName,
           lastName: shippingAddress.lastName,
-          email: user?.email || "customer@laluxurys.com",
+          email:
+            customerEmail.trim() ||
+            user?.email ||
+            `${(shippingAddress.phone || "customer").replace(/[^0-9]/g, "")}@customer.laluxurys.com`,
           phone: shippingAddress.phone,
         },
         shippingAddress: {
@@ -206,16 +430,44 @@ export function StorefrontCartScreen({
         discountCode: appliedPromo || null,
         preorderDepositOption: hasPreorderItems ? preorderDepositOption : null,
         paymentMethod: selectedPayment,
+        momoPhone: selectedPayment === "momo_push" ? (momoPhone || shippingAddress.phone) : undefined,
+        momoProvider: selectedPayment === "momo_push" ? momoProvider : undefined,
         idempotencyKey: `mob-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
       };
 
       const res = await api.checkout(orderPayload);
       if (res.ok) {
+        // If guest checkout created an account and returned credentials, save session immediately
+        if (res.token && res.user) {
+          try {
+            await api.setSession(res.token, res.user);
+            onAuthSuccess?.(res.user, res.token);
+          } catch {
+            // Non-critical session persist
+          }
+        }
+
+        // Direct Mobile Money USSD prompt path
+        if (res.momoPush && res.momoPush.status === "pay_offline") {
+          setMomoPushData(res.momoPush);
+          setPendingOrderNumber(res.order.orderNumber);
+          setMomoVerified(false);
+          setMomoErrorMessage(null);
+          setShowMoMoPromptModal(true);
+          startMoMoPolling(
+            res.momoPush.reference,
+            res.order.orderNumber,
+            res.momoPush.phone,
+            res.token,
+            res.user,
+          );
+          return;
+        }
+
         onClearCart();
 
         if (res.isTestOrder) {
           if (onNotify) {
-
             onNotify({
               title: "🧪 Test Order Placed!",
               message: `Order #${res.order.orderNumber} placed in test mode. No real money charged.`,
@@ -242,14 +494,18 @@ export function StorefrontCartScreen({
           if (onNotify) {
             onNotify({
               title: "Order Placed Successfully",
-              message: `Order #${res.order.orderNumber} received. Thank you for your order!`,
+              message: `Order #${res.order.orderNumber} received. Receipt sent via SMS & Email.`,
               type: "success",
               icon: "shopping-bag",
             });
           }
         }
 
-        onOrderSuccess(res.order.orderNumber);
+        onOrderSuccess(
+          res.order.orderNumber,
+          shippingAddress.phone,
+          customerEmail.trim() || user?.email || undefined
+        );
       } else {
         throw new Error("Unable to complete order.");
       }
@@ -615,12 +871,107 @@ export function StorefrontCartScreen({
             activeOpacity={0.8}
           >
             <View style={styles.cardContentLeft}>
-              <Text style={styles.paymentMethodText}>{currentPayment.label}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={styles.paymentMethodText}>{currentPayment.label}</Text>
+                {currentPayment.badge && (
+                  <View style={{ backgroundColor: "#F3E8EC", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                    <Text style={{ color: colors.primary, fontSize: 10, fontWeight: "700" }}>{currentPayment.badge}</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.paymentMethodSub}>{currentPayment.subtitle}</Text>
             </View>
             <Feather name="chevron-right" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
+
+        {/* Mobile Money Inline Configuration */}
+        {selectedPayment === "momo_push" && (
+          <View style={styles.momoCard}>
+            <View style={styles.momoCardHeader}>
+              <Feather name="smartphone" size={16} color={colors.primary} />
+              <Text style={styles.momoCardTitle}>INSTANT MOBILE MONEY PROMPT</Text>
+            </View>
+            <Text style={styles.momoCardSubtitle}>
+              We will send a USSD prompt with the exact amount to your phone. Simply enter your 4-digit MoMo PIN to approve.
+            </Text>
+
+            {/* Network Chips */}
+            <Text style={styles.momoInputLabel}>SELECT NETWORK</Text>
+            <View style={styles.networkSelectorRow}>
+              {NETWORKS.map((net) => {
+                const isSelected = momoProvider === net.id;
+                return (
+                  <TouchableOpacity
+                    key={net.id}
+                    style={[
+                      styles.networkChip,
+                      isSelected && styles.networkChipSelected,
+                    ]}
+                    onPress={() => setMomoProvider(net.id)}
+                    activeOpacity={0.8}
+                  >
+                    <View
+                      style={[
+                        styles.networkDot,
+                        { backgroundColor: net.badgeColor },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.networkChipText,
+                        isSelected && styles.networkChipTextSelected,
+                      ]}
+                    >
+                      {net.name.split(" ")[0]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* MoMo Phone Number Input */}
+            <Text style={styles.momoInputLabel}>MOMO PHONE NUMBER (FOR PIN PROMPT & SMS)</Text>
+            <View style={styles.momoPhoneInputWrapper}>
+              <View style={styles.ghanaFlagPrefix}>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.text }}>🇬🇭 +233</Text>
+              </View>
+              <TextInput
+                style={styles.momoPhoneInput}
+                placeholder="024 123 4567"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
+                value={momoPhone}
+                onChangeText={(val) => {
+                  setMomoPhone(val);
+                  setMomoProvider(detectMoMoProvider(val));
+                }}
+              />
+            </View>
+
+            {/* Email Input for PDF Receipt */}
+            <Text style={styles.momoInputLabel}>EMAIL FOR RECEIPT & INVOICE (PDF)</Text>
+            <View style={styles.momoEmailInputWrapper}>
+              <Feather name="mail" size={16} color={colors.textSecondary} style={{ marginLeft: 12 }} />
+              <TextInput
+                style={styles.momoEmailInput}
+                placeholder="Enter email to receive receipt PDF"
+                placeholderTextColor="#999"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={customerEmail}
+                onChangeText={setCustomerEmail}
+              />
+            </View>
+
+            <View style={styles.momoSecurityNotice}>
+              <Feather name="shield" size={12} color={colors.primary} />
+              <Text style={styles.momoSecurityNoticeText}>
+                No card details needed. Safe & direct USSD authentication from your telco.
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Place Order CTA */}
         <TouchableOpacity
@@ -633,7 +984,11 @@ export function StorefrontCartScreen({
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <Text style={styles.placeOrderText}>
-              {selectedPayment === "paystack" ? "PROCEED TO PAYSTACK · " : "PLACE ORDER · "}
+              {selectedPayment === "momo_push"
+                ? "SEND MOMO PROMPT · "
+                : selectedPayment === "paystack"
+                ? "PROCEED TO PAYSTACK · "
+                : "PLACE ORDER · "}
               {formatCurrency(amountDueNow)}
             </Text>
           )}
@@ -777,7 +1132,14 @@ export function StorefrontCartScreen({
               >
                 <Feather name={pm.icon} size={20} color={colors.primary} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.paymentOptionLabel}>{pm.label}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={styles.paymentOptionLabel}>{pm.label}</Text>
+                    {pm.badge && (
+                      <View style={{ backgroundColor: "#F3E8EC", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ color: colors.primary, fontSize: 10, fontWeight: "700" }}>{pm.badge}</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.paymentOptionSub}>{pm.subtitle}</Text>
                 </View>
                 {selectedPayment === pm.id && (
@@ -785,6 +1147,166 @@ export function StorefrontCartScreen({
                 )}
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* MoMo Authorization Prompt Modal */}
+      <Modal visible={showMoMoPromptModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: "88%" }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View style={styles.momoModalHeaderIcon}>
+                  <Feather name="smartphone" size={16} color={colors.primary} />
+                </View>
+                <Text style={styles.modalTitle}>Authorize Payment</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  if (pollingIntervalRef.current) {
+                    clearInterval(pollingIntervalRef.current);
+                    pollingIntervalRef.current = null;
+                  }
+                  setMomoPolling(false);
+                  setShowMoMoPromptModal(false);
+                }}
+              >
+                <Feather name="x" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              {/* Callout Card */}
+              <View style={styles.momoPromptCard}>
+                <View style={[styles.momoPromptIconCircle, momoVerified && { backgroundColor: "#E6F4EA" }]}>
+                  {momoVerified ? (
+                    <Feather name="check" size={32} color="#137333" />
+                  ) : momoPolling ? (
+                    <ActivityIndicator size="large" color={colors.primary} />
+                  ) : (
+                    <Feather name="smartphone" size={32} color={colors.primary} />
+                  )}
+                </View>
+
+                <Text style={styles.momoPromptEyebrow}>
+                  {momoVerified ? "PAYMENT SUCCESSFUL" : "USSD PROMPT DISPATCHED"}
+                </Text>
+                <Text style={styles.momoPromptAmount}>
+                  {momoPushData?.amountFormatted || formatCurrency(amountDueNow)}
+                </Text>
+
+                <View style={styles.momoPromptRecipientBox}>
+                  <Text style={styles.momoPromptRecipientText}>
+                    Sent to: <Text style={{ fontWeight: "800", color: colors.text }}>{momoPushData?.phone || momoPhone}</Text>
+                    {"  "}·{"  "}
+                    <Text style={{ fontWeight: "700", color: colors.primary }}>
+                      {momoPushData?.providerLabel || "Mobile Money"}
+                    </Text>
+                  </Text>
+                </View>
+              </View>
+
+              {/* Step by step Instructions */}
+              <View style={styles.momoInstructionsCard}>
+                <Text style={styles.momoInstructionsTitle}>WHAT TO DO ON YOUR PHONE:</Text>
+                <View style={styles.instructionStepRow}>
+                  <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>1</Text></View>
+                  <Text style={styles.instructionStepText}>
+                    Check your phone screen for the payment authorization prompt.
+                  </Text>
+                </View>
+                <View style={styles.instructionStepRow}>
+                  <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>2</Text></View>
+                  <Text style={styles.instructionStepText}>
+                    Enter your 4-digit MoMo PIN to authorize payment.
+                  </Text>
+                </View>
+                <View style={styles.instructionStepRow}>
+                  <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>3</Text></View>
+                  <Text style={styles.instructionStepText}>
+                    Keep this screen open — your receipt and SMS will arrive automatically.
+                  </Text>
+                </View>
+              </View>
+
+              {/* Error Message if payment failed */}
+              {momoErrorMessage ? (
+                <View style={styles.momoErrorBox}>
+                  <Feather name="alert-triangle" size={16} color="#B91C1C" />
+                  <Text style={styles.momoErrorText}>{momoErrorMessage}</Text>
+                </View>
+              ) : null}
+
+              {/* Status Polling Indicator */}
+              {momoPolling && (
+                <View style={styles.pollingNoticeRow}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.pollingNoticeText}>
+                    Waiting for your authorization on your handset...
+                  </Text>
+                </View>
+              )}
+
+              {/* Manual Check Status CTA */}
+              <TouchableOpacity
+                style={[styles.modalActionBtn, (verifyingManual || momoVerified) && { opacity: 0.7 }]}
+                onPress={() => handleManualVerifyMoMo(false)}
+                disabled={verifyingManual || momoVerified}
+                activeOpacity={0.85}
+              >
+                {verifyingManual ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Feather name="refresh-cw" size={14} color="#FFFFFF" />
+                    <Text style={styles.modalActionBtnText}>I'VE APPROVED (CHECK NOW)</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Telecel / Vodafone Cash Voucher OTP Section */}
+              <View style={styles.voucherSection}>
+                <Text style={styles.voucherSectionTitle}>Using Telecel or Vodafone Cash?</Text>
+                <Text style={styles.voucherSectionSub}>
+                  If your provider sent a voucher code (or dialed *110# to generate one), enter it below:
+                </Text>
+                <View style={styles.voucherInputRow}>
+                  <TextInput
+                    style={styles.voucherInput}
+                    placeholder="Enter Voucher Code / OTP"
+                    placeholderTextColor="#999"
+                    keyboardType="number-pad"
+                    value={otpInput}
+                    onChangeText={setOtpInput}
+                  />
+                  <TouchableOpacity
+                    style={[styles.voucherSubmitBtn, (!otpInput.trim() || submittingOtp) && { opacity: 0.5 }]}
+                    onPress={handleSubmitMoMoOtp}
+                    disabled={!otpInput.trim() || submittingOtp}
+                  >
+                    {submittingOtp ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.voucherSubmitBtnText}>SUBMIT</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Test Mode / Simulation CTA */}
+              <TouchableOpacity
+                style={styles.simulateApprovalBtn}
+                onPress={() => handleManualVerifyMoMo(true)}
+                disabled={verifyingManual || momoVerified}
+                activeOpacity={0.8}
+              >
+                <Feather name="check-circle" size={13} color="#92400E" />
+                <Text style={styles.simulateApprovalBtnText}>
+                  SIMULATE APPROVAL (TEST / DEMO MODE)
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1289,5 +1811,338 @@ const styles = StyleSheet.create({
     color: "#B45309",
     marginTop: 2,
     lineHeight: 14,
+  },
+  momoCard: {
+    backgroundColor: "#FDFBF7",
+    borderColor: "#EAD5D9",
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  momoCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  momoCardTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: colors.primary,
+    letterSpacing: 1,
+  },
+  momoCardSubtitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    lineHeight: 16,
+    marginBottom: 14,
+  },
+  momoInputLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    marginBottom: 6,
+    marginTop: 6,
+    letterSpacing: 0.5,
+  },
+  networkSelectorRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  networkChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E1D8",
+  },
+  networkChipSelected: {
+    borderColor: colors.primary,
+    backgroundColor: "#FAF4F6",
+    borderWidth: 1.5,
+  },
+  networkDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  networkChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  networkChipTextSelected: {
+    fontWeight: "800",
+    color: colors.primary,
+  },
+  momoPhoneInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#DCD6C9",
+    overflow: "hidden",
+    marginBottom: 10,
+  },
+  ghanaFlagPrefix: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: "#F5F2EB",
+    borderRightWidth: 1,
+    borderRightColor: "#E5E1D8",
+  },
+  momoPhoneInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  momoEmailInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#DCD6C9",
+    overflow: "hidden",
+    marginBottom: 10,
+  },
+  momoEmailInput: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: colors.text,
+  },
+  momoSecurityNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F0EAE1",
+  },
+  momoSecurityNoticeText: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    flex: 1,
+    lineHeight: 14,
+  },
+  momoModalHeaderIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F7EFF1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  momoPromptCard: {
+    alignItems: "center",
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    backgroundColor: "#FAF7F3",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#ECE6DC",
+    marginBottom: 16,
+  },
+  momoPromptIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#F7EFF1",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  momoPromptEyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.primary,
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  momoPromptAmount: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: colors.text,
+    fontFamily: "serif",
+    marginBottom: 8,
+  },
+  momoPromptRecipientBox: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#E5E1D8",
+  },
+  momoPromptRecipientText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  momoInstructionsCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#EAE5DB",
+    marginBottom: 14,
+    gap: 10,
+  },
+  momoInstructionsTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.textSecondary,
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  instructionStepRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  stepBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  stepBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  instructionStepText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.text,
+    lineHeight: 18,
+  },
+  momoErrorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FEE2E2",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  momoErrorText: {
+    flex: 1,
+    fontSize: 11,
+    color: "#B91C1C",
+    fontWeight: "600",
+  },
+  pollingNoticeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  pollingNoticeText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: "600",
+  },
+  modalActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginBottom: 14,
+  },
+  modalActionBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  voucherSection: {
+    backgroundColor: "#F9F8F5",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#ECE8E1",
+    marginBottom: 12,
+  },
+  voucherSectionTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 2,
+  },
+  voucherSectionSub: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    lineHeight: 14,
+    marginBottom: 8,
+  },
+  voucherInputRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  voucherInput: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#DCD6C9",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 12,
+    color: colors.text,
+  },
+  voucherSubmitBtn: {
+    backgroundColor: colors.text,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  voucherSubmitBtnText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  simulateApprovalBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#FEF3C7",
+    borderColor: "#F59E0B",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  simulateApprovalBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#92400E",
+    letterSpacing: 0.5,
   },
 });

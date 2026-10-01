@@ -74,7 +74,9 @@ export default function App() {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [shopFilter, setShopFilter] = useState<string | undefined>(undefined);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [confirmedOrder, setConfirmedOrder] = useState<string | null>(null);
+  const [confirmedOrderNumber, setConfirmedOrderNumber] = useState<string | null>(null);
+  const [confirmedOrderPhone, setConfirmedOrderPhone] = useState<string | null>(null);
+  const [confirmedOrderEmail, setConfirmedOrderEmail] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [notification, setNotification] = useState<PopNotificationData | null>(null);
 
@@ -166,8 +168,10 @@ export default function App() {
       }
 
       // 2. If order confirmation modal is open, close it
-      if (confirmedOrder) {
-        setConfirmedOrder(null);
+      if (confirmedOrderNumber) {
+        setConfirmedOrderNumber(null);
+        setConfirmedOrderPhone(null);
+        setConfirmedOrderEmail(null);
         setStorefrontTab("HOME");
         return true;
       }
@@ -215,7 +219,7 @@ export default function App() {
     );
 
     return () => subscription.remove();
-  }, [selectedProductId, confirmedOrder, mode, storefrontTab, backendTab]);
+  }, [selectedProductId, confirmedOrderNumber, mode, storefrontTab, backendTab]);
 
   // Sync Cart with Storage
   const updateCartState = (newCart: CartItem[]) => {
@@ -497,9 +501,22 @@ export default function App() {
                 onUpdateQuantity={handleUpdateCartQty}
                 onRemoveItem={handleRemoveCartItem}
                 onClearCart={handleClearCart}
-                onOrderSuccess={(orderNum) => setConfirmedOrder(orderNum)}
+                onOrderSuccess={(orderNum, phone, email) => {
+                  setConfirmedOrderNumber(orderNum);
+                  setConfirmedOrderPhone(phone || null);
+                  setConfirmedOrderEmail(email || null);
+                }}
                 onBrowseProducts={() => setStorefrontTab("SHOP")}
                 onNotify={notify}
+                onAuthSuccess={(loggedUser) => {
+                  setUser(loggedUser);
+                  notify({
+                    title: "Account Linked",
+                    message: `Welcome ${loggedUser.firstName || "Customer"}! Account created and linked to ${loggedUser.phone || "your phone"}.`,
+                    type: "success",
+                    icon: "user-check",
+                  });
+                }}
               />
             )}
 
@@ -614,10 +631,14 @@ export default function App() {
 
       {/* Order Confirmation Receipt Modal */}
       <OrderConfirmationModal
-        visible={Boolean(confirmedOrder)}
-        orderNumber={confirmedOrder}
+        visible={Boolean(confirmedOrderNumber)}
+        orderNumber={confirmedOrderNumber}
+        customerPhone={confirmedOrderPhone}
+        customerEmail={confirmedOrderEmail}
         onClose={() => {
-          setConfirmedOrder(null);
+          setConfirmedOrderNumber(null);
+          setConfirmedOrderPhone(null);
+          setConfirmedOrderEmail(null);
           setStorefrontTab("HOME");
         }}
       />
