@@ -86,13 +86,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Product management requires at least STAFF role
-    if (!isStaff(user.role)) {
-      return NextResponse.json(
-        { error: "Access denied. Only staff members can access the management app." },
-        { status: 403 },
-      );
-    }
+    // User is authenticated. Allow both customers and staff to sign in.
+    // If user is staff/owner/admin, permissions will reflect it so mobile app can direct to management dashboard.
 
     // Update lastLoginAt
     await db.user.update({

@@ -70,7 +70,7 @@ export function ProductsListScreen({
   };
 
   const formatMoney = (minor: number) => {
-    return `GHS ${(minor / 100).toLocaleString(undefined, {
+    return `GH₵ ${(minor / 100).toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;

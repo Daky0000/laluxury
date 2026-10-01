@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ShieldAlert } from "lucide-react";
+import { ShieldAlert, Database } from "lucide-react";
 
 /**
- * Catches permission failures from `requirePermission`, so a staff member who
- * reaches a page above their role sees an explanation rather than a stack trace.
+ * Catches permission failures from `requirePermission` or database connection
+ * downtime, giving clear guidance on what to do rather than an ambiguous error.
  */
 export default function AdminError({
   error,
@@ -15,6 +15,52 @@ export default function AdminError({
   reset: () => void;
 }) {
   const isPermission = error.name === "AuthError" || /role cannot/i.test(error.message);
+  const isDbDown =
+    /database is currently offline|ECONNREFUSED|connect_timeout|database|prisma/i.test(
+      error.message
+    ) || (Boolean(error.digest) && !isPermission);
+
+  if (isDbDown && !isPermission) {
+    return (
+      <div className="flex min-h-96 flex-col items-center justify-center gap-4 text-center p-6">
+        <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/10 text-amber-600">
+          <Database className="h-6 w-6" aria-hidden />
+        </div>
+
+        <div className="max-w-md">
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">
+            Database Offline or Reconnecting
+          </h1>
+          <p className="mt-2 text-sm text-[var(--text-secondary)] leading-relaxed">
+            The database connection was interrupted. If you are developing locally, please ensure <strong>Docker Desktop</strong> is open and your <code>laluxury-pg</code> PostgreSQL container is started.
+          </p>
+          <div className="mt-4 rounded-lg bg-[var(--surface-sunken)] p-3 text-left font-mono text-xs text-[var(--text-muted)]">
+            <code>docker start laluxury-pg</code>
+          </div>
+        </div>
+
+        <div className="mt-2 flex gap-3">
+          <button
+            type="button"
+            onClick={reset}
+            className="rounded-(--radius-card) bg-[var(--accent)] px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-white shadow-xs hover:opacity-90 transition-opacity"
+          >
+            Retry Connection
+          </button>
+          <Link
+            href="/admin"
+            className="rounded-(--radius-card) border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-4 py-2.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-sunken)] transition-colors"
+          >
+            Reload Page
+          </Link>
+        </div>
+
+        {error.digest ? (
+          <p className="text-[11px] text-[var(--text-muted)]">Reference ID: {error.digest}</p>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-96 flex-col items-center justify-center gap-4 text-center">

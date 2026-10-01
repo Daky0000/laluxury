@@ -1,28 +1,52 @@
 export const colors = {
-  background: "#121214",
-  surface: "#18181B",
-  surfaceLight: "#27272A",
-  card: "#202024",
-  border: "#3F3F46",
-  borderLight: "#52525B",
+  // LaLuxury Signature Wine Palette (From globals.css / Efie Home Storefront)
+  primary: "#7A2E3C",         // Signature deep wine / bordeaux
+  primaryDark: "#63252F",     // Deep shadow wine
+  primaryLight: "#96525E",    // Mid soft wine
+  primaryHover: "#8C3545",
+  primaryTint: "#F4EAEC",     // Light wine tint for badges/accents
 
-  // Luxury Accents
-  gold: "#D4AF37",
-  goldLight: "#F3E5AB",
-  goldDark: "#997A15",
+  // Warm Paper & Stone Canvas
+  background: "#FBF9F5",      // Warm paper / ivory canvas
+  surface: "#FFFFFF",         // Crisp card surface
+  surfaceWarm: "#F3F1EC",     // Warm stone surface
+  surfaceCard: "#EDEAE3",     // Featured / rounded product card background
+  surfaceInput: "#F9F8F5",    // Soft input background
+  surfaceLight: "#2A2826",    // Dark backend surface element
+  card: "#FFFFFF",
 
-  // Text
-  text: "#FFFFFF",
-  textMuted: "#A1A1AA",
-  textSubtle: "#71717A",
+  // Borders & Dividers
+  border: "#E4E1DA",
+  borderLight: "#EFECE6",
+  borderDark: "#CFCDC6",
+
+  // Typography (Ink scale)
+  text: "#1A1A18",            // Deep ink
+  textSecondary: "#56544E",   // Stone grey
+  textMuted: "#918E86",       // Soft muted ink
+  textSubtle: "#918E86",      // Alias for textMuted
+  textLight: "#FFFFFF",       // White text on dark buttons/badges
+
+  // Accents
+  brass: "#C9A227",           // LaLuxury warm brass
+  gold: "#C9A227",            // Brass / gold accent
+  goldLight: "#F5ECC8",
+  goldDark: "#9E7B15",
+  sage: "#3F5348",            // LaLuxury sage green accent
 
   // Statuses
-  success: "#10B981",
-  successBg: "rgba(16, 185, 129, 0.15)",
-  warning: "#F59E0B",
-  warningBg: "rgba(245, 158, 11, 0.15)",
-  error: "#EF4444",
-  errorBg: "rgba(239, 68, 68, 0.15)",
-  info: "#3B82F6",
-  infoBg: "rgba(59, 130, 246, 0.15)",
+  success: "#3F7D58",
+  successBg: "#EBF3EE",
+  warning: "#B07D2B",
+  warningBg: "#FEF7E8",
+  error: "#A63D3D",
+  errorBg: "#FDF0F0",
+  info: "#3C5A78",
+  infoBg: "#EEF4F9",
+
+  // Dark Theme / Store Backend Accents
+  darkBg: "#151413",
+  darkSurface: "#1F1E1B",
+  darkCard: "#2B2925",
+  darkBorder: "#3D3A35",
 };

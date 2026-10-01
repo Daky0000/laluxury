@@ -68,6 +68,7 @@ export type Product = {
   images: ProductImage[];
   categories: Category[];
   collections: Collection[];
+  variants?: Variant[];
   createdAt: string;
   updatedAt: string;
 };
@@ -81,4 +82,80 @@ export type ProductDetail = Product & {
     unitsSold: number;
     reviewsCount: number;
   };
+};
+
+export type CartItem = {
+  product: Product;
+  variant: Variant;
+  quantity: number;
+};
+
+export type ShippingAddress = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  line1: string;
+  line2?: string | null;
+  city: string;
+  region: string;
+  postalCode?: string | null;
+  country: string;
+};
+
+export type Order = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  paymentStatus: string;
+  paymentMethod: string;
+  currency: string;
+  subtotal: number;
+  shippingTotal: number;
+  total: number;
+  placedAt: string;
+  shippingAddress?: ShippingAddress | null;
+  items: Array<{
+    id: string;
+    variantId: string;
+    productId: string;
+    productTitle: string;
+    variantTitle: string;
+    sku: string;
+    imageUrl?: string | null;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+  }>;
+};
+
+export type DashboardData = {
+  metrics: {
+    totalRevenue: number;
+    ordersCount: number;
+    pendingFulfilment: number;
+    totalProducts: number;
+    activeProducts: number;
+    lowStockCount: number;
+  };
+  recentOrders: Array<{
+    id: string;
+    orderNumber: string;
+    total: number;
+    currency: string;
+    status: string;
+    paymentStatus: string;
+    placedAt: string;
+    customerName: string;
+    city: string | null;
+  }>;
+  lowStockItems: Array<{
+    id: string;
+    productId: string;
+    productTitle: string;
+    variantTitle: string;
+    sku: string;
+    price: number;
+    stock: number;
+    imageUrl?: string | null;
+  }>;
 };

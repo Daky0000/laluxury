@@ -3,12 +3,12 @@
     "name": "LaLuxury",
     "slug": "danny",
     "owner": "danny1999s-team",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "splash": {
-      "backgroundColor": "#7a2e3c"
+      "backgroundColor": "#7A2E3C"
     },
     "ios": {
       "supportsTablet": false,
@@ -18,7 +18,7 @@
       "package": "com.laluxury.management",
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "backgroundColor": "#7a2e3c",
+        "backgroundColor": "#7A2E3C",
         "foregroundImage": "./assets/icon.png"
       },
       "permissions": [

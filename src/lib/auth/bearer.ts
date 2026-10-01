@@ -61,13 +61,24 @@ export async function requireBearerPermission(permission: Permission): Promise<U
   return user;
 }
 
-/** Returns the authenticated staff user if a valid bearer token is present, or null. */
-export async function getOptionalBearerStaff(): Promise<User | null> {
+/** Returns the authenticated user if a valid bearer token is present, or null. */
+export async function getOptionalBearerUser(): Promise<User | null> {
   try {
     const session = await getBearerSession();
     if (!session?.userId) return null;
     const user = await db.user.findUnique({ where: { id: session.userId } });
-    if (!user || !user.isActive || !isStaff(user.role)) return null;
+    if (!user || !user.isActive) return null;
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+/** Returns the authenticated staff user if a valid bearer token is present, or null. */
+export async function getOptionalBearerStaff(): Promise<User | null> {
+  try {
+    const user = await getOptionalBearerUser();
+    if (!user || !isStaff(user.role)) return null;
     return user;
   } catch {
     return null;

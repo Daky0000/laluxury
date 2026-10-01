@@ -7,30 +7,33 @@ export const metadata: Metadata = {
   description: "Download the LaLuxury mobile app for Android to manage inventory, catalog pieces, and live showroom pricing.",
 };
 
-const APK_URL = "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/LaLuxury-Management.apk";
+const LOCAL_DOWNLOAD_URL = "/downloads/LaLuxury-Management.apk";
 
 export default function AppDownloadPage() {
   return (
     <>
       {/* Header */}
       <section className="lx-container lx-page-header text-center">
-        <p className="lx-eyebrow">Mobile Experience</p>
-        <h1 className="mt-3 text-[clamp(2.25rem,5vw,3.5rem)] leading-tight">
-          LaLuxury Management App
+        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--accent)] mb-3">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          Version 1.2.0 &bull; Latest Release
+        </div>
+        <h1 className="mt-2 text-[clamp(2.25rem,5vw,3.5rem)] leading-tight font-serif text-[var(--text-primary)]">
+          LaLuxury Mobile App
         </h1>
-        <p className="mx-auto mt-3 max-w-[580px] text-sm sm:text-base font-light leading-relaxed text-[var(--text-muted)]">
-          Manage your showroom catalog in real-time, view live customer pieces, scan stock, and snap showroom photos directly from your phone.
+        <p className="mx-auto mt-3 max-w-[620px] text-sm sm:text-base font-light leading-relaxed text-[var(--text-muted)]">
+          The complete luxury living experience in your pocket. Browse handcrafted collections in GH₵, purchase seamlessly with Paystack or MoMo, or sign in as store owner to manage showroom inventory in real time.
         </p>
 
         {/* Primary CTA */}
         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
           <a
-            href={APK_URL}
+            href={LOCAL_DOWNLOAD_URL}
             download="LaLuxury-Management.apk"
-            className="inline-flex items-center gap-2.5 rounded-none bg-[var(--text-primary)] px-8 py-4 text-xs font-medium uppercase tracking-[0.16em] text-[var(--surface-canvas)] shadow-md transition-all hover:bg-[var(--accent)]"
+            className="inline-flex items-center gap-2.5 rounded-none bg-[#7A2E3C] px-8 py-4 text-xs font-medium uppercase tracking-[0.16em] text-white shadow-md transition-all hover:bg-[#60232F]"
           >
             <Download className="h-4 w-4" />
-            <span>Download Android APK (65.6 MB)</span>
+            <span>Download Local APK (v1.2.0 &bull; 68 MB)</span>
           </a>
           <Link
             href="/shop"
@@ -125,14 +128,13 @@ export default function AppDownloadPage() {
 
           <div className="mt-10 border-t border-[var(--border-subtle)] pt-6 text-center">
             <p className="text-xs text-[var(--text-muted)]">
-              Direct APK URL:{" "}
+              Direct Local Download:{" "}
               <a
-                href={APK_URL}
+                href={LOCAL_DOWNLOAD_URL}
                 className="underline hover:text-[var(--text-primary)]"
-                target="_blank"
-                rel="noreferrer"
+                download="LaLuxury-Management.apk"
               >
-                {APK_URL}
+                {LOCAL_DOWNLOAD_URL}
               </a>
             </p>
           </div>

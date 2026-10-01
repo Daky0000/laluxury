@@ -1,5 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Product, ProductDetail, Category, Collection, User } from "../types";
+import {
+  Product,
+  ProductDetail,
+  Category,
+  Collection,
+  User,
+  Order,
+  DashboardData,
+  CartItem,
+  ShippingAddress,
+} from "../types";
 
 // Default to live store URL, with support for local LAN and emulator endpoints
 const DEFAULT_URL = "https://laluxurys.com";
@@ -7,6 +17,7 @@ const DEFAULT_URL = "https://laluxurys.com";
 const STORAGE_KEY_TOKEN = "lx_token";
 const STORAGE_KEY_USER = "lx_user";
 const STORAGE_KEY_URL = "lx_api_url";
+const STORAGE_KEY_CART = "lx_cart";
 
 class ApiService {
   private token: string | null = null;
@@ -120,6 +131,20 @@ class ApiService {
     return res;
   }
 
+  async register(data: {
+    name: string;
+    email?: string;
+    phone?: string;
+    password: string;
+  }): Promise<{ token: string; user: User }> {
+    const res = await this.request<{ token: string; user: User }>("/api/app/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    await this.setSession(res.token, res.user);
+    return res;
+  }
+
   async getMe(): Promise<{ user: User }> {
     return this.request<{ user: User }>("/api/app/auth/me");
   }
@@ -133,6 +158,7 @@ class ApiService {
     status?: string;
     stock?: string;
     categoryId?: string;
+    isFeatured?: boolean;
   } = {}): Promise<{
     products: Product[];
     pagination: { page: number; limit: number; total: number; totalPages: number };
@@ -144,6 +170,7 @@ class ApiService {
     if (params.status && params.status !== "ALL") searchParams.set("status", params.status);
     if (params.stock) searchParams.set("stock", params.stock);
     if (params.categoryId) searchParams.set("categoryId", params.categoryId);
+    if (params.isFeatured !== undefined) searchParams.set("isFeatured", String(params.isFeatured));
 
     const query = searchParams.toString();
     return this.request<{
@@ -158,7 +185,7 @@ class ApiService {
 
   async createProduct(data: {
     title: string;
-    price: number; // in cedis or minor units
+    price: number;
     compareAtPrice?: number | null;
     stock?: number;
     sku?: string;
@@ -300,6 +327,100 @@ class ApiService {
   async getCollections(): Promise<{ collections: Collection[] }> {
     return this.request<{ collections: Collection[] }>("/api/app/collections");
   }
+
+  // --- Dashboard (Backend) --------------------------------------------------
+
+  async getDashboard(): Promise<DashboardData> {
+    return this.request<DashboardData>("/api/app/dashboard");
+  }
+
+  // --- Orders & Checkout ----------------------------------------------------
+
+  async getOrders(): Promise<{ orders: Order[] }> {
+    return this.request<{ orders: Order[] }>("/api/app/orders");
+  }
+
+  async checkout(orderData: {
+    items: Array<{ variantId: string; quantity: number }>;
+    customer: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      phone: string;
+    };
+    shippingAddress: ShippingAddress;
+    paymentMethod: string;
+    customerNote?: string | null;
+  }): Promise<{
+    ok: boolean;
+    order: {
+      id: string;
+      orderNumber: string;
+      total: number;
+      currency: string;
+      status: string;
+      placedAt: string;
+      reference: string;
+    };
+    paymentUrl?: string | null;
+  }> {
+    return this.request<{
+      ok: boolean;
+      order: {
+        id: string;
+        orderNumber: string;
+        total: number;
+        currency: string;
+        status: string;
+        placedAt: string;
+        reference: string;
+      };
+      paymentUrl?: string | null;
+    }>("/api/app/orders", {
+      method: "POST",
+      body: JSON.stringify(orderData),
+    });
+  }
+
+  // --- Local Cart Storage ---------------------------------------------------
+
+  async getSavedCart(): Promise<CartItem[]> {
+    try {
+      const json = await AsyncStorage.getItem(STORAGE_KEY_CART);
+      return json ? JSON.parse(json) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async saveCart(items: CartItem[]): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY_CART, JSON.stringify(items));
+    } catch {
+      // Ignore storage error
+    }
+  }
+
+  // --- App Version & Update -------------------------------------------------
+
+  async checkAppVersion(): Promise<{
+    latestVersion: string;
+    versionCode: number;
+    appName: string;
+    downloadUrl: string;
+    directUrl: string;
+    releaseNotes: string;
+  }> {
+    return this.request<{
+      latestVersion: string;
+      versionCode: number;
+      appName: string;
+      downloadUrl: string;
+      directUrl: string;
+      releaseNotes: string;
+    }>("/api/app/version");
+  }
 }
+
 
 export const api = new ApiService();
