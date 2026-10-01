@@ -40,12 +40,7 @@ async function migrate() {
     );
 
     const assets = res.rows;
-    console.log(`Found ${assets.length} image(s) stored in PostgreSQL.`);
-    if (assets.length === 0) {
-      console.log("No images to migrate! All images are already on CDN/external.");
-      await pool.end();
-      return;
-    }
+    console.log(`Found ${assets.length} binary image(s) remaining in PostgreSQL.`);
 
     let totalBytesFreed = 0;
     let successCount = 0;
@@ -84,10 +79,62 @@ async function migrate() {
       }
     }
 
-    console.log("\nMigration completed!");
-    console.log(`Successfully migrated: ${successCount}/${assets.length} images.`);
-    console.log(`Freed ~${(totalBytesFreed / 1024 / 1024).toFixed(2)} MB of binary data from PostgreSQL.`);
-    console.log("Future views will load directly from Cloudflare R2 edge with $0 Railway egress!");
+    if (assets.length > 0) {
+      console.log(`Successfully migrated ${successCount}/${assets.length} binary images to R2. Freed ~${(totalBytesFreed / 1024 / 1024).toFixed(2)} MB.`);
+    }
+
+    // 1. Update ProductImage linked to MediaAsset
+    console.log("Updating ProductImage rows to Cloudflare R2 URLs...");
+    const piMediaRes = await pool.query(`
+      UPDATE "ProductImage" pi
+      SET url = ma.url
+      FROM "MediaAsset" ma
+      WHERE pi."mediaId" = ma.id AND ma.url != '' AND pi.url != ma.url
+    `);
+    console.log(`Updated ${piMediaRes.rowCount ?? 0} ProductImage row(s) from MediaAsset.`);
+
+    // 2. Update ProductImage with /api/media/ URLs
+    const piApiRes = await pool.query(`
+      UPDATE "ProductImage" pi
+      SET url = ma.url
+      FROM "MediaAsset" ma
+      WHERE (pi.url = '/api/media/' || ma.id OR pi.url LIKE '/api/media/' || ma.id || '.%') AND ma.url != '' AND pi.url != ma.url
+    `);
+    console.log(`Updated ${piApiRes.rowCount ?? 0} ProductImage row(s) with /api/media/ URLs.`);
+
+    // 3. Update ProductImage with /catalog/ URLs
+    const piCatRes = await pool.query(`
+      UPDATE "ProductImage"
+      SET url = $1 || url
+      WHERE url LIKE '/catalog/%'
+    `, [publicUrl]);
+    console.log(`Updated ${piCatRes.rowCount ?? 0} ProductImage row(s) pointing to /catalog/.`);
+
+    // 4. Update Category image URLs
+    const catRes = await pool.query(`
+      UPDATE "Category"
+      SET "imageUrl" = $1 || "imageUrl"
+      WHERE "imageUrl" LIKE '/catalog/%'
+    `, [publicUrl]);
+    console.log(`Updated ${catRes.rowCount ?? 0} Category row(s) pointing to /catalog/.`);
+
+    // 5. Update Collection image URLs
+    const colRes = await pool.query(`
+      UPDATE "Collection"
+      SET "imageUrl" = $1 || "imageUrl"
+      WHERE "imageUrl" LIKE '/catalog/%'
+    `, [publicUrl]);
+    console.log(`Updated ${colRes.rowCount ?? 0} Collection row(s) pointing to /catalog/.`);
+
+    // 6. Update Setting JSON references to /catalog/
+    const setCatRes = await pool.query(`
+      UPDATE "Setting"
+      SET value = replace(value::text, '"/catalog/', '"' || $1 || '/catalog/')::jsonb
+      WHERE value::text LIKE '%"/catalog/%'
+    `, [publicUrl]);
+    console.log(`Updated ${setCatRes.rowCount ?? 0} Setting row(s) containing /catalog/ references.`);
+
+    console.log("\nAll database image references have been migrated to Cloudflare R2!");
   } catch (err) {
     console.error("Migration check encountered error:", err.message);
   } finally {
