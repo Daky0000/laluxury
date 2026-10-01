@@ -32,7 +32,12 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<{
+    uri: string;
+    base64?: string | null;
+    mimeType?: string | null;
+    fileName?: string | null;
+  } | null>(null);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -58,9 +63,16 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
             mediaTypes: ["images"],
             allowsEditing: true,
             quality: 0.8,
+            base64: true,
           });
-          if (!result.canceled && result.assets[0]?.uri) {
-            setPhotoUri(result.assets[0].uri);
+          if (!result.canceled && result.assets[0]) {
+            const a = result.assets[0];
+            setPhoto({
+              uri: a.uri,
+              base64: a.base64,
+              mimeType: a.mimeType || "image/jpeg",
+              fileName: a.fileName || "photo.jpg",
+            });
           }
         },
       },
@@ -71,9 +83,16 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
             mediaTypes: ["images"],
             allowsEditing: true,
             quality: 0.8,
+            base64: true,
           });
-          if (!result.canceled && result.assets[0]?.uri) {
-            setPhotoUri(result.assets[0].uri);
+          if (!result.canceled && result.assets[0]) {
+            const a = result.assets[0];
+            setPhoto({
+              uri: a.uri,
+              base64: a.base64,
+              mimeType: a.mimeType || "image/jpeg",
+              fileName: a.fileName || "photo.jpg",
+            });
           }
         },
       },
@@ -114,11 +133,19 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
       const newId = res.product.id;
 
       // 2. Upload photo if selected
-      if (photoUri) {
+      if (photo) {
         try {
-          await api.uploadImage(newId, photoUri);
-        } catch {
-          // Non-blocking: product was already created
+          await api.uploadImage(newId, photo);
+        } catch (uploadErr) {
+          console.error("Photo upload error on create:", uploadErr);
+          const uploadMsg =
+            uploadErr instanceof Error ? uploadErr.message : "Photo upload failed";
+          Alert.alert(
+            "Piece Created (Photo Notice)",
+            `"${title}" was created, but photo could not be attached: ${uploadMsg}. You can re-upload inside the piece details.`,
+            [{ text: "View Piece", onPress: () => onCreated(newId) }]
+          );
+          return;
         }
       }
 
@@ -147,8 +174,13 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Photo Box */}
         <TouchableOpacity style={styles.photoBox} onPress={handlePickPhoto}>
-          {photoUri ? (
-            <Image source={{ uri: photoUri }} style={styles.photoPreview} />
+          {photo?.uri ? (
+            <View style={{ width: "100%", height: "100%", position: "relative" }}>
+              <Image source={{ uri: photo.uri }} style={styles.photoPreview} resizeMode="cover" />
+              <View style={styles.photoOverlayBadge}>
+                <Text style={styles.photoOverlayText}>Tap to Change Photo</Text>
+              </View>
+            </View>
           ) : (
             <View style={styles.photoPlaceholder}>
               <Text style={styles.photoPlaceholderIcon}>📷</Text>
@@ -333,6 +365,21 @@ const styles = StyleSheet.create({
   photoPreview: {
     width: "100%",
     height: "100%",
+  },
+  photoOverlayBadge: {
+    position: "absolute",
+    bottom: 10,
+    alignSelf: "center",
+    backgroundColor: "rgba(0,0,0,0.65)",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+  },
+  photoOverlayText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.3,
   },
   photoPlaceholder: {
     alignItems: "center",

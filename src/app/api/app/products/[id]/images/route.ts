@@ -123,9 +123,11 @@ export const POST = withApiAuth(
 
     // Case A: Base64 upload
     if (base64) {
-      const cleanBase64 = base64.replace(/^data:image\/[a-z]+;base64,/, "");
+      const cleanBase64 = base64.includes(",") ? base64.split(",").pop()! : base64;
       const buffer = Buffer.from(cleanBase64, "base64");
-      const file = new File([buffer], filename, { type: mimeType });
+      const normalizedMime = (mimeType.toLowerCase() === "image/jpg" ? "image/jpeg" : mimeType) || "image/jpeg";
+      const cleanFilename = filename || "photo.jpg";
+      const file = new File([buffer], cleanFilename, { type: normalizedMime });
 
       try {
         const asset = await storeUpload(file, {

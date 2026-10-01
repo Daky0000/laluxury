@@ -82,9 +82,16 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
             mediaTypes: ["images"],
             allowsEditing: true,
             quality: 0.8,
+            base64: true,
           });
-          if (!result.canceled && result.assets[0]?.uri) {
-            await uploadSelectedImage(result.assets[0].uri);
+          if (!result.canceled && result.assets[0]) {
+            const a = result.assets[0];
+            await uploadSelectedImage({
+              uri: a.uri,
+              base64: a.base64,
+              mimeType: a.mimeType || "image/jpeg",
+              fileName: a.fileName || "photo.jpg",
+            });
           }
         },
       },
@@ -95,9 +102,16 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
             mediaTypes: ["images"],
             allowsEditing: true,
             quality: 0.8,
+            base64: true,
           });
-          if (!result.canceled && result.assets[0]?.uri) {
-            await uploadSelectedImage(result.assets[0].uri);
+          if (!result.canceled && result.assets[0]) {
+            const a = result.assets[0];
+            await uploadSelectedImage({
+              uri: a.uri,
+              base64: a.base64,
+              mimeType: a.mimeType || "image/jpeg",
+              fileName: a.fileName || "photo.jpg",
+            });
           }
         },
       },
@@ -105,16 +119,26 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
     ]);
   };
 
-  const uploadSelectedImage = async (uri: string) => {
+  const uploadSelectedImage = async (
+    source:
+      | {
+          uri: string;
+          base64?: string | null;
+          mimeType?: string | null;
+          fileName?: string | null;
+        }
+      | string,
+  ) => {
     setUploadingImage(true);
     try {
-      await api.uploadImage(productId, uri);
+      await api.uploadImage(productId, source);
       await loadProduct();
       setFeedback("Photo added successfully!");
       setTimeout(() => setFeedback(null), 3000);
+      Alert.alert("Success", "Photo uploaded and added to the piece!");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Upload failed.";
-      Alert.alert("Error", msg);
+      Alert.alert("Upload Error", msg);
     } finally {
       setUploadingImage(false);
     }

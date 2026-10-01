@@ -21,7 +21,12 @@ class ApiService {
       ]);
 
       if (savedToken) this.token = savedToken;
-      if (savedUrl) this.baseUrl = savedUrl;
+      if (savedUrl) {
+        let clean = savedUrl.trim().replace(/\/+$/, "");
+        if (clean.startsWith("hhtps://")) clean = "https://" + clean.slice(8);
+        if (clean.startsWith("hhtp://")) clean = "http://" + clean.slice(7);
+        this.baseUrl = clean;
+      }
 
       const user = savedUser ? (JSON.parse(savedUser) as User) : null;
       return { token: this.token, user, baseUrl: this.baseUrl };
@@ -35,7 +40,12 @@ class ApiService {
   }
 
   async setBaseUrl(url: string): Promise<void> {
-    const clean = url.trim().replace(/\/+$/, "");
+    let clean = url.trim().replace(/\/+$/, "");
+    if (clean.startsWith("hhtps://")) clean = "https://" + clean.slice(8);
+    if (clean.startsWith("hhtp://")) clean = "http://" + clean.slice(7);
+    if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
+      clean = `https://${clean}`;
+    }
     this.baseUrl = clean;
     await AsyncStorage.setItem(STORAGE_KEY_URL, clean);
   }
@@ -220,29 +230,58 @@ class ApiService {
 
   async uploadImage(
     productId: string,
-    fileUri: string,
+    source:
+      | {
+          uri: string;
+          base64?: string | null;
+          fileName?: string | null;
+          mimeType?: string | null;
+        }
+      | string,
     alt?: string,
   ): Promise<{ ok: boolean }> {
-    const formData = new FormData();
-    const filename = fileUri.split("/").pop() || "photo.jpg";
+    const isObject = typeof source === "object" && source !== null;
+    const uri = isObject ? source.uri : source;
+    const filename =
+      (isObject && source.fileName) || uri.split("/").pop() || "photo.jpg";
     const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : `image/jpeg`;
+    const rawType =
+      (isObject && source.mimeType) ||
+      (match ? `image/${match[1].toLowerCase()}` : "image/jpeg");
+    const mimeType = rawType === "image/jpg" ? "image/jpeg" : rawType;
 
-    // React Native FormData file shape
-    formData.append("file", {
-      uri: fileUri,
-      name: filename,
-      type,
-    } as unknown as Blob);
+    let base64String = isObject && source.base64 ? source.base64 : null;
 
-    if (alt) formData.append("alt", alt);
+    if (!base64String) {
+      try {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        base64String = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (typeof reader.result === "string") {
+              resolve(reader.result);
+            } else {
+              reject(new Error("Unable to read image as base64 string"));
+            }
+          };
+          reader.onerror = () => reject(new Error("Failed to read image data"));
+          reader.readAsDataURL(blob);
+        });
+      } catch (readErr: unknown) {
+        const msg = readErr instanceof Error ? readErr.message : "Failed to read image";
+        throw new Error(`Unable to prepare image: ${msg}`);
+      }
+    }
 
     return this.request<{ ok: boolean }>(`/api/app/products/${productId}/images`, {
       method: "POST",
-      body: formData,
-      headers: {
-        // Leave Content-Type blank so fetch populates boundary
-      },
+      body: JSON.stringify({
+        base64: base64String,
+        filename,
+        mimeType,
+        alt: alt || null,
+      }),
     });
   }
 
