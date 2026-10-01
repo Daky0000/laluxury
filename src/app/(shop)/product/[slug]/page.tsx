@@ -15,7 +15,7 @@ import { ProductTile } from "@/components/shop/product-tile";
 import { ReviewForm } from "@/components/shop/review-form";
 import { Divider } from "@/components/ui";
 
-export const revalidate = 120;
+export const dynamic = "force-dynamic";
 
 /** Merchandising badges are ordinary tags, matching the grid tiles. */
 const BADGES: Record<string, string> = {

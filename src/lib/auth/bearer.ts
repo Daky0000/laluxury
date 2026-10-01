@@ -61,6 +61,31 @@ export async function requireBearerPermission(permission: Permission): Promise<U
   return user;
 }
 
+/** Returns the authenticated staff user if a valid bearer token is present, or null. */
+export async function getOptionalBearerStaff(): Promise<User | null> {
+  try {
+    const session = await getBearerSession();
+    if (!session?.userId) return null;
+    const user = await db.user.findUnique({ where: { id: session.userId } });
+    if (!user || !user.isActive || !isStaff(user.role)) return null;
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+/** Standard CORS OPTIONS response for mobile API routes. */
+export function apiOptionsResponse(): Response {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  });
+}
+
 /**
  * Catches `ApiAuthError` from a handler and returns the right HTTP response.
  *

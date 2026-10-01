@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireBearerPermission, withApiAuth } from "@/lib/auth/bearer";
+import { requireBearerPermission, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { revalidateProductCatalog } from "@/lib/catalog-revalidate";
 
 export const runtime = "nodejs";
+
+export const OPTIONS = apiOptionsResponse;
 
 const updateImageSchema = z.object({
   alt: z.string().trim().nullable().optional(),

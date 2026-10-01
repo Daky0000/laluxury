@@ -52,6 +52,19 @@ export default function App() {
     setSelectedProductId(null);
   };
 
+  const handleBrowseCatalog = () => {
+    setUser({
+      id: "guest",
+      email: "guest@laluxury.com",
+      phone: null,
+      firstName: "Guest",
+      lastName: "Shopper",
+      role: "STAFF",
+      permissions: ["products:read"],
+    });
+    setActiveTab("CATALOG");
+  };
+
   if (initializing) {
     return (
       <View style={styles.splashContainer}>
@@ -65,7 +78,10 @@ export default function App() {
     return (
       <SafeAreaView style={styles.container}>
         <ExpoStatusBar style="light" />
-        <LoginScreen onLoginSuccess={handleLoginSuccess} />
+        <LoginScreen
+          onLoginSuccess={handleLoginSuccess}
+          onBrowseCatalog={handleBrowseCatalog}
+        />
       </SafeAreaView>
     );
   }

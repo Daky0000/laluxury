@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireBearerPermission, withApiAuth } from "@/lib/auth/bearer";
+import { requireBearerPermission, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { refreshPriceRange } from "@/lib/catalog";
 import { ensureInventoryItem } from "@/lib/inventory";
 import { recordAudit } from "@/lib/audit";
 import { revalidateProductCatalog } from "@/lib/catalog-revalidate";
 
 export const runtime = "nodejs";
+
+export const OPTIONS = apiOptionsResponse;
 
 function toMinor(val: number): number {
   if (!Number.isFinite(val)) return 0;

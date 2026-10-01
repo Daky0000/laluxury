@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireBearerPermission, withApiAuth } from "@/lib/auth/bearer";
+import { requireBearerPermission, getOptionalBearerStaff, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
+import { can } from "@/lib/auth/rbac";
 import { uniqueSlug, skuFromTitle } from "@/lib/slug";
 import { buildSearchText } from "@/lib/catalog";
 import { recordAudit } from "@/lib/audit";
@@ -9,6 +10,8 @@ import { revalidateProductCatalog } from "@/lib/catalog-revalidate";
 import type { Prisma, ProductStatus } from "@/generated/prisma";
 
 export const runtime = "nodejs";
+
+export const OPTIONS = apiOptionsResponse;
 
 const createProductSchema = z.object({
   title: z.string().trim().min(1, "Product title is required."),
@@ -62,7 +65,8 @@ function parseTags(raw: string[] | string): string[] {
 // ---------------------------------------------------------------------------
 
 export const GET = withApiAuth(async (request: Request) => {
-  await requireBearerPermission("products:read");
+  const staff = await getOptionalBearerStaff();
+  const isAuthorizedStaff = Boolean(staff && can(staff.role, "products:read"));
 
   const url = new URL(request.url);
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
@@ -83,7 +87,10 @@ export const GET = withApiAuth(async (request: Request) => {
 
   const and: Prisma.ProductWhereInput[] = [];
 
-  if (statusParam && ["DRAFT", "ACTIVE", "ARCHIVED"].includes(statusParam)) {
+  if (!isAuthorizedStaff) {
+    // Public/unauthenticated caller can only view ACTIVE products
+    and.push({ status: "ACTIVE" });
+  } else if (statusParam && ["DRAFT", "ACTIVE", "ARCHIVED"].includes(statusParam)) {
     and.push({ status: statusParam as ProductStatus });
   }
 

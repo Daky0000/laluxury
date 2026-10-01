@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Switch,
+  Linking,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { colors } from "../theme/colors";
@@ -224,6 +225,27 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
             <Text style={styles.feedbackText}>{feedback}</Text>
           </View>
         ) : null}
+
+        {/* Live Website Link Bar */}
+        <TouchableOpacity
+          style={styles.liveWebBanner}
+          onPress={() => {
+            const webUrl = `${api.getBaseUrl()}/product/${product.slug}`;
+            Linking.openURL(webUrl).catch(() => {
+              Alert.alert("Unable to open browser", `Web address: ${webUrl}`);
+            });
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.liveWebIcon}>🌐</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.liveWebTitle}>View Live on Website</Text>
+            <Text style={styles.liveWebSubtitle} numberOfLines={1}>
+              {api.getBaseUrl()}/product/{product.slug}
+            </Text>
+          </View>
+          <Text style={styles.liveWebArrow}>↗</Text>
+        </TouchableOpacity>
 
         {/* Photos Carousel */}
         <View style={styles.section}>
@@ -655,5 +677,34 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     letterSpacing: 0.5,
+  },
+  liveWebBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    padding: 12,
+    marginBottom: 16,
+    gap: 10,
+  },
+  liveWebIcon: {
+    fontSize: 20,
+  },
+  liveWebTitle: {
+    color: colors.gold,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  liveWebSubtitle: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  liveWebArrow: {
+    color: colors.gold,
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

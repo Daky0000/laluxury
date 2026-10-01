@@ -16,6 +16,7 @@ import { User } from "../types";
 
 type Props = {
   onLoginSuccess: (user: User) => void;
+  onBrowseCatalog?: () => void;
 };
 
 const PRESETS = [
@@ -24,7 +25,7 @@ const PRESETS = [
   { id: "emu", label: "Android Emulator", url: "http://10.0.2.2:3005", icon: "📱" },
 ];
 
-export function LoginScreen({ onLoginSuccess }: Props) {
+export function LoginScreen({ onLoginSuccess, onBrowseCatalog }: Props) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [serverUrl, setServerUrl] = useState(api.getBaseUrl());
@@ -35,6 +36,12 @@ export function LoginScreen({ onLoginSuccess }: Props) {
   const handleSelectPreset = async (url: string) => {
     setServerUrl(url);
     await api.setBaseUrl(url);
+    setError(null);
+  };
+
+  const handleQuickFillOwner = () => {
+    setIdentifier("laluxurys@laluxurys.com");
+    setPassword("Laluxurys#1");
     setError(null);
   };
 
@@ -162,6 +169,15 @@ export function LoginScreen({ onLoginSuccess }: Props) {
           </View>
 
           <TouchableOpacity
+            style={styles.quickFillBtn}
+            onPress={handleQuickFillOwner}
+          >
+            <Text style={styles.quickFillText}>
+              🔑 Auto-fill Store Owner Credentials
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={[styles.loginButton, loading && styles.buttonDisabled]}
             onPress={handleLogin}
             disabled={loading}
@@ -172,6 +188,17 @@ export function LoginScreen({ onLoginSuccess }: Props) {
               <Text style={styles.loginButtonText}>Sign In to Atelier</Text>
             )}
           </TouchableOpacity>
+
+          {onBrowseCatalog ? (
+            <TouchableOpacity
+              style={styles.browseButton}
+              onPress={onBrowseCatalog}
+            >
+              <Text style={styles.browseButtonText}>
+                Browse Live Catalog (Guest Mode) ›
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -377,5 +404,34 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     letterSpacing: 0.5,
+  },
+  quickFillBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    marginBottom: 6,
+    borderRadius: 6,
+    backgroundColor: "rgba(212, 175, 55, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(212, 175, 55, 0.25)",
+  },
+  quickFillText: {
+    color: colors.goldLight,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  browseButton: {
+    marginTop: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  browseButtonText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

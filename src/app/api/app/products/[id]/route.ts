@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireBearerPermission, withApiAuth } from "@/lib/auth/bearer";
+import { requireBearerPermission, getOptionalBearerStaff, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
+import { can } from "@/lib/auth/rbac";
 import { uniqueSlug, slugify } from "@/lib/slug";
 import { buildSearchText } from "@/lib/catalog";
 import { recordAudit } from "@/lib/audit";
@@ -9,6 +10,8 @@ import { revalidateProductCatalog } from "@/lib/catalog-revalidate";
 import type { ProductStatus } from "@/generated/prisma";
 
 export const runtime = "nodejs";
+
+export const OPTIONS = apiOptionsResponse;
 
 const updateProductSchema = z.object({
   title: z.string().trim().min(1).optional(),
@@ -54,7 +57,8 @@ function parseTags(raw?: string[] | string): string[] | undefined {
 
 export const GET = withApiAuth(
   async (_request: Request, ctx: { params: Promise<{ id: string }> }) => {
-    await requireBearerPermission("products:read");
+    const staff = await getOptionalBearerStaff();
+    const isAuthorizedStaff = Boolean(staff && can(staff.role, "products:read"));
     const { id } = await ctx.params;
 
     const product = await db.product.findUnique({
@@ -108,7 +112,7 @@ export const GET = withApiAuth(
       },
     });
 
-    if (!product) {
+    if (!product || (!isAuthorizedStaff && product.status !== "ACTIVE")) {
       return NextResponse.json({ error: "Product not found." }, { status: 404 });
     }
 

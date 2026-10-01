@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireBearerUser, withApiAuth } from "@/lib/auth/bearer";
+import { requireBearerUser, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { permissionsFor } from "@/lib/auth/rbac";
 
 export const runtime = "nodejs";
+
+export const OPTIONS = apiOptionsResponse;
 
 export const GET = withApiAuth(async () => {
   const user = await requireBearerUser();

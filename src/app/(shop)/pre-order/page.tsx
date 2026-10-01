@@ -6,7 +6,7 @@ import { toTile } from "@/lib/product-view";
 import { ProductTile } from "@/components/shop/product-tile";
 import { PreorderRequestForm } from "@/components/shop/preorder-request-form";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Pre-Order & Bespoke Sourcing",

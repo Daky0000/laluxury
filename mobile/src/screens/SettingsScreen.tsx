@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
@@ -96,6 +97,38 @@ export function SettingsScreen({ user, onLogout }: Props) {
             ) : (
               <Text style={styles.testBtnText}>Test & Save Server URL</Text>
             )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Seamless Web Sync Shortcuts */}
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>WEB STORE SHORTCUTS</Text>
+          <Text style={styles.subText}>
+            Quickly jump to the live website or web back-office console.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.webLinkBtn}
+            onPress={() => Linking.openURL(api.getBaseUrl())}
+          >
+            <Text style={styles.webLinkIcon}>🌐</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.webLinkTitle}>Open Customer Storefront</Text>
+              <Text style={styles.webLinkUrl}>{api.getBaseUrl()}</Text>
+            </View>
+            <Text style={styles.webLinkArrow}>↗</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.webLinkBtn, { marginTop: 8 }]}
+            onPress={() => Linking.openURL(`${api.getBaseUrl()}/admin`)}
+          >
+            <Text style={styles.webLinkIcon}>🛡️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.webLinkTitle}>Open Web Admin Console</Text>
+              <Text style={styles.webLinkUrl}>{api.getBaseUrl()}/admin</Text>
+            </View>
+            <Text style={styles.webLinkArrow}>↗</Text>
           </TouchableOpacity>
         </View>
 
@@ -254,5 +287,33 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontSize: 14,
     fontWeight: "600",
+  },
+  webLinkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    gap: 10,
+  },
+  webLinkIcon: {
+    fontSize: 18,
+  },
+  webLinkTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  webLinkUrl: {
+    color: colors.goldLight,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  webLinkArrow: {
+    color: colors.gold,
+    fontSize: 16,
+    fontWeight: "700",
   },
 });
