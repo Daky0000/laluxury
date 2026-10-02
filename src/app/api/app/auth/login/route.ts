@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       },
     });
 
-    const seedOwnerEmail = (process.env.SEED_OWNER_EMAIL || "owner@laluxury.com").toLowerCase();
+    const seedOwnerEmail = (process.env.SEED_OWNER_EMAIL || "owner@nobleenclave.com").toLowerCase();
     const seedOwnerPassword = process.env.SEED_OWNER_PASSWORD || "ChangeMe!2026";
     const isSeedOwner = clean.toLowerCase() === seedOwnerEmail && password === seedOwnerPassword;
 

@@ -403,7 +403,7 @@ export function MessageTemplatesEditor({
                         <span>Live Email Preview</span>
                       </span>
                       <span className="text-[10px] text-[var(--text-muted)]">
-                        From: {storeName} &lt;concierge@laluxurys.com&gt;
+                        From: {storeName} &lt;concierge@nobleenclave.com&gt;
                       </span>
                     </div>
 

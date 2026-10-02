@@ -93,7 +93,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   landingPage: "shop",
   storeName: "Nobel Enclave",
   tagline: "Considered pieces for the modern Ghanaian home",
-  supportEmail: "hello@laluxury.com",
+  supportEmail: "hello@nobleenclave.com",
   supportPhone: "",
   whatsappNumber: "",
   addressLine: "Accra, Ghana",

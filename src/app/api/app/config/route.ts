@@ -58,7 +58,7 @@ export async function GET() {
         mode: activeMode,
         publicKey: paystack?.publicKey ? `${paystack.publicKey.slice(0, 8)}...` : null,
       },
-      supportEmail: settings?.supportEmail || "contact@laluxurys.com",
+      supportEmail: settings?.supportEmail || "contact@nobleenclave.com",
       supportPhone: settings?.supportPhone || "",
       whatsappNumber: settings?.whatsappNumber || "",
       addressLine: settings?.addressLine || "Accra, Ghana",

@@ -6,7 +6,7 @@ import { LegalShell } from "@/components/shop/legal-shell";
 export const metadata: Metadata = {
   title: "Terms of sale",
   description:
-    "The terms you agree to when you order from LaLuxury: prices, payment, delivery, returns and how to reach us.",
+    "The terms you agree to when you order from Nobel Enclave: prices, payment, delivery, returns and how to reach us.",
 };
 
 /**
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
  */
 export default async function TermsPage() {
   const settings = await getSettings();
-  const contact = settings.supportEmail || "hello@laluxury.com";
+  const contact = settings.supportEmail || "hello@nobleenclave.com";
 
   return (
     <LegalShell

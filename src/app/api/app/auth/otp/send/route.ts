@@ -40,54 +40,29 @@ export async function POST(request: Request) {
       );
     }
 
-    const existingUser = await db.user.findFirst({
-      where: { phone: normalized },
-    });
-
-    if (purpose === "LOGIN" && !existingUser) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "No account found with this phone number. Please choose 'Create Account' first.",
-          notRegistered: true,
-        },
-        { status: 404 },
-      );
-    }
-
-    if (purpose === "REGISTER" && existingUser) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "An account with this phone number already exists. Please choose 'Sign In' instead.",
-          alreadyRegistered: true,
-        },
-        { status: 409 },
-      );
-    }
-
     const storeName = "Nobel Enclave";
     const otpRes = await sendOtp(normalized, storeName);
 
     if (!otpRes.ok) {
-      if (!otpRes.fatal) {
-        // Gateway queue hiccup (e.g. transient 500) where SMS is in flight
-        return NextResponse.json({
-          ok: true,
-          message: `Verification code is on its way via SMS to ${phone}. It may take a minute to arrive.`,
-          normalizedPhone: normalized,
-        });
-      }
       return NextResponse.json(
-        { ok: false, error: otpRes.message },
+        {
+          ok: false,
+          error: otpRes.message,
+          ussdCode: otpRes.ussdCode || "*928*01#",
+        },
         { status: 400 },
       );
     }
 
+    const message = otpRes.pending
+      ? `A verification code is already active for ${phone}. Check your messages or dial *928*01#.`
+      : `Verification code sent via SMS to ${phone}.`;
+
     return NextResponse.json({
       ok: true,
-      message: `Verification code sent to ${phone}.`,
+      message,
       normalizedPhone: normalized,
+      ussdCode: otpRes.ussdCode || "*928*01#",
     });
   } catch (error) {
     console.error("Error sending OTP:", error);

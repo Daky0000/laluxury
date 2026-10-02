@@ -40,7 +40,7 @@ export const OTP_EXPIRY_MINUTES = 5;
 export const OTP_MAX_ATTEMPTS = 3;
 
 export type SmsResult =
-  | { ok: true; otpId?: number }
+  | { ok: true; otpId?: number; ussdCode?: string; pending?: boolean }
   | {
       ok: false;
       code: string;
@@ -52,6 +52,7 @@ export type SmsResult =
        * the common case and the one that must not strand anybody.
        */
       fatal: boolean;
+      ussdCode?: string;
     };
 
 /**
@@ -83,10 +84,13 @@ const FATAL_CODES = new Set([
 
 async function credentials(): Promise<{ apiKey: string; senderId: string } | null> {
   const { sms } = await getIntegrations();
-  if (!sms.apiKey || !sms.senderId) return null;
-  // The sender ID is a brand name on the handset and Vynfy caps it at 11
-  // characters, so it is trimmed here rather than rejected at send time.
-  return { apiKey: sms.apiKey, senderId: sms.senderId.slice(0, 11) };
+  if (!sms.apiKey) return null;
+  // Vynfy registered & approved sender ID is 'Laluxurys'
+  let senderId = sms.senderId?.trim() || "Laluxurys";
+  if (!senderId || senderId.toLowerCase() === "laluxury") {
+    senderId = "Laluxurys";
+  }
+  return { apiKey: sms.apiKey, senderId: senderId.slice(0, 11) };
 }
 
 export async function isSmsConfigured(): Promise<boolean> {
@@ -99,6 +103,7 @@ type VynfyResponse = {
   error?: string;
   error_code?: string;
   otp_id?: number;
+  ussd_code?: string;
   attempts_remaining?: number;
 };
 
@@ -202,7 +207,7 @@ function readableError(
       "account up for you.",
     MISSING_PHONE: "Enter your phone number.",
     OTP_PENDING:
-      "A code is already on its way to that number. Wait for it, or try again in a few minutes.",
+      "A code is already on its way to that number. Check your messages or dial *928*01# (Ghana).",
     INSUFFICIENT_BALANCE:
       "We could not send the code just now. Please try again shortly, or contact us.",
     NO_OTP_FOUND: "That code has expired. Ask for a new one.",
@@ -255,7 +260,7 @@ export async function sendOtp(phone: string, storeName: string): Promise<SmsResu
     `${storeName}: your verification code is %otp_code%. ` +
     `It expires in ${OTP_EXPIRY_MINUTES} minutes. Do not share it with anyone.`;
 
-  let { status, data } = await call("/otp/generate", config.apiKey, {
+  const payload = {
     number: forGateway(number),
     message: message.slice(0, 160),
     sender_id: config.senderId,
@@ -263,32 +268,56 @@ export async function sendOtp(phone: string, storeName: string): Promise<SmsResu
     medium: "sms",
     length: OTP_LENGTH,
     expiry: OTP_EXPIRY_MINUTES,
-  });
+  };
 
-  // If Vynfy returned a transient error (e.g. queue spike or network hiccup), retry once after 1s
-  if (status !== 200 && (!data || !FATAL_CODES.has(data.error_code ?? data.error ?? ""))) {
-    console.warn(`[sms] /otp/generate returned status ${status} (${data?.message || "error"}), retrying once...`);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    const retry = await call("/otp/generate", config.apiKey, {
-      number: forGateway(number),
-      message: message.slice(0, 160),
-      sender_id: config.senderId,
-      otp_type: "numeric",
-      medium: "sms",
-      length: OTP_LENGTH,
-      expiry: OTP_EXPIRY_MINUTES,
-    });
-    if (retry.status === 200 || retry.data?.otp_id) {
-      status = retry.status;
-      data = retry.data;
+  // Up to 3 attempts with progressive backoff if Vynfy experiences transient queue load spikes
+  const delays = [0, 800, 1500];
+  let status = 0;
+  let data: VynfyResponse = {};
+
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (attempt > 0) {
+      console.warn(
+        `[sms] /otp/generate retry ${attempt + 1}/${delays.length} after ${delays[attempt]}ms (previous status ${status}, ${data?.message || data?.error || "error"})...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+
+    const res = await call("/otp/generate", config.apiKey, payload);
+    status = res.status;
+    data = res.data;
+
+    // Strict success: HTTP 200 AND data.success === true
+    if (status === 200 && data.success) {
+      return {
+        ok: true,
+        otpId: data.otp_id,
+        ussdCode: data.ussd_code || "*928*01#",
+      };
+    }
+
+    // Existing active OTP pending on gateway
+    const errCode = data.error_code ?? data.error ?? "";
+    if (status === 429 || errCode === "OTP_PENDING") {
+      return {
+        ok: true,
+        pending: true,
+        otpId: data.otp_id,
+        ussdCode: data.ussd_code || "*928*01#",
+      };
+    }
+
+    // If fatal validation failure (bad phone number, empty message, etc), abort retry immediately
+    if (FATAL_CODES.has(errCode)) {
+      break;
     }
   }
 
-  // If 200 OK OR if Vynfy generated an otp_id (even on queue response 500, Vynfy dispatches the SMS)
-  if ((status === 200 && data.success) || data.otp_id) {
-    return { ok: true, otpId: data.otp_id };
-  }
-  return { ok: false, ...readableError("/otp/generate", status, data) };
+  return {
+    ok: false,
+    ...readableError("/otp/generate", status, data),
+    ussdCode: "*928*01#",
+  };
 }
 
 /** Checks a code against the pending OTP for that number. */

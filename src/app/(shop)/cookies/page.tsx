@@ -17,7 +17,7 @@ export const metadata: Metadata = {
  */
 export default async function CookiesPage() {
   const settings = await getSettings();
-  const contact = settings.supportEmail || "hello@laluxury.com";
+  const contact = settings.supportEmail || "hello@nobleenclave.com";
 
   return (
     <LegalShell

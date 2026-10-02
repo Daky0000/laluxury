@@ -9,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "All products",
     description:
-      "Every LaLuxury piece — bedding, living, windows and student essentials — in one place.",
+      "Every Nobel Enclave piece — bedding, living, windows and student essentials — in one place.",
     // With the catalog chosen as the front page it answers at two addresses.
     // Point search engines at the one the shop links to.
     alternates: settings.landingPage === "shop" ? { canonical: env.siteUrl() } : undefined,

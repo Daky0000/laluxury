@@ -7,7 +7,7 @@ import { CookieSettingsLink } from "@/components/shop/cookie-consent";
 export const metadata: Metadata = {
   title: "Privacy notice",
   description:
-    "What personal data LaLuxury collects, why we hold it, who processes it, how long we keep it, and the rights you have over it under the GDPR and Ghana's Data Protection Act.",
+    "What personal data Nobel Enclave collects, why we hold it, who processes it, how long we keep it, and the rights you have over it under the GDPR and Ghana's Data Protection Act.",
 };
 
 /**
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
  */
 export default async function PrivacyPage() {
   const settings = await getSettings();
-  const contact = settings.supportEmail || "hello@laluxury.com";
+  const contact = settings.supportEmail || "hello@nobleenclave.com";
 
   return (
     <LegalShell

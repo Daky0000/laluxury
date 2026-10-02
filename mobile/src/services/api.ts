@@ -148,8 +148,8 @@ class ApiService {
     phone: string,
     purpose: "LOGIN" | "REGISTER" = "LOGIN",
     name?: string,
-  ): Promise<{ ok: boolean; message: string; normalizedPhone?: string }> {
-    return this.request<{ ok: boolean; message: string; normalizedPhone?: string }>(
+  ): Promise<{ ok: boolean; message: string; normalizedPhone?: string; ussdCode?: string }> {
+    return this.request<{ ok: boolean; message: string; normalizedPhone?: string; ussdCode?: string }>(
       "/api/app/auth/otp/send",
       {
         method: "POST",

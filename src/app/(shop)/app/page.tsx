@@ -3,8 +3,8 @@ import Link from "next/link";
 import { Download, Smartphone, ShieldCheck, CheckCircle2, ArrowRight } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Download Mobile App | LaLuxury",
-  description: "Download the LaLuxury mobile app for Android to manage inventory, catalog pieces, and live showroom pricing.",
+  title: "Download Mobile App | Nobel Enclave",
+  description: "Download the Nobel Enclave mobile app for Android to browse luxury living collections, track orders, and manage pieces.",
 };
 
 const DOWNLOAD_URL = "/api/app/download";
@@ -16,13 +16,13 @@ export default function AppDownloadPage() {
       <section className="lx-container lx-page-header text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--accent)] mb-3">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Version 1.2.2 &bull; Latest Release
+          Version 1.2.5 &bull; Latest Release
         </div>
         <h1 className="mt-2 text-[clamp(2.25rem,5vw,3.5rem)] leading-tight font-serif text-[var(--text-primary)]">
-          LaLuxury Mobile App
+          Nobel Enclave Mobile App
         </h1>
         <p className="mx-auto mt-3 max-w-[620px] text-sm sm:text-base font-light leading-relaxed text-[var(--text-muted)]">
-          The complete luxury living experience in your pocket. Browse handcrafted collections in GH₵, purchase seamlessly with Paystack or MoMo, or sign in as store owner to manage showroom inventory in real time.
+          The complete luxury living experience in your pocket. Browse handcrafted collections in GH₵, purchase seamlessly with Paystack or MoMo, or sign in to manage your orders and concierge services in real time.
         </p>
 
         {/* Primary CTA */}
@@ -32,7 +32,7 @@ export default function AppDownloadPage() {
             className="inline-flex items-center gap-2.5 rounded-none bg-[#7A2E3C] px-8 py-4 text-xs font-medium uppercase tracking-[0.16em] text-white shadow-md transition-all hover:bg-[#60232F]"
           >
             <Download className="h-4 w-4" />
-            <span>Download Android APK (v1.2.2)</span>
+            <span>Download Android APK (v1.2.5)</span>
           </a>
           <Link
             href="/shop"
@@ -105,7 +105,7 @@ export default function AppDownloadPage() {
                   Allow Installation
                 </h4>
                 <p className="mt-1 text-sm font-light leading-relaxed text-[var(--text-secondary)]">
-                  Open your phone&rsquo;s <strong>Downloads</strong> and tap <code>LaLuxury-Management.apk</code>. If prompted by your browser or Android system to allow unknown apps, toggle &ldquo;Allow from this source&rdquo;.
+                  Open your phone&rsquo;s <strong>Downloads</strong> and tap <code>Nobel-Enclave.apk</code> (or <code>LaLuxury-Management.apk</code>). If prompted by your browser or Android system to allow unknown apps, toggle &ldquo;Allow from this source&rdquo;.
                 </p>
               </div>
             </li>
@@ -119,7 +119,7 @@ export default function AppDownloadPage() {
                   Launch &amp; Enjoy
                 </h4>
                 <p className="mt-1 text-sm font-light leading-relaxed text-[var(--text-secondary)]">
-                  Open the app from your home screen. Tap &ldquo;Browse Live Catalog&rdquo; for guest mode or use &ldquo;Auto-fill Store Owner Credentials&rdquo; to sign in.
+                  Open the app from your home screen. Explore the live luxury collections or sign in seamlessly via phone number and SMS verification.
                 </p>
               </div>
             </li>

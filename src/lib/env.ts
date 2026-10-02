@@ -64,13 +64,13 @@ export const env = {
     port: () => Number(optional("SMTP_PORT", "587")),
     user: () => optional("SMTP_USER"),
     password: () => optional("SMTP_PASSWORD"),
-    from: () => optional("EMAIL_FROM", "LaLuxury <no-reply@laluxury.com>"),
+    from: () => optional("EMAIL_FROM", "Nobel Enclave <no-reply@nobleenclave.com>"),
     isConfigured: () => Boolean(process.env.SMTP_HOST && process.env.SMTP_USER),
   },
 
   vynfy: {
     apiKey: () => optional("VYNFY_API_KEY"),
-    senderId: () => optional("VYNFY_SENDER_ID", "LaLuxury"),
+    senderId: () => optional("VYNFY_SENDER_ID", "Laluxurys"),
     isConfigured: () => Boolean(process.env.VYNFY_API_KEY),
   },
 

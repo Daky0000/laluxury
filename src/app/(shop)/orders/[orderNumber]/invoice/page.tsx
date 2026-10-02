@@ -244,7 +244,7 @@ export default async function OrderInvoicePage({
             </p>
             <p className="mt-1.5 leading-relaxed">
               Quote reference <strong>{order.orderNumber}</strong> on all Mobile Money or corporate
-              bank transfers. All pieces include LaLuxury&apos;s white-glove room placement and
+              bank transfers. All pieces include Nobel Enclave&apos;s white-glove room placement and
               packaging removal in Greater Accra.
             </p>
           </div>

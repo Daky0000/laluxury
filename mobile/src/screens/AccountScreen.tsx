@@ -194,14 +194,8 @@ export function AccountScreen({
       setResendCooldown(60);
       setInfoMessage(res.message || `A 6-digit verification code was sent via SMS to ${cleanPhone}.`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to send verification SMS.";
-      if (msg.includes("SMS-500") || msg.includes("network had trouble") || msg.includes("trouble with that")) {
-        setAuthStep("OTP");
-        setResendCooldown(60);
-        setInfoMessage(`Verification code is dispatching to ${cleanPhone}. Enter it below once it arrives or request a new code.`);
-      } else {
-        setError(msg);
-      }
+      const msg = err instanceof Error ? err.message : "Failed to send verification SMS. Please try again.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -831,6 +825,15 @@ export function AccountScreen({
                 </TouchableOpacity>
               )}
             </View>
+
+            <View style={styles.ussdHintBox}>
+              <Feather name="phone-call" size={13} color={colors.primary} />
+              <Text style={styles.ussdHintText}>
+                Ghana network tip: Dial{" "}
+                <Text style={{ fontWeight: "700", color: colors.primary }}>*928*01#</Text>{" "}
+                to retrieve your code instantly on-screen if SMS is delayed.
+              </Text>
+            </View>
           </View>
         )}
 
@@ -1330,6 +1333,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.primary,
     fontWeight: "700",
+  },
+  ussdHintBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.surfaceWarm,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  ussdHintText: {
+    flex: 1,
+    fontSize: 11,
+    color: colors.textSecondary,
+    lineHeight: 16,
   },
   backBtnRow: {
     flexDirection: "row",

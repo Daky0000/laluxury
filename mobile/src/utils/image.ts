@@ -1,5 +1,5 @@
 /**
- * Universal Image URL Resolver for LaLuxury Mobile App
+ * Universal Image URL Resolver for Nobel Enclave Mobile App
  * Resolves relative catalog paths, Cloudflare R2 paths, and API media URLs
  * into fully qualified HTTPS URLs that load reliably in React Native.
  */

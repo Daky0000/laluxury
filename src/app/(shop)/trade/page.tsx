@@ -4,7 +4,7 @@ import { Compass, Layers, ShieldCheck, Truck, ArrowRight } from "lucide-react";
 import { TradeApplicationForm } from "@/components/shop/trade-application-form";
 
 export const metadata: Metadata = {
-  title: "Trade & Interior Design Program — LaLuxury",
+  title: "Trade & Interior Design Program — Nobel Enclave",
   description:
     "Exclusive trade privileges, custom upholstery swatches, CAD/3D specifications, and white-glove installation for interior designers, architects, and luxury developers.",
 };
@@ -39,7 +39,7 @@ export default function TradeProgramPage() {
       <div className="grid gap-10 border-b border-[var(--border-subtle)] pb-14 lg:grid-cols-[1.4fr_1fr] lg:items-start">
         <div>
           <p className="lx-eyebrow">
-            LaLuxury To-The-Trade Program
+            Nobel Enclave To-The-Trade Program
           </p>
           <h1 className="mt-3 text-[clamp(2.25rem,5vw,3.5rem)] leading-[1.06] text-[var(--text-primary)]">
             Designed for West Africa’s Leading Architects, Interior Designers &amp; Developers.

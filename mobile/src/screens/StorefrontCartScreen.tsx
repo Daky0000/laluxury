@@ -451,7 +451,7 @@ export function StorefrontCartScreen({
       const safeEmail =
         customerEmail.trim() ||
         user?.email ||
-        `${safePhone.replace(/[^0-9]/g, "")}@customer.laluxurys.com`;
+        `${safePhone.replace(/[^0-9]/g, "")}@customer.nobleenclave.com`;
 
       const orderPayload = {
         items: cart.map((item) => ({

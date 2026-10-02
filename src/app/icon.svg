@@ -1,6 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LaLuxury">
-  <rect width="64" height="64" rx="9" fill="#7a2e3c" />
-  <!-- The L of the wordmark, drawn as a path so it stays exact at 16px where
-       no serif face would be available to render text with. -->
-  <path d="M20 14h6.5v3.5h-2.5v25.5h18.5v-3h3.5v7H20v-3.5h2.5V17.5H20z" fill="#f1f0ec" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Nobel Enclave">
+  <rect width="64" height="64" rx="12" fill="#3E0416" />
+  <!-- Nobel Enclave NE monogram in luxury gold -->
+  <text x="32" y="42" font-family="Cinzel, 'Times New Roman', serif" font-size="28" font-weight="700" fill="#D4AF37" text-anchor="middle" letter-spacing="1">NE</text>
 </svg>
