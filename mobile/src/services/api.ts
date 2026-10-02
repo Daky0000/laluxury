@@ -121,7 +121,11 @@ class ApiService {
 
     if (!response.ok) {
       const errorMsg = data?.error || `Request failed with status ${response.status}`;
-      throw new Error(errorMsg);
+      const err = new Error(errorMsg) as any;
+      if (data && typeof data === "object") {
+        Object.assign(err, data);
+      }
+      throw err;
     }
 
     return data as T;
@@ -590,6 +594,24 @@ class ApiService {
       directUrl: string;
       releaseNotes: string;
     }>("/api/app/version");
+  }
+
+  // --- Owner Custom Notifications ------------------------------------------
+
+  async sendCustomNotification(data: {
+    target: "phone" | "announcement" | "order";
+    message: string;
+    phone?: string;
+    orderId?: string;
+    title?: string;
+  }): Promise<{ ok: boolean; message: string; deliveryStatus?: string }> {
+    return this.request<{ ok: boolean; message: string; deliveryStatus?: string }>(
+      "/api/app/notifications/custom",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    );
   }
 }
 

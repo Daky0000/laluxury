@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { StyleSheet, View, SafeAreaView, StatusBar, Alert, BackHandler, ToastAndroid } from "react-native";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "./src/theme/colors";
 import { api } from "./src/services/api";
 import { User, Product, Variant, CartItem, ServerCartItem } from "./src/types";
@@ -65,8 +66,33 @@ import { BottomNav, StorefrontTab, BackendTab } from "./src/components/BottomNav
 import { SplashScreen } from "./src/components/SplashScreen";
 import { OrderConfirmationModal } from "./src/components/OrderConfirmationModal";
 import { PopNotification, PopNotificationData } from "./src/components/PopNotification";
+import { AppUpdateModal, AppUpdateInfo } from "./src/components/AppUpdateModal";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const CURRENT_APP_VERSION = "1.2.3";
+
+function isNewerVersion(current: string, latest: string): boolean {
+  const cParts = current.split(".").map((n) => parseInt(n, 10) || 0);
+  const lParts = latest.split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(cParts.length, lParts.length); i++) {
+    const c = cParts[i] || 0;
+    const l = lParts[i] || 0;
+    if (l > c) return true;
+    if (l < c) return false;
+  }
+  return false;
+}
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <MainApp />
+    </SafeAreaProvider>
+  );
+}
+
+function MainApp() {
+  const insets = useSafeAreaInsets();
   const [user, setUser] = useState<User | null>(null);
   const [mode, setMode] = useState<"STOREFRONT" | "BACKEND">("STOREFRONT");
   const [storefrontTab, setStorefrontTab] = useState<StorefrontTab>("HOME");
@@ -79,9 +105,43 @@ export default function App() {
   const [confirmedOrderEmail, setConfirmedOrderEmail] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [notification, setNotification] = useState<PopNotificationData | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
 
   const notify = (data: PopNotificationData) => {
     setNotification(data);
+  };
+
+  // Check for app updates on launch and prompt user
+  useEffect(() => {
+    async function checkAppUpdates() {
+      try {
+        const info = await api.checkAppVersion();
+        if (info && info.latestVersion) {
+          setUpdateInfo(info);
+          if (isNewerVersion(CURRENT_APP_VERSION, info.latestVersion)) {
+            const dismissed = await AsyncStorage.getItem("@laluxury_dismissed_update_v");
+            if (dismissed !== info.latestVersion) {
+              setShowUpdateModal(true);
+            }
+          }
+        }
+      } catch {
+        // Non-blocking fallback when offline
+      }
+    }
+    checkAppUpdates();
+  }, []);
+
+  const handleDismissUpdate = async () => {
+    setShowUpdateModal(false);
+    if (updateInfo) {
+      try {
+        await AsyncStorage.setItem("@laluxury_dismissed_update_v", updateInfo.latestVersion);
+      } catch {
+        // ignore
+      }
+    }
   };
 
   // Initialize Auth & Cart
@@ -259,13 +319,69 @@ export default function App() {
     }
     updateCartState(nextCart);
 
-    if (user) {
+    if (user && !activeVariant.id.endsWith("-default")) {
       api.addToServerCart(activeVariant.id, qty).catch(() => null);
+    }
+
+    // If product had no variants in memory, resolve real variant from API to avoid -default IDs
+    if (!variant && (!product.variants || product.variants.length === 0)) {
+      api
+        .getProduct(product.id)
+        .then((res) => {
+          if (res?.product?.variants && res.product.variants.length > 0) {
+            const realVar = res.product.variants[0];
+            setCart((curr) => {
+              const updated = curr.map((c) =>
+                c.variant.id === `${product.id}-default` ? { ...c, variant: realVar } : c,
+              );
+              api.saveCart(updated);
+              return updated;
+            });
+            if (user) {
+              api.addToServerCart(realVar.id, qty).catch(() => null);
+            }
+          }
+        })
+        .catch(() => null);
     }
 
     notify({
       title: "Added to Bag",
       message: `${qty}× ${product.title} added to your bag.`,
+      type: "success",
+      icon: "shopping-bag",
+    });
+  };
+
+  const handleBulkAddToCart = (
+    items: Array<{ product: Product; variant: Variant; quantity: number }>,
+  ) => {
+    if (!items || items.length === 0) return;
+    let nextCart = [...cart];
+
+    for (const { product, variant, quantity } of items) {
+      if (quantity <= 0) continue;
+      const existingIndex = nextCart.findIndex((i) => i.variant.id === variant.id);
+      if (existingIndex > -1) {
+        nextCart[existingIndex] = {
+          ...nextCart[existingIndex],
+          quantity: nextCart[existingIndex].quantity + quantity,
+        };
+      } else {
+        nextCart.push({ product, variant, quantity });
+      }
+
+      if (user && !variant.id.endsWith("-default")) {
+        api.addToServerCart(variant.id, quantity).catch(() => null);
+      }
+    }
+
+    updateCartState(nextCart);
+
+    const totalAdded = items.reduce((sum, i) => sum + i.quantity, 0);
+    notify({
+      title: "Bulk Added to Bag",
+      message: `${totalAdded} items added to your bag.`,
       type: "success",
       icon: "shopping-bag",
     });
@@ -415,6 +531,9 @@ export default function App() {
           onAddToCart={(product, variant, qty) => {
             handleAddToCart(product, variant, qty);
           }}
+          onBulkAddToCart={(items) => {
+            handleBulkAddToCart(items);
+          }}
           onNotify={notify}
         />
         <PopNotification
@@ -445,7 +564,7 @@ export default function App() {
     >
       <ExpoStatusBar style={mode === "BACKEND" ? "light" : "dark"} />
 
-      <View style={styles.screenContent}>
+      <View style={[styles.screenContent, { paddingBottom: 64 + Math.max(insets.bottom, 12) }]}>
         {/* ================================================================ */}
         {/* STOREFRONT MODE (E-Commerce Customer Experience)                  */}
         {/* ================================================================ */}
@@ -562,6 +681,7 @@ export default function App() {
                   });
                 }}
                 onLogout={handleLogout}
+                onNotify={notify}
               />
             )}
 
@@ -641,6 +761,14 @@ export default function App() {
           setConfirmedOrderEmail(null);
           setStorefrontTab("HOME");
         }}
+      />
+
+      {/* In-App Update Prompt Modal */}
+      <AppUpdateModal
+        visible={showUpdateModal}
+        updateInfo={updateInfo}
+        currentVersion={CURRENT_APP_VERSION}
+        onDismiss={handleDismissUpdate}
       />
 
       {/* Floating Pop Notifications */}

@@ -16,6 +16,7 @@ import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { User, Order } from "../types";
 import { formatCurrency, formatDate } from "../utils/format";
+import { AppUpdateModal } from "../components/AppUpdateModal";
 
 type Props = {
   user: User | null;
@@ -86,6 +87,7 @@ export function AccountScreen({
     releaseNotes: string;
   } | null>(null);
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
 
   const handleCheckUpdate = async () => {
     setCheckingUpdate(true);
@@ -93,10 +95,11 @@ export function AccountScreen({
     try {
       const res = await api.checkAppVersion();
       setUpdateInfo(res);
-      if (res.latestVersion === "1.2.0") {
-        setUpdateStatus("You have the latest version (v1.2.0 installed).");
+      if (res.latestVersion === "1.2.2") {
+        setUpdateStatus("You are running the latest version (v1.2.2).");
       } else {
         setUpdateStatus(`Update available: v${res.latestVersion}`);
+        setShowUpdateModal(true);
       }
     } catch {
       setUpdateStatus("Could not reach update server. Check your connection.");
@@ -121,7 +124,7 @@ export function AccountScreen({
         </View>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.updateCardTitle}>APP UPDATE & VERSION</Text>
-          <Text style={styles.updateCardSubtitle}>v1.2.0 (Build 2) &bull; Latest Release</Text>
+          <Text style={styles.updateCardSubtitle}>v1.2.2 (Build 3) &bull; Official Release</Text>
         </View>
         <TouchableOpacity
           style={styles.checkUpdateBtn}
@@ -150,7 +153,7 @@ export function AccountScreen({
           <Text style={styles.updateNotesText}>{updateInfo.releaseNotes}</Text>
           <TouchableOpacity
             style={styles.downloadUpdateBtn}
-            onPress={() => handleDownloadUpdate(updateInfo.downloadUrl)}
+            onPress={() => setShowUpdateModal(true)}
             activeOpacity={0.85}
           >
             <Feather name="download" size={14} color="#FFFFFF" />
@@ -158,6 +161,13 @@ export function AccountScreen({
           </TouchableOpacity>
         </View>
       )}
+
+      <AppUpdateModal
+        visible={showUpdateModal}
+        updateInfo={updateInfo}
+        currentVersion="1.2.2"
+        onDismiss={() => setShowUpdateModal(false)}
+      />
     </View>
   );
 

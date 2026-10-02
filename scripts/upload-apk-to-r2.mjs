@@ -23,40 +23,33 @@ async function uploadApk() {
     },
   });
 
-  const apkPath = "LaLuxury-Management.apk";
-  if (!fs.existsSync(apkPath)) {
-    console.error(`APK not found at ${apkPath}`);
-    process.exit(1);
+  const downloadsDir = fs.existsSync("public/downloads") ? "public/downloads" : ".";
+  const apkFiles = fs.readdirSync(downloadsDir).filter(f => f.endsWith(".apk"));
+  
+  if (apkFiles.length === 0) {
+    console.log("No APK files found to upload.");
+    return;
   }
 
-  const stat = fs.statSync(apkPath);
-  console.log(`Uploading ${apkPath} (${(stat.size / 1024 / 1024).toFixed(2)} MB) to Cloudflare R2...`);
+  for (const file of apkFiles) {
+    const fullPath = `${downloadsDir}/${file}`;
+    const stat = fs.statSync(fullPath);
+    console.log(`Uploading ${file} (${(stat.size / 1024 / 1024).toFixed(2)} MB) to Cloudflare R2...`);
+    const fileBuffer = fs.readFileSync(fullPath);
 
-  const fileBuffer = fs.readFileSync(apkPath);
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: `downloads/${file}`,
+        Body: fileBuffer,
+        ContentType: "application/vnd.android.package-archive",
+        ContentDisposition: `attachment; filename="${file}"`,
+      })
+    );
+    console.log(`Uploaded: ${publicUrl}/downloads/${file}`);
+  }
 
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: bucketName,
-      Key: "downloads/LaLuxury-Management.apk",
-      Body: fileBuffer,
-      ContentType: "application/vnd.android.package-archive",
-      ContentDisposition: 'attachment; filename="LaLuxury-Management.apk"',
-    })
-  );
-
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: bucketName,
-      Key: "downloads/LaLuxury-v1.2.2.apk",
-      Body: fileBuffer,
-      ContentType: "application/vnd.android.package-archive",
-      ContentDisposition: 'attachment; filename="LaLuxury-v1.2.2.apk"',
-    })
-  );
-
-  console.log("Upload completed successfully!");
-  console.log(`Download link 1: ${publicUrl}/downloads/LaLuxury-Management.apk`);
-  console.log(`Download link 2: ${publicUrl}/downloads/LaLuxury-v1.2.2.apk`);
+  console.log("All APK uploads completed successfully!");
 }
 
 uploadApk().catch((err) => {

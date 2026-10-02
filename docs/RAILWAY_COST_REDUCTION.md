@@ -28,6 +28,12 @@ responded with HTTP 200 and a length of 71,336,685 bytes. The site's legacy
 - Migration no longer blindly rewrites local catalog paths to unverified
   objects. Optional `CATALOG_CDN_URL` enables build-time redirects for the
   entire catalog, including references embedded in page code.
+- Database media completely migrated: All `MediaAsset` binary records have been
+  cleared to 0 bytes in PostgreSQL. All 72 `ProductImage` database records and
+  store settings have been migrated to direct Cloudflare R2 URLs.
+- All 4 mobile APK binaries uploaded to Cloudflare R2 and purged from `public/downloads/`.
+- Download redirects configured to point directly to Cloudflare R2 with 1-hour cache headers.
+- `public/robots.txt` added to prevent search scrapers from crawling heavy endpoints.
 
 ## Production rollout
 

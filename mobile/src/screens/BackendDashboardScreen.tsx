@@ -14,6 +14,8 @@ import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { User, DashboardData } from "../types";
 import { formatCurrency, formatDate } from "../utils/format";
+import { CustomNotificationModal } from "../components/CustomNotificationModal";
+import { PopNotificationData } from "../components/PopNotification";
 
 type Props = {
   user: User;
@@ -22,6 +24,7 @@ type Props = {
   onSelectProduct: (productId: string) => void;
   onSwitchToStorefront: () => void;
   onLogout: () => void;
+  onNotify?: (data: PopNotificationData) => void;
 };
 
 export function BackendDashboardScreen({
@@ -31,10 +34,12 @@ export function BackendDashboardScreen({
   onSelectProduct,
   onSwitchToStorefront,
   onLogout,
+  onNotify,
 }: Props) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -169,6 +174,22 @@ export function BackendDashboardScreen({
           </TouchableOpacity>
         </View>
 
+        {/* Custom Notification / SMS Broadcast Quick Action */}
+        <TouchableOpacity
+          style={styles.actionBtnNotif}
+          onPress={() => setShowNotificationModal(true)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.notifIconCircle}>
+            <Feather name="bell" size={16} color={colors.gold} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.notifActionTitle}>SEND CUSTOM NOTIFICATION</Text>
+            <Text style={styles.notifActionSub}>Direct customer SMS or storewide banner</Text>
+          </View>
+          <Feather name="chevron-right" size={16} color={colors.gold} />
+        </TouchableOpacity>
+
         {/* Low Stock Alerts */}
         {data?.lowStockItems && data.lowStockItems.length > 0 && (
           <View style={styles.sectionContainer}>
@@ -272,11 +293,65 @@ export function BackendDashboardScreen({
 
         <View style={{ height: 60 }} />
       </ScrollView>
+      <CustomNotificationModal
+        visible={showNotificationModal}
+        onClose={() => setShowNotificationModal(false)}
+        onSuccess={(msg) => {
+          if (onNotify) {
+            onNotify({
+              title: "Notification Sent",
+              message: msg,
+              type: "success",
+              icon: "check-circle",
+            });
+          }
+        }}
+        onError={(err) => {
+          if (onNotify) {
+            onNotify({
+              title: "Failed to Send",
+              message: err,
+              type: "error",
+              icon: "alert-circle",
+            });
+          }
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  actionBtnNotif: {
+    backgroundColor: colors.darkSurface,
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "rgba(212, 175, 55, 0.35)",
+  },
+  notifIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(212, 175, 55, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  notifActionTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  notifActionSub: {
+    fontSize: 11,
+    color: "#9CA3AF",
+  },
   container: {
     flex: 1,
     backgroundColor: colors.darkBg,

@@ -11,8 +11,11 @@ import {
   Modal,
   Alert,
   Linking,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { CartItem, User, ShippingAddress, ShippingRate, GHANA_REGIONS } from "../types";
@@ -104,11 +107,13 @@ export function StorefrontCartScreen({
   onNotify,
   onAuthSuccess,
 }: Props) {
+  const insets = useSafeAreaInsets();
   const [submitting, setSubmitting] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(PAYMENT_METHODS[0].id);
   const [isTestMode, setIsTestMode] = useState(false);
+  const [deliveryType, setDeliveryType] = useState<"delivery" | "pickup">("delivery");
   const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
   const [selectedRateId, setSelectedRateId] = useState<string | null>(null);
   const [loadingRates, setLoadingRates] = useState(false);
@@ -117,12 +122,10 @@ export function StorefrontCartScreen({
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [preorderDepositOption, setPreorderDepositOption] = useState<"full" | "deposit_50">("full");
 
-  // Customer contact states for instant MoMo and receipt delivery
-  const [momoPhone, setMomoPhone] = useState(user?.phone || "0241234567");
-  const [momoProvider, setMomoProvider] = useState<"mtn" | "vod" | "tgo">(
-    detectMoMoProvider(user?.phone || "0241234567")
-  );
-  const [customerEmail, setCustomerEmail] = useState(user?.email || "");
+  // Customer contact states for instant MoMo and receipt delivery (no prefill, placeholders show)
+  const [momoPhone, setMomoPhone] = useState("");
+  const [momoProvider, setMomoProvider] = useState<"mtn" | "vod" | "tgo">("mtn");
+  const [customerEmail, setCustomerEmail] = useState("");
 
   // MoMo Authorization Prompt Modal states
   const [showMoMoPromptModal, setShowMoMoPromptModal] = useState(false);
@@ -165,14 +168,14 @@ export function StorefrontCartScreen({
       .catch(() => {});
   }, []);
 
-  // Default Ghanaian delivery address
+  // Ghanaian delivery address - clean empty strings so placeholders show instead of dummy text
   const [shippingAddress, setShippingAddress] = useState<ShippingAddress>({
-    firstName: user?.firstName || "Akua",
-    lastName: user?.lastName || "Mensah",
-    phone: user?.phone || "+233 24 123 4567",
-    line1: "15 Senchi Street, Airport Residential",
+    firstName: "",
+    lastName: "",
+    phone: "",
+    line1: "",
     line2: "",
-    city: "Accra",
+    city: "",
     region: "Greater Accra",
     country: "Ghana",
   });
@@ -212,11 +215,13 @@ export function StorefrontCartScreen({
       .finally(() => setLoadingRates(false));
   }, [shippingAddress.region, subtotal, cart.length]);
 
+  const isPickup = deliveryType === "pickup";
   const selectedRate = shippingRates.find((r) => r.id === selectedRateId) || shippingRates[0];
   const isFreeDelivery =
+    isPickup ||
     Boolean(selectedRate?.isFree) ||
     (freeShippingThreshold !== null && subtotal >= freeShippingThreshold);
-  const shippingFee = cart.length > 0 ? (isFreeDelivery ? 0 : (selectedRate?.price ?? 0)) : 0;
+  const shippingFee = cart.length > 0 && !isPickup ? (isFreeDelivery ? 0 : (selectedRate?.price ?? 0)) : 0;
   const total = subtotal + shippingFee;
 
   const hasPreorderItems = cart.some((item) => Boolean(item.product.isPreorder));
@@ -370,14 +375,51 @@ export function StorefrontCartScreen({
       return;
     }
 
-    if (!shippingAddress.line1 || !shippingAddress.city) {
+    const trimmedFirst = (shippingAddress.firstName || "").trim();
+    const trimmedPhone = (shippingAddress.phone || "").trim();
+    const trimmedLine1 = (shippingAddress.line1 || "").trim();
+    const trimmedCity = (shippingAddress.city || "").trim();
+
+    if (!trimmedFirst) {
+      if (onNotify) {
+        onNotify({
+          title: "First Name Required",
+          message: "Please enter your first name for the delivery receipt.",
+          type: "warning",
+          icon: "user",
+        });
+      } else {
+        Alert.alert("First Name Required", "Please enter your first name for the delivery receipt.");
+      }
+      setShowAddressModal(true);
+      return;
+    }
+
+    if (!trimmedPhone || trimmedPhone.replace(/[^0-9]/g, "").length < 9) {
+      if (onNotify) {
+        onNotify({
+          title: "Phone Number Required",
+          message: "Please enter a valid phone number for your delivery and SMS receipt.",
+          type: "warning",
+          icon: "phone",
+        });
+      } else {
+        Alert.alert("Phone Required", "Please enter a valid phone number for your delivery and SMS receipt.");
+      }
+      setShowAddressModal(true);
+      return;
+    }
+
+    if (deliveryType === "delivery" && (!trimmedLine1 || !trimmedCity)) {
       if (onNotify) {
         onNotify({
           title: "Address Required",
-          message: "Please enter your delivery street address.",
+          message: "Please enter your delivery street address and city.",
           type: "warning",
           icon: "map-pin",
         });
+      } else {
+        Alert.alert("Address Required", "Please enter your delivery street address and city.");
       }
       setShowAddressModal(true);
       return;
@@ -402,35 +444,51 @@ export function StorefrontCartScreen({
 
     setSubmitting(true);
     try {
+      const safeFirst = trimmedFirst || user?.firstName?.trim() || "Customer";
+      const safeLast = (shippingAddress.lastName || "").trim() || user?.lastName?.trim() || safeFirst;
+      const safePhone = trimmedPhone || user?.phone || momoPhone || "0240000000";
+      const safeEmail =
+        customerEmail.trim() ||
+        user?.email ||
+        `${safePhone.replace(/[^0-9]/g, "")}@customer.laluxurys.com`;
+
       const orderPayload = {
         items: cart.map((item) => ({
           variantId: item.variant.id,
           quantity: item.quantity,
         })),
         customer: {
-          firstName: shippingAddress.firstName,
-          lastName: shippingAddress.lastName,
-          email:
-            customerEmail.trim() ||
-            user?.email ||
-            `${(shippingAddress.phone || "customer").replace(/[^0-9]/g, "")}@customer.laluxurys.com`,
-          phone: shippingAddress.phone,
+          firstName: safeFirst,
+          lastName: safeLast,
+          email: safeEmail,
+          phone: safePhone,
         },
-        shippingAddress: {
-          firstName: shippingAddress.firstName,
-          lastName: shippingAddress.lastName,
-          phone: shippingAddress.phone,
-          line1: shippingAddress.line1,
-          line2: shippingAddress.line2 || null,
-          city: shippingAddress.city,
-          region: shippingAddress.region,
-          country: shippingAddress.country,
-        },
-        shippingRateId: selectedRate?.id || null,
+        shippingAddress: isPickup
+          ? {
+              firstName: safeFirst,
+              lastName: safeLast,
+              phone: safePhone,
+              line1: "LaLuxury Atelier Showroom (Self-Pickup)",
+              line2: "Spintex Road / Airport Residential",
+              city: "Accra",
+              region: "Greater Accra",
+              country: "Ghana",
+            }
+          : {
+              firstName: safeFirst,
+              lastName: safeLast,
+              phone: safePhone,
+              line1: trimmedLine1,
+              line2: shippingAddress.line2?.trim() || null,
+              city: trimmedCity,
+              region: shippingAddress.region || "Greater Accra",
+              country: shippingAddress.country || "Ghana",
+            },
+        shippingRateId: isPickup ? null : (selectedRate?.id || null),
         discountCode: appliedPromo || null,
         preorderDepositOption: hasPreorderItems ? preorderDepositOption : null,
         paymentMethod: selectedPayment,
-        momoPhone: selectedPayment === "momo_push" ? (momoPhone || shippingAddress.phone) : undefined,
+        momoPhone: selectedPayment === "momo_push" ? (momoPhone || safePhone) : undefined,
         momoProvider: selectedPayment === "momo_push" ? momoProvider : undefined,
         idempotencyKey: `mob-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
       };
@@ -511,6 +569,48 @@ export function StorefrontCartScreen({
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to place order.";
+      const unavailableIds: string[] = (err as any)?.unavailableVariantIds || [];
+
+      if (
+        unavailableIds.length > 0 ||
+        msg.toLowerCase().includes("no longer available") ||
+        msg.toLowerCase().includes("unavailable")
+      ) {
+        Alert.alert(
+          "Items Unavailable in Bag",
+          "One or more products in your bag are no longer available in the atelier inventory. Would you like to remove only the unavailable items and keep the rest?",
+          [
+            { text: "Review Bag", style: "cancel" },
+            {
+              text: "Remove Unavailable Items",
+              style: "destructive",
+              onPress: () => {
+                if (unavailableIds.length > 0) {
+                  for (const id of unavailableIds) {
+                    onRemoveItem(id);
+                  }
+                } else {
+                  for (const item of cart) {
+                    if (item.variant.id.endsWith("-default")) {
+                      onRemoveItem(item.variant.id);
+                    }
+                  }
+                }
+                if (onNotify) {
+                  onNotify({
+                    title: "Bag Updated",
+                    message: "Unavailable items were removed from your bag. You can now checkout.",
+                    type: "info",
+                    icon: "shopping-bag",
+                  });
+                }
+              },
+            },
+          ]
+        );
+        return;
+      }
+
       if (onNotify) {
         onNotify({
           title: "Order Could Not Be Placed",
@@ -740,7 +840,203 @@ export function StorefrontCartScreen({
           </View>
         )}
 
-        {/* Cost Summary Breakdown */}
+        {/* 1. DELIVERY OR PICKUP METHOD */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionHeaderLabel}>DELIVERY OR PICKUP</Text>
+          <View style={styles.deliveryTypeToggle}>
+            <TouchableOpacity
+              style={[
+                styles.deliveryTypeBtn,
+                deliveryType === "delivery" && styles.deliveryTypeBtnActive,
+              ]}
+              onPress={() => setDeliveryType("delivery")}
+              activeOpacity={0.8}
+            >
+              <Feather
+                name="truck"
+                size={16}
+                color={deliveryType === "delivery" ? "#FFFFFF" : colors.text}
+              />
+              <Text
+                style={[
+                  styles.deliveryTypeBtnText,
+                  deliveryType === "delivery" && styles.deliveryTypeBtnTextActive,
+                ]}
+              >
+                Door Delivery
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.deliveryTypeBtn,
+                deliveryType === "pickup" && styles.deliveryTypeBtnActive,
+              ]}
+              onPress={() => setDeliveryType("pickup")}
+              activeOpacity={0.8}
+            >
+              <Feather
+                name="map-pin"
+                size={16}
+                color={deliveryType === "pickup" ? "#FFFFFF" : colors.text}
+              />
+              <Text
+                style={[
+                  styles.deliveryTypeBtnText,
+                  deliveryType === "pickup" && styles.deliveryTypeBtnTextActive,
+                ]}
+              >
+                Store Pickup (FREE)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* If Door Delivery: Show Delivery Address + Delivery Method Rates */}
+        {deliveryType === "delivery" && (
+          <>
+            {/* Delivery Address Card */}
+            <View style={styles.sectionContainer}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <Text style={styles.sectionHeaderLabel}>DELIVERY ADDRESS</Text>
+                {shippingAddress.line1 ? (
+                  <TouchableOpacity onPress={() => setShowAddressModal(true)}>
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: colors.primary }}>EDIT</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              {shippingAddress.line1 ? (
+                <TouchableOpacity
+                  style={styles.cardSelectable}
+                  onPress={() => setShowAddressModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.cardContentLeft}>
+                    <Text style={styles.addressName}>
+                      {[shippingAddress.firstName, shippingAddress.lastName].filter(Boolean).join(" ")} · {shippingAddress.phone}
+                    </Text>
+                    <Text style={styles.addressDetail}>
+                      {shippingAddress.line1}{shippingAddress.line2 ? `, ${shippingAddress.line2}` : ""}, {shippingAddress.city}, {shippingAddress.region}
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.cardSelectable, { borderStyle: "dashed", borderColor: colors.primary, backgroundColor: "#FAF7F5" }]}
+                  onPress={() => setShowAddressModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.cardContentLeft}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Feather name="plus-circle" size={18} color={colors.primary} />
+                      <Text style={[styles.paymentMethodText, { color: colors.primary }]}>Add Delivery Address</Text>
+                    </View>
+                    <Text style={styles.paymentMethodSub}>Tap to enter recipient name and address</Text>
+                  </View>
+                  <Feather name="chevron-right" size={20} color={colors.primary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Delivery Method Selector */}
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionHeaderLabel}>DELIVERY METHOD</Text>
+              {loadingRates ? (
+                <View style={[styles.cardSelectable, { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 14 }]}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={{ marginLeft: 8, fontSize: 13, color: colors.textSecondary }}>
+                    Quoting delivery rates...
+                  </Text>
+                </View>
+              ) : shippingRates.length === 0 ? (
+                <View style={styles.cardSelectable}>
+                  <View style={styles.cardContentLeft}>
+                    <Text style={styles.paymentMethodText}>Standard Delivery</Text>
+                    <Text style={styles.paymentMethodSub}>{shippingAddress.region || "Greater Accra"} · Calculated at checkout</Text>
+                  </View>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: colors.primary }}>
+                    {isFreeDelivery ? "FREE" : "—"}
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ gap: 8 }}>
+                  {shippingRates.map((rate) => {
+                    const isSelected = selectedRate?.id === rate.id;
+                    const ratePrice = isFreeDelivery || rate.isFree ? 0 : rate.price;
+                    return (
+                      <TouchableOpacity
+                        key={rate.id}
+                        style={[
+                          styles.cardSelectable,
+                          isSelected && {
+                            borderColor: colors.primary,
+                            borderWidth: 1.5,
+                            backgroundColor: "#FAF7F5",
+                          },
+                        ]}
+                        onPress={() => setSelectedRateId(rate.id)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.cardContentLeft}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <Text style={[styles.paymentMethodText, isSelected && { color: colors.primary, fontWeight: "700" }]}>
+                              {rate.name}
+                            </Text>
+                            {(rate.isFree || ratePrice === 0) && (
+                              <View style={{ backgroundColor: "#E6F4EA", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                <Text style={{ color: "#137333", fontSize: 11, fontWeight: "700" }}>FREE</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.paymentMethodSub}>
+                            {rate.estimatedDaysMin !== null && rate.estimatedDaysMax !== null
+                              ? `${rate.estimatedDaysMin === rate.estimatedDaysMax ? rate.estimatedDaysMin : `${rate.estimatedDaysMin}–${rate.estimatedDaysMax}`} business days · ${rate.zoneName}`
+                              : rate.zoneName}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 14, fontWeight: "700", color: isSelected ? colors.primary : colors.text }}>
+                          {ratePrice === 0 ? "FREE" : formatCurrency(ratePrice)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          </>
+        )}
+
+        {/* If Store Pickup: Show Pickup Location Details */}
+        {deliveryType === "pickup" && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionHeaderLabel}>PICKUP LOCATION</Text>
+            <View style={[styles.cardSelectable, { backgroundColor: "#FAF7F5", borderColor: colors.primary }]}>
+              <View style={styles.cardContentLeft}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                  <Text style={[styles.paymentMethodText, { color: colors.primary }]}>
+                    LaLuxury Atelier & Living Showroom
+                  </Text>
+                  <View style={{ backgroundColor: "#E6F4EA", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                    <Text style={{ color: "#137333", fontSize: 11, fontWeight: "700" }}>FREE</Text>
+                  </View>
+                </View>
+                <Text style={styles.addressDetail}>
+                  Spintex Road / Airport Residential Atelier, Accra
+                </Text>
+                <Text style={[styles.paymentMethodSub, { marginTop: 4 }]}>
+                  Opening Hours: Mon – Sat, 9:00 AM – 6:00 PM
+                </Text>
+                <Text style={[styles.paymentMethodSub, { color: colors.primary, marginTop: 2 }]}>
+                  • Ready for collection within 2–4 hours
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* 2. COST SUMMARY BREAKDOWN (Comes AFTER Delivery, BEFORE Payment!) */}
         <View style={styles.summaryBox}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>SUBTOTAL</Text>
@@ -748,16 +1044,12 @@ export function StorefrontCartScreen({
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>
-              DELIVERY ({selectedRate ? selectedRate.name.toUpperCase() : "STANDARD"})
+              {deliveryType === "pickup"
+                ? "STORE PICKUP"
+                : `DELIVERY (${selectedRate ? selectedRate.name.toUpperCase() : "STANDARD"})`}
             </Text>
             <Text style={styles.summaryValue}>
-              {loadingRates ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : isFreeDelivery ? (
-                "FREE"
-              ) : (
-                formatCurrency(shippingFee)
-              )}
+              {deliveryType === "pickup" ? "FREE" : isFreeDelivery ? "FREE" : formatCurrency(shippingFee)}
             </Text>
           </View>
           <View style={[styles.summaryRow, styles.summaryTotalRow]}>
@@ -776,93 +1068,7 @@ export function StorefrontCartScreen({
           )}
         </View>
 
-        {/* Shipping Address Card */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionHeaderLabel}>DELIVERY ADDRESS</Text>
-          <TouchableOpacity
-            style={styles.cardSelectable}
-            onPress={() => setShowAddressModal(true)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.cardContentLeft}>
-              <Text style={styles.addressName}>
-                {shippingAddress.firstName} {shippingAddress.lastName} · {shippingAddress.phone}
-              </Text>
-              <Text style={styles.addressDetail}>
-                {shippingAddress.line1}, {shippingAddress.city}, {shippingAddress.region}
-              </Text>
-            </View>
-            <Feather name="chevron-right" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Delivery Method Selector */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionHeaderLabel}>DELIVERY METHOD</Text>
-          {loadingRates ? (
-            <View style={[styles.cardSelectable, { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 14 }]}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={{ marginLeft: 8, fontSize: 13, color: colors.textSecondary }}>
-                Quoting delivery rates...
-              </Text>
-            </View>
-          ) : shippingRates.length === 0 ? (
-            <View style={styles.cardSelectable}>
-              <View style={styles.cardContentLeft}>
-                <Text style={styles.paymentMethodText}>Standard Delivery</Text>
-                <Text style={styles.paymentMethodSub}>{shippingAddress.region} · Calculated at checkout</Text>
-              </View>
-              <Text style={{ fontSize: 14, fontWeight: "700", color: colors.primary }}>
-                {isFreeDelivery ? "FREE" : "—"}
-              </Text>
-            </View>
-          ) : (
-            <View style={{ gap: 8 }}>
-              {shippingRates.map((rate) => {
-                const isSelected = selectedRate?.id === rate.id;
-                const ratePrice = isFreeDelivery || rate.isFree ? 0 : rate.price;
-                return (
-                  <TouchableOpacity
-                    key={rate.id}
-                    style={[
-                      styles.cardSelectable,
-                      isSelected && {
-                        borderColor: colors.primary,
-                        borderWidth: 1.5,
-                        backgroundColor: "#FAF7F5",
-                      },
-                    ]}
-                    onPress={() => setSelectedRateId(rate.id)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.cardContentLeft}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Text style={[styles.paymentMethodText, isSelected && { color: colors.primary, fontWeight: "700" }]}>
-                          {rate.name}
-                        </Text>
-                        {(rate.isFree || ratePrice === 0) && (
-                          <View style={{ backgroundColor: "#E6F4EA", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                            <Text style={{ color: "#137333", fontSize: 11, fontWeight: "700" }}>FREE</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.paymentMethodSub}>
-                        {rate.estimatedDaysMin !== null && rate.estimatedDaysMax !== null
-                          ? `${rate.estimatedDaysMin === rate.estimatedDaysMax ? rate.estimatedDaysMin : `${rate.estimatedDaysMin}–${rate.estimatedDaysMax}`} business days · ${rate.zoneName}`
-                          : rate.zoneName}
-                      </Text>
-                    </View>
-                    <Text style={{ fontSize: 14, fontWeight: "700", color: isSelected ? colors.primary : colors.text }}>
-                      {ratePrice === 0 ? "FREE" : formatCurrency(ratePrice)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-        </View>
-
-        {/* Payment Method Card */}
+        {/* 3. PAYMENT METHOD (Comes AFTER Subtotal and Total!) */}
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionHeaderLabel}>PAYMENT METHOD</Text>
           <TouchableOpacity
@@ -1003,58 +1209,108 @@ export function StorefrontCartScreen({
           </Text>
         </View>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 40 + Math.max(insets.bottom, 16) }} />
       </ScrollView>
 
       {/* Edit Address Modal */}
-      <Modal visible={showAddressModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+      <Modal
+        visible={showAddressModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddressModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 24) }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Delivery Address</Text>
-              <TouchableOpacity onPress={() => setShowAddressModal(false)}>
+              <View>
+                <Text style={styles.modalTitle}>Delivery Address</Text>
+                <Text style={styles.modalSubtitleText}>
+                  Enter recipient address details for nationwide delivery
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowAddressModal(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
                 <Feather name="x" size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ maxHeight: 380 }}>
-              <Text style={styles.inputLabel}>Full Name</Text>
-              <TextInput
-                style={styles.input}
-                value={`${shippingAddress.firstName} ${shippingAddress.lastName}`}
-                onChangeText={(val) => {
-                  const parts = val.split(" ");
-                  setShippingAddress((prev) => ({
-                    ...prev,
-                    firstName: parts[0] || "",
-                    lastName: parts.slice(1).join(" ") || "",
-                  }));
-                }}
-              />
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={{ maxHeight: 420 }}
+            >
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>First Name *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={shippingAddress.firstName}
+                    placeholder="e.g. Kwame"
+                    placeholderTextColor="#999"
+                    onChangeText={(val) =>
+                      setShippingAddress((prev) => ({ ...prev, firstName: val }))
+                    }
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Last Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={shippingAddress.lastName}
+                    placeholder="e.g. Mensah"
+                    placeholderTextColor="#999"
+                    onChangeText={(val) =>
+                      setShippingAddress((prev) => ({ ...prev, lastName: val }))
+                    }
+                  />
+                </View>
+              </View>
 
-              <Text style={styles.inputLabel}>Phone Number</Text>
+              <Text style={styles.inputLabel}>Phone Number *</Text>
               <TextInput
                 style={styles.input}
                 keyboardType="phone-pad"
                 value={shippingAddress.phone}
+                placeholder="e.g. 024 123 4567"
+                placeholderTextColor="#999"
                 onChangeText={(val) =>
                   setShippingAddress((prev) => ({ ...prev, phone: val }))
                 }
               />
 
-              <Text style={styles.inputLabel}>Street Address</Text>
+              <Text style={styles.inputLabel}>Street Address *</Text>
               <TextInput
                 style={styles.input}
                 value={shippingAddress.line1}
+                placeholder="e.g. 15 Senchi Street, Airport Residential"
+                placeholderTextColor="#999"
                 onChangeText={(val) =>
                   setShippingAddress((prev) => ({ ...prev, line1: val }))
                 }
               />
 
-              <Text style={styles.inputLabel}>City / Town</Text>
+              <Text style={styles.inputLabel}>Apartment / Suite / Landmark (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={shippingAddress.line2 || ""}
+                placeholder="e.g. Near Koala Supermarket, Apt 4B"
+                placeholderTextColor="#999"
+                onChangeText={(val) =>
+                  setShippingAddress((prev) => ({ ...prev, line2: val }))
+                }
+              />
+
+              <Text style={styles.inputLabel}>City / Town *</Text>
               <TextInput
                 style={styles.input}
                 value={shippingAddress.city}
+                placeholder="e.g. Accra"
+                placeholderTextColor="#999"
                 onChangeText={(val) =>
                   setShippingAddress((prev) => ({ ...prev, city: val }))
                 }
@@ -1100,17 +1356,26 @@ export function StorefrontCartScreen({
             <TouchableOpacity
               style={styles.modalSaveBtn}
               onPress={() => setShowAddressModal(false)}
+              activeOpacity={0.85}
             >
               <Text style={styles.modalSaveText}>Save Delivery Address</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Payment Selection Modal */}
-      <Modal visible={showPaymentModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+      <Modal
+        visible={showPaymentModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPaymentModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 24) }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Choose Payment Method</Text>
               <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
@@ -1148,13 +1413,28 @@ export function StorefrontCartScreen({
               </TouchableOpacity>
             ))}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* MoMo Authorization Prompt Modal */}
-      <Modal visible={showMoMoPromptModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: "88%" }]}>
+      <Modal
+        visible={showMoMoPromptModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          setMomoPolling(false);
+          setShowMoMoPromptModal(false);
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { maxHeight: "90%", paddingBottom: Math.max(insets.bottom, 24) }]}>
             <View style={styles.modalHeader}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <View style={styles.momoModalHeaderIcon}>
@@ -1308,7 +1588,7 @@ export function StorefrontCartScreen({
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1608,6 +1888,37 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 8,
   },
+  deliveryTypeToggle: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  deliveryTypeBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceWarm,
+    borderWidth: 1.5,
+    borderColor: colors.borderLight,
+  },
+  deliveryTypeBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  deliveryTypeBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  deliveryTypeBtnTextActive: {
+    color: "#FFFFFF",
+  },
   cardSelectable: {
     backgroundColor: colors.surfaceWarm,
     borderRadius: 14,
@@ -1735,6 +2046,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: colors.text,
+  },
+  modalSubtitleText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   inputLabel: {
     fontSize: 10,

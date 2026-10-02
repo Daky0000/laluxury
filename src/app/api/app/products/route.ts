@@ -239,6 +239,19 @@ export const GET = withApiAuth(async (request: Request) => {
       images: p.images,
       categories: p.categories.map((c) => c.category),
       collections: p.collections.map((c) => c.collection),
+      variants: p.variants.map((v) => ({
+        id: v.id,
+        title: "Default",
+        sku: v.sku,
+        price: v.price,
+        compareAtPrice: p.compareAtPrice,
+        costPrice: null,
+        isActive: v.isActive,
+        stock: v.inventory?.onHand ?? 0,
+        available: v.inventory
+          ? Math.max(0, v.inventory.onHand - v.inventory.reserved)
+          : 0,
+      })),
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
     };

@@ -323,15 +323,23 @@ export async function sendSms(phone: string, message: string): Promise<SmsResult
 
   const config = await credentials();
   if (!config) {
+    console.warn(
+      `[sms:simulated] SMS Gateway not configured (missing VYNFY_API_KEY/integrations). Simulated dispatch to ${number}: "${message.slice(0, 100)}"`,
+    );
     return { ok: false, code: "NOT_CONFIGURED", fatal: true, message: "SMS is not configured." };
   }
 
+  console.log(`[sms:dispatching] Sending SMS to ${number} via Vynfy (${config.senderId})...`);
   const { status, data } = await call("/api/v1/send", config.apiKey, {
     sender: config.senderId,
     recipients: [forGateway(number)],
     message: message.slice(0, 650),
   });
 
-  if (status === 200 && data.success) return { ok: true };
+  if (status === 200 && data.success) {
+    console.log(`[sms:success] SMS delivered to ${number}`);
+    return { ok: true };
+  }
+  console.error(`[sms:error] SMS to ${number} failed with status ${status}:`, data);
   return { ok: false, ...readableError("/api/v1/send", status, data) };
 }

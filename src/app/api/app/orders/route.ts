@@ -38,7 +38,7 @@ const checkoutSchema = z.object({
     .min(1, "At least one item is required."),
   customer: z.object({
     firstName: z.string().trim().min(1, "First name is required."),
-    lastName: z.string().trim().min(1, "Last name is required."),
+    lastName: z.string().trim().optional().default(""),
     email: z.string().email("Valid email is required."),
     phone: z.string().min(1, "Phone number is required."),
   }),
@@ -137,7 +137,29 @@ export const GET = withApiAuth(async (request: Request) => {
 // ---------------------------------------------------------------------------
 export const POST = withApiAuth(async (request: Request) => {
   const user = await getOptionalBearerUser();
-  const json = await request.json().catch(() => null);
+  let json = await request.json().catch(() => null);
+
+  // Auto-harmonize customer and shipping address names so partial names don't fail checkout
+  if (json && typeof json === "object") {
+    const raw = json as Record<string, any>;
+    const cust = (raw.customer && typeof raw.customer === "object") ? { ...raw.customer } : {};
+    const ship = (raw.shippingAddress && typeof raw.shippingAddress === "object") ? { ...raw.shippingAddress } : {};
+
+    const resolvedFirst = (cust.firstName || ship.firstName || user?.firstName || "").toString().trim();
+    const resolvedLast = (cust.lastName || ship.lastName || user?.lastName || resolvedFirst || "Customer").toString().trim();
+
+    if (resolvedFirst) {
+      if (!cust.firstName || !cust.firstName.toString().trim()) cust.firstName = resolvedFirst;
+      if (!ship.firstName || !ship.firstName.toString().trim()) ship.firstName = resolvedFirst;
+    }
+    if (!cust.lastName || !cust.lastName.toString().trim()) cust.lastName = resolvedLast;
+    if (!ship.lastName || !ship.lastName.toString().trim()) ship.lastName = resolvedLast;
+
+    raw.customer = cust;
+    raw.shippingAddress = ship;
+    json = raw;
+  }
+
   const parsed = checkoutSchema.safeParse(json);
 
   if (!parsed.success) {
@@ -179,8 +201,8 @@ export const POST = withApiAuth(async (request: Request) => {
         data: {
           email: data.customer.email.toLowerCase().trim(),
           phone: cleanPhone,
-          firstName: data.customer.firstName.trim(),
-          lastName: data.customer.lastName.trim(),
+          firstName: data.customer.firstName.trim() || "Customer",
+          lastName: data.customer.lastName.trim() || data.customer.firstName.trim() || "Customer",
           role: "CUSTOMER",
           phoneVerified: new Date(),
         },
@@ -242,10 +264,10 @@ export const POST = withApiAuth(async (request: Request) => {
     }
   }
 
-  // Resolve variants from database
-  const variantIds = data.items.map((i) => i.variantId);
+  // Resolve variants from database (handling deduplicated IDs and product-level fallbacks)
+  const uniqueVariantIds = Array.from(new Set(data.items.map((i) => i.variantId)));
   const variants = await db.variant.findMany({
-    where: { id: { in: variantIds } },
+    where: { id: { in: uniqueVariantIds } },
     include: {
       product: {
         include: {
@@ -257,15 +279,59 @@ export const POST = withApiAuth(async (request: Request) => {
     },
   });
 
-  if (variants.length !== variantIds.length) {
+  const variantMap = new Map(variants.map((v) => [v.id, v]));
+
+  // For any items whose variant wasn't found directly by ID, check if variantId is productId or productId-default
+  const missingVariantIds = uniqueVariantIds.filter((id) => !variantMap.has(id));
+  if (missingVariantIds.length > 0) {
+    const candidateProductIds = missingVariantIds.map((id) => id.replace(/-default$/, ""));
+    const fallbackVariants = await db.variant.findMany({
+      where: {
+        productId: { in: candidateProductIds },
+        isActive: true,
+      },
+      include: {
+        product: {
+          include: {
+            images: { take: 1, orderBy: { position: "asc" } },
+            categories: { select: { categoryId: true } },
+          },
+        },
+        inventory: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    for (const fv of fallbackVariants) {
+      if (!variantMap.has(fv.id)) {
+        variantMap.set(fv.id, fv);
+      }
+      for (const missingId of missingVariantIds) {
+        if (
+          missingId === fv.productId ||
+          missingId === `${fv.productId}-default` ||
+          missingId.startsWith(fv.productId)
+        ) {
+          variantMap.set(missingId, fv);
+        }
+      }
+    }
+  }
+
+  // Identify any remaining missing items
+  const stillMissingItems = data.items.filter((item) => !variantMap.has(item.variantId));
+  if (stillMissingItems.length > 0) {
+    const unavailableVariantIds = Array.from(new Set(stillMissingItems.map((i) => i.variantId)));
     return NextResponse.json(
-      { error: "One or more products in your bag are no longer available." },
+      {
+        error: "One or more products in your bag are no longer available.",
+        unavailableVariantIds,
+      },
       { status: 400 },
     );
   }
 
   // Check inventory stock
-  const variantMap = new Map(variants.map((v) => [v.id, v]));
   for (const item of data.items) {
     const v = variantMap.get(item.variantId);
     if (!v) continue;
@@ -389,7 +455,7 @@ export const POST = withApiAuth(async (request: Request) => {
   });
 
   const grandTotal = Math.max(0, subtotal - discountTotal) + shippingTotal;
-  const hasPreorderItems = variants.some((v) => Boolean(v.product.isPreorder));
+  const hasPreorderItems = Array.from(variantMap.values()).some((v) => Boolean(v.product.isPreorder));
   const is50PercentDeposit = hasPreorderItems && data.preorderDepositOption === "deposit_50";
   const depositAmount = is50PercentDeposit ? Math.round(grandTotal * 0.5) : null;
   const chargeAmount = depositAmount ?? grandTotal;
@@ -405,8 +471,8 @@ export const POST = withApiAuth(async (request: Request) => {
     const shipping = await tx.address.create({
       data: {
         userId,
-        firstName: data.shippingAddress.firstName || data.customer.firstName,
-        lastName: data.shippingAddress.lastName || data.customer.lastName,
+        firstName: data.shippingAddress.firstName?.trim() || data.customer.firstName.trim() || "Customer",
+        lastName: data.shippingAddress.lastName?.trim() || data.customer.lastName.trim() || data.customer.firstName.trim() || "Customer",
         phone: data.shippingAddress.phone || cleanPhone,
         line1: data.shippingAddress.line1,
         line2: data.shippingAddress.line2 ?? null,

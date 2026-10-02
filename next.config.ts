@@ -37,31 +37,32 @@ const nextConfig: NextConfig = {
   },
 
   async redirects() {
+    const cdnUrl = (process.env.CATALOG_CDN_URL || process.env.R2_PUBLIC_URL || "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev").replace(/\/$/, "");
+
     return [
-      // Enable only after every catalog object has been uploaded and verified.
-      ...(process.env.CATALOG_CDN_URL ? [{
+      {
         source: "/catalog/:path*",
-        destination: `${process.env.CATALOG_CDN_URL.replace(/\/$/, "")}/catalog/:path*`,
+        destination: `${cdnUrl}/catalog/:path*`,
         permanent: false,
-      }] : []),
+      },
       {
         source: "/downloads/:file(.*\\.apk)",
-        destination: "/api/app/download",
+        destination: `${cdnUrl}/downloads/:file`,
         permanent: false,
       },
       {
         source: "/LaLuxury-Management.apk",
-        destination: "/api/app/download",
+        destination: `${cdnUrl}/downloads/LaLuxury-Management.apk`,
         permanent: false,
       },
       {
         source: "/download",
-        destination: "/api/app/download",
+        destination: `${cdnUrl}/downloads/LaLuxury-Management.apk`,
         permanent: false,
       },
       {
         source: "/app/download",
-        destination: "/api/app/download",
+        destination: `${cdnUrl}/downloads/LaLuxury-Management.apk`,
         permanent: false,
       },
     ];

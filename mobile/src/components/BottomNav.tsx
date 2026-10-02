@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../theme/colors";
 
 export type StorefrontTab = "HOME" | "SHOP" | "BAG" | "ACCOUNT";
@@ -21,6 +22,9 @@ export function BottomNav({
   onTabPress,
   onSwitchMode,
 }: Props) {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 12);
+
   if (mode === "BACKEND") {
     const backendTabs = [
       { key: "DASHBOARD" as BackendTab, label: "Dashboard", icon: "bar-chart-2" as const },
@@ -30,7 +34,7 @@ export function BottomNav({
     ];
 
     return (
-      <View style={styles.backendContainer}>
+      <View style={[styles.backendContainer, { paddingBottom: bottomInset }]}>
         {backendTabs.map((tab) => {
           const isActive = activeTab === tab.key;
           return (
@@ -76,7 +80,7 @@ export function BottomNav({
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: bottomInset }]}>
       {storefrontTabs.map((tab) => {
         const isActive = activeTab === tab.key;
         return (

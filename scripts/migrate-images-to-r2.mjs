@@ -122,7 +122,7 @@ async function migrate() {
 
     console.log("\nAll database image references have been migrated to Cloudflare R2!");
   } catch (err) {
-    console.error("Migration check encountered error:", err.message);
+    console.error("Migration check encountered error:", err);
     process.exitCode = 1;
   } finally {
     await pool.end();

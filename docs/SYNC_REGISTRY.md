@@ -96,6 +96,7 @@ Classification:
 | Product Catalog CRUD | `db.product`, `db.variant` | `/admin/products` | ProductsList & CreateProduct | Mutation | **Shared (Parity Achieved)** | Create, edit price/stock, upload images |
 | Direct Camera Image Upload | Device Camera / R2 CDN | Web file picker | Native Camera + Expo ImagePicker | User action | **App-Only (Documented Exception)** | Mobile camera snap uploaded to R2 |
 | Order Status Transitions | `db.order` | `/admin/orders` | Mobile orders endpoint | Mutation | **Shared (Parity Achieved)** | View orders and payment statuses |
+| Custom Notifications & SMS Broadcast | `/api/app/notifications/custom` / `src/lib/sms.ts` | `CustomNotificationPanel` | `CustomNotificationModal` in Dashboard | Mutation | **Shared (Parity Achieved)** | Owner can send targeted SMS or storewide announcements |
 
 ---
 
@@ -110,6 +111,7 @@ after upload verification. See `RAILWAY_COST_REDUCTION.md` for rollout checks.
 
 | Module / Feature | Authoritative Source | Web Status | App Status | Refresh Trigger | Classification | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| App Release Version | `mobile/app.json` (1.2.2) | Web direct download | `/api/app/version` | In-app update check | **Shared (Parity Achieved)** | Aligned at version `1.2.2` (code 3) |
+| App Release Version | `mobile/app.json` (1.2.3) | Web direct download | `/api/app/version` | In-app update check | **Shared (Parity Achieved)** | Aligned at version `1.2.3` (code 5) |
 | APK Distribution | Cloudflare R2 | `/api/app/download` | In-app download link | User action | **Shared (Parity Achieved)** | Hosted on R2 bucket |
+| In-App Update Prompt System | `/api/app/version` / `/api/app/download` | Direct download link | `AppUpdateModal` auto-prompt & account check | App launch / Focus | **Shared (Parity Achieved)** | Prompts user on new release and downloads APK in-app |
 | Drift Prevention Checks | `scripts/verify-sync.ts` | CI pipeline | `npm run verify:sync` | Pre-commit / CI | **Shared (Parity Achieved)** | Fails build if hardcoded commerce rules drift |

@@ -8,6 +8,7 @@ import { getIntegrations, isReady } from "@/lib/integrations";
 import { getSettings } from "@/lib/settings";
 import { clearCart, getOrCreateCart } from "@/lib/cart";
 import { createOrderFromCart, logOrderEvent } from "@/lib/orders";
+import { notifyOrder } from "@/lib/notify";
 import { createSessionCookie, getSession } from "@/lib/auth/session";
 import { hashPassword, passwordProblems } from "@/lib/auth/password";
 import { initializeTransaction } from "@/lib/paystack";
@@ -27,8 +28,8 @@ export type CheckoutState = {
 
 const schema = z.object({
   email: z.string().email("Enter a valid email address."),
-  firstName: z.string().min(1, "Enter a first name."),
-  lastName: z.string().min(1, "Enter a last name."),
+  firstName: z.string().trim().min(1, "Enter a first name."),
+  lastName: z.string().trim().optional().default(""),
   phone: z
     .string()
     .min(1, "Enter a phone number we can reach you on.")
@@ -184,8 +185,8 @@ export async function placeOrderAction(
       phone,
       userId,
       shippingAddress: {
-        firstName: data.firstName,
-        lastName: data.lastName,
+        firstName: data.firstName.trim() || "Customer",
+        lastName: data.lastName?.trim() || data.firstName.trim() || "Customer",
         phone,
         line1: data.line1,
         line2: data.line2 ?? null,
@@ -242,6 +243,11 @@ export async function placeOrderAction(
           },
         });
       }
+
+      // Send Order Placed notification via SMS & Email
+      await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
+        console.error("[notify] web direct order.placed error:", err),
+      );
 
       redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=direct`;
     } else {

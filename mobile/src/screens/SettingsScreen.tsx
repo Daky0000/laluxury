@@ -13,6 +13,7 @@ import {
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { User } from "../types";
+import { AppUpdateModal, AppUpdateInfo } from "../components/AppUpdateModal";
 
 type Props = {
   user: User;
@@ -23,6 +24,26 @@ export function SettingsScreen({ user, onLogout }: Props) {
   const [serverUrl, setServerUrl] = useState(api.getBaseUrl());
   const [testing, setTesting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      const res = await api.checkAppVersion();
+      setUpdateInfo(res);
+      if (res.latestVersion === "1.2.2") {
+        Alert.alert("Latest Release", "This app is running the latest version (v1.2.2).");
+      } else {
+        setShowUpdateModal(true);
+      }
+    } catch {
+      Alert.alert("Update Error", "Could not reach update server. Check your connection.");
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   const handleSaveAndTest = async () => {
     setTesting(true);
@@ -137,7 +158,7 @@ export function SettingsScreen({ user, onLogout }: Props) {
           <Text style={styles.sectionLabel}>ABOUT LALUXURY ATELIER</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Version:</Text>
-            <Text style={styles.infoVal}>1.0.0 (Production Build)</Text>
+            <Text style={styles.infoVal}>1.2.2 (Build 3 - Latest)</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Platform:</Text>
@@ -147,7 +168,26 @@ export function SettingsScreen({ user, onLogout }: Props) {
             <Text style={styles.infoLabel}>Sync Protocol:</Text>
             <Text style={styles.infoVal}>Real-time Bearer REST</Text>
           </View>
+
+          <TouchableOpacity
+            style={[styles.testBtn, { marginTop: 14 }]}
+            onPress={handleCheckUpdate}
+            disabled={checkingUpdate}
+          >
+            {checkingUpdate ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <Text style={styles.testBtnText}>Check for App Updates</Text>
+            )}
+          </TouchableOpacity>
         </View>
+
+        <AppUpdateModal
+          visible={showUpdateModal}
+          updateInfo={updateInfo}
+          currentVersion="1.2.2"
+          onDismiss={() => setShowUpdateModal(false)}
+        />
 
         {/* Logout */}
         <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>

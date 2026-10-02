@@ -9,8 +9,13 @@ import {
   ActivityIndicator,
   Dimensions,
   Share,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { ProductDetail, Variant, Product } from "../types";
@@ -22,6 +27,7 @@ type Props = {
   onBack: () => void;
   onNavigateToBag: () => void;
   onAddToCart: (product: Product, variant: Variant, quantity: number) => void;
+  onBulkAddToCart?: (items: Array<{ product: Product; variant: Variant; quantity: number }>) => void;
   onNotify?: (notif: {
     title: string;
     message?: string;
@@ -171,8 +177,10 @@ export function StorefrontProductDetailScreen({
   onBack,
   onNavigateToBag,
   onAddToCart,
+  onBulkAddToCart,
   onNotify,
 }: Props) {
+  const insets = useSafeAreaInsets();
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
@@ -181,6 +189,12 @@ export function StorefrontProductDetailScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addedToast, setAddedToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+
+  // Bulk Order Assistant states
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkQuantities, setBulkQuantities] = useState<Record<string, number>>({});
+  const [bulkTargetTotal, setBulkTargetTotal] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -308,6 +322,74 @@ export function StorefrontProductDetailScreen({
       }
     } catch {
       // User cancelled
+    }
+  };
+
+  // Multi-variant bulk calculations
+  const bulkSelectedVariants = (product?.variants || [])
+    .map((v) => ({ variant: v, quantity: bulkQuantities[v.id] || 0 }))
+    .filter((line) => line.quantity > 0);
+
+  const totalBulkItems = bulkSelectedVariants.reduce((sum, line) => sum + line.quantity, 0);
+  const totalBulkPrice = bulkSelectedVariants.reduce(
+    (sum, line) => sum + line.quantity * line.variant.price,
+    0,
+  );
+
+  const handleDistributeTarget = () => {
+    const target = parseInt(bulkTargetTotal, 10);
+    if (isNaN(target) || target <= 0 || !product?.variants || product.variants.length === 0) return;
+    const availableVars = product.variants.filter((v) => (v.stock ?? v.available ?? 10) > 0 || product.isPreorder);
+    const pool = availableVars.length > 0 ? availableVars : product.variants;
+    const perVar = Math.floor(target / pool.length);
+    const remainder = target % pool.length;
+
+    const nextQty: Record<string, number> = {};
+    pool.forEach((v, index) => {
+      nextQty[v.id] = perVar + (index < remainder ? 1 : 0);
+    });
+    setBulkQuantities(nextQty);
+  };
+
+  const handleConfirmBulkAdd = () => {
+    if (totalBulkItems === 0) {
+      if (onNotify) {
+        onNotify({
+          title: "Select Quantities",
+          message: "Please choose at least 1 item to add in bulk.",
+          type: "warning",
+          icon: "alert-circle",
+        });
+      }
+      return;
+    }
+
+    if (onBulkAddToCart) {
+      onBulkAddToCart(
+        bulkSelectedVariants.map((line) => ({
+          product,
+          variant: line.variant,
+          quantity: line.quantity,
+        })),
+      );
+    } else {
+      bulkSelectedVariants.forEach((line) => {
+        onAddToCart(product, line.variant, line.quantity);
+      });
+    }
+
+    setShowBulkModal(false);
+    setToastMessage(`Added ${totalBulkItems} items across ${bulkSelectedVariants.length} option(s)`);
+    setAddedToast(true);
+    setTimeout(() => setAddedToast(false), 2400);
+
+    if (onNotify) {
+      onNotify({
+        title: "Bulk Added to Bag",
+        message: `${totalBulkItems} items added across ${bulkSelectedVariants.length} option(s).`,
+        type: "success",
+        icon: "shopping-bag",
+      });
     }
   };
 
@@ -540,8 +622,30 @@ export function StorefrontProductDetailScreen({
         </View>
       </ScrollView>
 
+      {/* Floating Hover Spark Symbol for Bulk Add */}
+      <TouchableOpacity
+        style={[
+          styles.floatingSparkBtn,
+          { bottom: 84 + Math.max(insets.bottom, 16) },
+        ]}
+        onPress={() => {
+          if (Object.keys(bulkQuantities).length === 0 && activeVariant) {
+            setBulkQuantities({ [activeVariant.id]: quantity });
+          }
+          setShowBulkModal(true);
+        }}
+        activeOpacity={0.85}
+      >
+        <View style={styles.floatingSparkIconWrap}>
+          <Feather name="zap" size={14} color="#FFFFFF" />
+        </View>
+        <Text style={styles.floatingSparkText}>
+          {totalBulkItems > 1 ? `Bulk (${totalBulkItems}) ✨` : "Bulk Add ✨"}
+        </Text>
+      </TouchableOpacity>
+
       {/* Sticky Bottom Purchase Bar */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity
           style={styles.bottomShareBtn}
           onPress={handleShare}
@@ -588,6 +692,189 @@ export function StorefrontProductDetailScreen({
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Bulk Order Assistant Modal */}
+      <Modal
+        visible={showBulkModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowBulkModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={styles.sparkHeaderBadge}>
+                  <Feather name="zap" size={16} color={colors.gold} />
+                </View>
+                <View>
+                  <Text style={styles.modalTitle}>Bulk Order Assistant</Text>
+                  <Text style={styles.modalSubtitle}>
+                    We'll help you bulk add to cart across multiple options
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowBulkModal(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Feather name="x" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 420 }}
+            >
+              {/* Optional Quick Total Input */}
+              <View style={styles.targetTotalBox}>
+                <Text style={styles.targetTotalLabel}>Target total pieces needed (optional):</Text>
+                <View style={{ flexDirection: "row", gap: 8, alignItems: "center", marginTop: 4 }}>
+                  <TextInput
+                    style={styles.targetTotalInput}
+                    placeholder="e.g. 10"
+                    placeholderTextColor="#999"
+                    keyboardType="number-pad"
+                    value={bulkTargetTotal}
+                    onChangeText={setBulkTargetTotal}
+                  />
+                  <TouchableOpacity
+                    style={styles.distributeBtn}
+                    onPress={handleDistributeTarget}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.distributeBtnText}>Distribute Evenly</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Multi-Option Variants List */}
+              <Text style={[styles.sectionHeading, { marginTop: 14, marginBottom: 8 }]}>
+                SELECT OPTIONS & QUANTITIES
+              </Text>
+
+              {(product.variants || []).map((v) => {
+                const qty = bulkQuantities[v.id] || 0;
+                const inStock = v.stock ?? v.available ?? 10;
+                const optValues = v.optionValues || [];
+                const colorObj = optValues.find((ov) => Boolean(ov.optionValue?.hexColor));
+                const swatch = colorObj?.optionValue?.hexColor;
+
+                return (
+                  <View key={v.id} style={styles.bulkVariantRow}>
+                    <View style={{ flex: 1, marginRight: 10 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        {swatch ? (
+                          <View
+                            style={{
+                              width: 14,
+                              height: 14,
+                              borderRadius: 7,
+                              backgroundColor: swatch,
+                              borderWidth: 1,
+                              borderColor: colors.border,
+                            }}
+                          />
+                        ) : null}
+                        <Text style={styles.bulkVariantTitle} numberOfLines={1}>
+                          {v.title || "Standard"}
+                        </Text>
+                      </View>
+                      <Text style={styles.bulkVariantPrice}>
+                        {formatCurrency(v.price)} · {product.isPreorder ? "Pre-order" : `${inStock} in stock`}
+                      </Text>
+                    </View>
+
+                    {/* Stepper with direct type input */}
+                    <View style={styles.bulkStepperGroup}>
+                      <TouchableOpacity
+                        style={styles.bulkStepBtn}
+                        onPress={() =>
+                          setBulkQuantities((prev) => ({
+                            ...prev,
+                            [v.id]: Math.max(0, (prev[v.id] || 0) - 1),
+                          }))
+                        }
+                      >
+                        <Text style={styles.bulkStepBtnText}>−</Text>
+                      </TouchableOpacity>
+                      <TextInput
+                        style={styles.bulkStepInput}
+                        keyboardType="number-pad"
+                        value={String(qty)}
+                        onChangeText={(txt) => {
+                          const val = parseInt(txt.replace(/[^0-9]/g, ""), 10);
+                          setBulkQuantities((prev) => ({
+                            ...prev,
+                            [v.id]: isNaN(val) ? 0 : val,
+                          }));
+                        }}
+                      />
+                      <TouchableOpacity
+                        style={styles.bulkStepBtn}
+                        onPress={() =>
+                          setBulkQuantities((prev) => ({
+                            ...prev,
+                            [v.id]: (prev[v.id] || 0) + 1,
+                          }))
+                        }
+                      >
+                        <Text style={styles.bulkStepBtnText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+
+              {/* Multiple Selected Live Breakdown (Website parity!) */}
+              {bulkSelectedVariants.length > 0 && (
+                <View style={styles.bulkSummaryCard}>
+                  <Text style={styles.bulkSummaryHeading}>
+                    Selected Options ({totalBulkItems} {totalBulkItems === 1 ? "item" : "items"}):
+                  </Text>
+                  {bulkSelectedVariants.map((line) => (
+                    <View key={line.variant.id} style={styles.bulkSummaryItemRow}>
+                      <Text style={styles.bulkSummaryItemText} numberOfLines={1}>
+                        • {line.variant.title} × {line.quantity}
+                      </Text>
+                      <Text style={styles.bulkSummaryItemPrice}>
+                        {formatCurrency(line.variant.price * line.quantity)}
+                      </Text>
+                    </View>
+                  ))}
+                  <View style={styles.bulkSummaryDivider} />
+                  <View style={styles.bulkSummaryTotalRow}>
+                    <Text style={styles.bulkSummaryTotalLabel}>Total ({totalBulkItems} pcs):</Text>
+                    <Text style={styles.bulkSummaryTotalValue}>{formatCurrency(totalBulkPrice)}</Text>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Confirm Bulk Add Button */}
+            <TouchableOpacity
+              style={[
+                styles.modalSaveBtn,
+                totalBulkItems === 0 && { opacity: 0.5 },
+              ]}
+              onPress={handleConfirmBulkAdd}
+              disabled={totalBulkItems === 0}
+              activeOpacity={0.85}
+            >
+              <Feather name="shopping-bag" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text style={styles.modalSaveText}>
+                {totalBulkItems > 0
+                  ? `Add ${totalBulkItems} Items to Bag · ${formatCurrency(totalBulkPrice)}`
+                  : "Select Items to Add"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -992,5 +1279,223 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "700",
+  },
+  floatingSparkBtn: {
+    position: "absolute",
+    right: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#181314",
+    borderRadius: 24,
+    paddingVertical: 9,
+    paddingHorizontal: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 1.5,
+    borderColor: colors.gold,
+    zIndex: 99,
+  },
+  floatingSparkIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 7,
+  },
+  floatingSparkText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  sparkHeaderBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#2B161B",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalTitle: {
+    fontFamily: "serif",
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  modalSubtitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  targetTotalBox: {
+    backgroundColor: "#FAF7F5",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#EAD5D9",
+    marginBottom: 4,
+  },
+  targetTotalLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  targetTotalInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: colors.text,
+  },
+  distributeBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  distributeBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  bulkVariantRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  bulkVariantTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  bulkVariantPrice: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  bulkStepperGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surfaceWarm,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  bulkStepBtn: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bulkStepBtnText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  bulkStepInput: {
+    width: 36,
+    height: 32,
+    textAlign: "center",
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.text,
+    padding: 0,
+  },
+  bulkSummaryCard: {
+    backgroundColor: "#FDFBFA",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    marginTop: 14,
+  },
+  bulkSummaryHeading: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 6,
+  },
+  bulkSummaryItemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 3,
+  },
+  bulkSummaryItemText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    flex: 1,
+    marginRight: 8,
+  },
+  bulkSummaryItemPrice: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  bulkSummaryDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 8,
+  },
+  bulkSummaryTotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  bulkSummaryTotalLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  bulkSummaryTotalValue: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: colors.primary,
+  },
+  modalSaveBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 16,
+  },
+  modalSaveText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
 });
