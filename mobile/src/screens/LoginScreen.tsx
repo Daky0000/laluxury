@@ -19,31 +19,11 @@ type Props = {
   onBrowseCatalog?: () => void;
 };
 
-const PRESETS = [
-  { id: "live", label: "Live Store", url: "https://laluxurys.com", icon: "🌐" },
-  { id: "local", label: "Local PC (Wi-Fi)", url: "http://192.168.3.225:3005", icon: "💻" },
-  { id: "emu", label: "Android Emulator", url: "http://10.0.2.2:3005", icon: "📱" },
-];
-
 export function LoginScreen({ onLoginSuccess, onBrowseCatalog }: Props) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [serverUrl, setServerUrl] = useState(api.getBaseUrl());
-  const [showCustomInput, setShowCustomInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handleSelectPreset = async (url: string) => {
-    setServerUrl(url);
-    await api.setBaseUrl(url);
-    setError(null);
-  };
-
-  const handleQuickFillOwner = () => {
-    setIdentifier("laluxurys@laluxurys.com");
-    setPassword("Laluxurys#1");
-    setError(null);
-  };
 
   const handleLogin = async () => {
     if (!identifier.trim() || !password) {
@@ -55,9 +35,6 @@ export function LoginScreen({ onLoginSuccess, onBrowseCatalog }: Props) {
     setError(null);
 
     try {
-      if (serverUrl !== api.getBaseUrl()) {
-        await api.setBaseUrl(serverUrl);
-      }
       const res = await api.login(identifier, password);
       onLoginSuccess(res.user);
     } catch (err: unknown) {
@@ -76,8 +53,8 @@ export function LoginScreen({ onLoginSuccess, onBrowseCatalog }: Props) {
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.brandBox}>
           <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
-          <Text style={styles.brandTitle}>LALUXURY</Text>
-          <Text style={styles.portalBadge}>MANAGEMENT APP</Text>
+          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
+          <Text style={styles.portalBadge}>MANAGEMENT PORTAL</Text>
         </View>
 
         <View style={styles.card}>
@@ -86,57 +63,6 @@ export function LoginScreen({ onLoginSuccess, onBrowseCatalog }: Props) {
             Manage your store catalog, prices, and stock directly from your phone.
           </Text>
 
-          {/* Quick Server Selector */}
-          <View style={styles.serverSection}>
-            <Text style={styles.serverHeaderLabel}>TARGET SERVER</Text>
-            <View style={styles.presetRow}>
-              {PRESETS.map((p) => {
-                const isSelected = serverUrl === p.url;
-                return (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={[styles.presetChip, isSelected && styles.presetChipActive]}
-                    onPress={() => handleSelectPreset(p.url)}
-                  >
-                    <Text style={styles.presetIcon}>{p.icon}</Text>
-                    <Text style={[styles.presetLabel, isSelected && styles.presetLabelActive]}>
-                      {p.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Current Active Server Bar */}
-            <TouchableOpacity
-              style={styles.activeServerBar}
-              onPress={() => setShowCustomInput(!showCustomInput)}
-            >
-              <View style={styles.serverStatusDot} />
-              <Text style={styles.activeServerText} numberOfLines={1}>
-                {serverUrl}
-              </Text>
-              <Text style={styles.editIcon}>{showCustomInput ? "▲" : "✏️"}</Text>
-            </TouchableOpacity>
-
-            {showCustomInput && (
-              <View style={styles.customServerBox}>
-                <Text style={styles.inputLabel}>CUSTOM SERVER URL</Text>
-                <TextInput
-                  style={styles.serverInput}
-                  value={serverUrl}
-                  onChangeText={(val) => {
-                    setServerUrl(val);
-                    api.setBaseUrl(val);
-                  }}
-                  placeholder="http://192.168.X.X:3005"
-                  placeholderTextColor={colors.textSubtle}
-                  autoCapitalize="none"
-                />
-              </View>
-            )}
-          </View>
-
           {error ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{error}</Text>
@@ -144,10 +70,10 @@ export function LoginScreen({ onLoginSuccess, onBrowseCatalog }: Props) {
           ) : null}
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>EMAIL OR GHANA PHONE</Text>
+            <Text style={styles.inputLabel}>EMAIL OR PHONE</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g. admin@laluxury.com or 0244123456"
+              placeholder="e.g. admin@nobleenclave.com or 0244123456"
               placeholderTextColor={colors.textSubtle}
               value={identifier}
               onChangeText={setIdentifier}
@@ -169,15 +95,6 @@ export function LoginScreen({ onLoginSuccess, onBrowseCatalog }: Props) {
           </View>
 
           <TouchableOpacity
-            style={styles.quickFillBtn}
-            onPress={handleQuickFillOwner}
-          >
-            <Text style={styles.quickFillText}>
-              🔑 Auto-fill Store Owner Credentials
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={[styles.loginButton, loading && styles.buttonDisabled]}
             onPress={handleLogin}
             disabled={loading}
@@ -185,7 +102,7 @@ export function LoginScreen({ onLoginSuccess, onBrowseCatalog }: Props) {
             {loading ? (
               <ActivityIndicator color="#000" />
             ) : (
-              <Text style={styles.loginButtonText}>Sign In to Atelier</Text>
+              <Text style={styles.loginButtonText}>Sign In</Text>
             )}
           </TouchableOpacity>
 

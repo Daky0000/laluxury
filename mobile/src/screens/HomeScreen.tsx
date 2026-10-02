@@ -90,7 +90,7 @@ export function HomeScreen({
       <View style={styles.topBar}>
         <View>
           <Text style={styles.dateText}>{currentDate.toUpperCase()}</Text>
-          <Text style={styles.brandTitle}>LALUXURY</Text>
+          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
           <Text style={styles.staffRole}>
             {user.firstName || user.email || "Staff"} · {user.role}
           </Text>

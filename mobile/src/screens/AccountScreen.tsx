@@ -27,26 +27,29 @@ type Props = {
   onOpenBackend?: () => void;
 };
 
-const PRESETS = [
-  { id: "live", label: "Live Store", url: "https://laluxurys.com" },
-  { id: "local", label: "Local PC", url: "http://192.168.3.225:3005" },
-  { id: "emu", label: "Emulator", url: "http://10.0.2.2:3005" },
-];
-
 export function AccountScreen({
   user,
   onLoginSuccess,
   onLogout,
   onOpenBackend,
 }: Props) {
-  // Auth Form State
+  // Auth Form State (Phone + SMS OTP)
   const [authMode, setAuthMode] = useState<"LOGIN" | "REGISTER">("LOGIN");
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
+  const [authStep, setAuthStep] = useState<"PHONE" | "OTP">("PHONE");
+  const [phone, setPhone] = useState("");
+  const [otpCode, setOtpCode] = useState("");
   const [fullName, setFullName] = useState("");
-  const [serverUrl, setServerUrl] = useState(api.getBaseUrl());
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+
+  // Staff Login Modal State
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [staffEmail, setStaffEmail] = useState("");
+  const [staffPassword, setStaffPassword] = useState("");
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffError, setStaffError] = useState<string | null>(null);
 
   // Customer Orders State
   const [orders, setOrders] = useState<Order[]>([]);
@@ -59,6 +62,14 @@ export function AccountScreen({
     user && ["OWNER", "ADMIN", "MANAGER", "STAFF"].includes(user.role);
 
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (resendCooldown > 0) {
+      timer = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
+  useEffect(() => {
     if (user && !isOwner) {
       setLoadingOrders(true);
       api
@@ -68,18 +79,6 @@ export function AccountScreen({
         .finally(() => setLoadingOrders(false));
     }
   }, [user, isOwner]);
-
-  const handleSelectPreset = async (url: string) => {
-    setServerUrl(url);
-    await api.setBaseUrl(url);
-    setError(null);
-  };
-
-  const handleQuickFillOwner = () => {
-    setIdentifier("laluxurys@laluxurys.com");
-    setPassword("Laluxurys#1");
-    setError(null);
-  };
 
   // App Update State
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -100,8 +99,8 @@ export function AccountScreen({
     try {
       const res = await api.checkAppVersion();
       setUpdateInfo(res);
-      if (res.latestVersion === "1.2.4") {
-        setUpdateStatus("You are running the latest version (v1.2.4).");
+      if (res.latestVersion === "1.2.5") {
+        setUpdateStatus("You are running the latest version (v1.2.5).");
       } else {
         setUpdateStatus(`Update available: v${res.latestVersion}`);
         setShowUpdateModal(true);
@@ -129,7 +128,7 @@ export function AccountScreen({
         </View>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.updateCardTitle}>APP UPDATE & VERSION</Text>
-          <Text style={styles.updateCardSubtitle}>v1.2.4 (Build 6) &bull; Official Release</Text>
+          <Text style={styles.updateCardSubtitle}>v1.2.5 (Build 7) &bull; Official Release</Text>
         </View>
         <TouchableOpacity
           style={styles.checkUpdateBtn}
@@ -170,58 +169,86 @@ export function AccountScreen({
       <AppUpdateModal
         visible={showUpdateModal}
         updateInfo={updateInfo}
-        currentVersion="1.2.2"
+        currentVersion="1.2.5"
         onDismiss={() => setShowUpdateModal(false)}
       />
     </View>
   );
 
-  const handleSubmit = async () => {
+  const handleSendOtp = async () => {
     setError(null);
+    setInfoMessage(null);
+    const cleanPhone = phone.trim();
+    if (!cleanPhone) {
+      setError("Please enter your phone number.");
+      return;
+    }
+    if (authMode === "REGISTER" && !fullName.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await api.sendAuthOtp(cleanPhone, authMode, fullName.trim());
+      setAuthStep("OTP");
+      setResendCooldown(60);
+      setInfoMessage(`A 6-digit verification code was sent via SMS to ${cleanPhone}.`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send verification SMS.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    if (authMode === "LOGIN") {
-      if (!identifier.trim() || !password) {
-        setError("Please enter your email/phone and password.");
-        return;
-      }
-      setLoading(true);
-      try {
-        if (serverUrl !== api.getBaseUrl()) {
-          await api.setBaseUrl(serverUrl);
-        }
-        const res = await api.login(identifier.trim(), password);
-        onLoginSuccess(res.user);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Failed to sign in.";
-        setError(msg);
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      // Registration
-      if (!fullName.trim() || !identifier.trim() || !password) {
-        setError("Please provide your full name, email/phone, and password.");
-        return;
-      }
-      setLoading(true);
-      try {
-        if (serverUrl !== api.getBaseUrl()) {
-          await api.setBaseUrl(serverUrl);
-        }
-        const isEmail = identifier.includes("@");
-        const res = await api.register({
-          name: fullName.trim(),
-          email: isEmail ? identifier.trim() : undefined,
-          phone: !isEmail ? identifier.trim() : undefined,
-          password,
-        });
-        onLoginSuccess(res.user);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Registration failed.";
-        setError(msg);
-      } finally {
-        setLoading(false);
-      }
+  const handleVerifyOtp = async (codeToVerify?: string) => {
+    const code = (codeToVerify || otpCode).trim();
+    if (code.length < 4) {
+      setError("Please enter the 6-digit verification code sent to your phone.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await api.verifyAuthOtp({
+        phone: phone.trim(),
+        code,
+        purpose: authMode,
+        name: fullName.trim(),
+      });
+      onLoginSuccess(res.user);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Verification failed.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpChange = (txt: string) => {
+    const clean = txt.replace(/[^0-9]/g, "").slice(0, 6);
+    setOtpCode(clean);
+    if (clean.length === 6) {
+      handleVerifyOtp(clean);
+    }
+  };
+
+  const handleStaffLogin = async () => {
+    setStaffError(null);
+    if (!staffEmail.trim() || !staffPassword) {
+      setStaffError("Please enter your staff email and password.");
+      return;
+    }
+    setStaffLoading(true);
+    try {
+      const res = await api.login(staffEmail.trim(), staffPassword);
+      setShowStaffModal(false);
+      onLoginSuccess(res.user);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Staff sign in failed.";
+      setStaffError(msg);
+    } finally {
+      setStaffLoading(false);
     }
   };
 
@@ -232,8 +259,7 @@ export function AccountScreen({
     return (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.brandHeader}>
-          <Text style={styles.brandTitle}>LALUXURY</Text>
-          <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
+          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
         </View>
 
         {/* Owner Profile Card */}
@@ -245,7 +271,7 @@ export function AccountScreen({
           </View>
           <View style={styles.profileText}>
             <Text style={styles.userName}>
-              {user.firstName || user.email?.split("@")[0] || "Store Owner"}
+              {user.firstName || user.email?.split("@")[0] || "Store Administrator"}
             </Text>
             <Text style={styles.userEmail}>{user.email || user.phone}</Text>
             <View style={styles.ownerRoleBadge}>
@@ -264,7 +290,7 @@ export function AccountScreen({
           </View>
           <Text style={styles.launchTitle}>Store Backend Dashboard</Text>
           <Text style={styles.launchSub}>
-            Manage live products, real-time prices, warehouse stock, and view recent customer orders synced directly with LaLuxury.com.
+            Manage live products, real-time prices, warehouse stock, and view recent customer orders synced directly with Noble Enclave.
           </Text>
           <TouchableOpacity
             style={styles.openBackendBtn}
@@ -274,12 +300,6 @@ export function AccountScreen({
             <Text style={styles.openBackendText}>OPEN STORE BACKEND</Text>
             <Feather name="arrow-right" size={16} color={colors.primary} />
           </TouchableOpacity>
-        </View>
-
-        {/* Server & Connectivity Info */}
-        <View style={styles.infoBox}>
-          <Text style={styles.infoBoxTitle}>CONNECTED SERVER</Text>
-          <Text style={styles.infoBoxValue}>{api.getBaseUrl()}</Text>
         </View>
 
         {/* Sign Out Button */}
@@ -300,7 +320,7 @@ export function AccountScreen({
     return (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.brandHeader}>
-          <Text style={styles.brandTitle}>LALUXURY</Text>
+          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
           <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
         </View>
 
@@ -518,8 +538,8 @@ export function AccountScreen({
                       onPress={() => {
                         const invoiceUrl = `${api.getBaseUrl()}/orders/${selectedOrder.orderNumber}/invoice`;
                         Share.share({
-                          title: `LaLuxury Receipt #${selectedOrder.orderNumber}`,
-                          message: `Official LaLuxury Receipt for Order #${selectedOrder.orderNumber}:\n${invoiceUrl}`,
+                          title: `Noble Enclave Receipt #${selectedOrder.orderNumber}`,
+                          message: `Official Noble Enclave Receipt for Order #${selectedOrder.orderNumber}:\n${invoiceUrl}`,
                           url: invoiceUrl,
                         }).catch(() => {});
                       }}
@@ -591,167 +611,299 @@ export function AccountScreen({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.brandHeader}>
-          <Text style={styles.brandTitle}>LALUXURY</Text>
+          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
           <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
         </View>
 
-        {/* Tab Toggle: Sign In vs Create Account */}
-        <View style={styles.authToggle}>
-          <TouchableOpacity
-            style={[styles.toggleBtn, authMode === "LOGIN" && styles.toggleBtnActive]}
-            onPress={() => {
-              setAuthMode("LOGIN");
-              setError(null);
-            }}
-          >
-            <Text
-              style={[
-                styles.toggleBtnText,
-                authMode === "LOGIN" && styles.toggleBtnTextActive,
-              ]}
-            >
-              SIGN IN
-            </Text>
-          </TouchableOpacity>
+        {authStep === "PHONE" ? (
+          <>
+            {/* Tab Toggle: Sign In vs Create Account */}
+            <View style={styles.authToggle}>
+              <TouchableOpacity
+                style={[styles.toggleBtn, authMode === "LOGIN" && styles.toggleBtnActive]}
+                onPress={() => {
+                  setAuthMode("LOGIN");
+                  setError(null);
+                  setInfoMessage(null);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.toggleBtnText,
+                    authMode === "LOGIN" && styles.toggleBtnTextActive,
+                  ]}
+                >
+                  SIGN IN
+                </Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.toggleBtn,
-              authMode === "REGISTER" && styles.toggleBtnActive,
-            ]}
-            onPress={() => {
-              setAuthMode("REGISTER");
-              setError(null);
-            }}
-          >
-            <Text
-              style={[
-                styles.toggleBtnText,
-                authMode === "REGISTER" && styles.toggleBtnTextActive,
-              ]}
-            >
-              CREATE ACCOUNT
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Form Card */}
-        <View style={styles.authCard}>
-          <Text style={styles.formTitle}>
-            {authMode === "LOGIN"
-              ? "Sign in to your account"
-              : "Create customer account"}
-          </Text>
-          <Text style={styles.formSub}>
-            {authMode === "LOGIN"
-              ? "Enter your credentials to access your profile or store backend."
-              : "Register to track orders, save delivery addresses, and purchase."}
-          </Text>
-
-          {error && (
-            <View style={styles.errorBox}>
-              <Feather name="alert-circle" size={14} color={colors.error} />
-              <Text style={styles.errorBoxText}>{error}</Text>
+              <TouchableOpacity
+                style={[styles.toggleBtn, authMode === "REGISTER" && styles.toggleBtnActive]}
+                onPress={() => {
+                  setAuthMode("REGISTER");
+                  setError(null);
+                  setInfoMessage(null);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.toggleBtnText,
+                    authMode === "REGISTER" && styles.toggleBtnTextActive,
+                  ]}
+                >
+                  CREATE ACCOUNT
+                </Text>
+              </TouchableOpacity>
             </View>
-          )}
 
-          {authMode === "REGISTER" && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>FULL NAME</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Akua Mensah"
-                placeholderTextColor={colors.textMuted}
-                value={fullName}
-                onChangeText={setFullName}
-                autoCapitalize="words"
-              />
-            </View>
-          )}
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>EMAIL OR PHONE NUMBER</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. akua@example.com or 0241234567"
-              placeholderTextColor={colors.textMuted}
-              value={identifier}
-              onChangeText={setIdentifier}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>PASSWORD</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="••••••••"
-              placeholderTextColor={colors.textMuted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.submitBtn, loading && { opacity: 0.7 }]}
-            onPress={handleSubmit}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={styles.submitBtnText}>
-                {authMode === "LOGIN" ? "SIGN IN" : "CREATE ACCOUNT"}
+            {/* Phone Form Card */}
+            <View style={styles.authCard}>
+              <Text style={styles.formTitle}>
+                {authMode === "LOGIN"
+                  ? "Sign in with phone"
+                  : "Create customer account"}
               </Text>
-            )}
-          </TouchableOpacity>
+              <Text style={styles.formSub}>
+                {authMode === "LOGIN"
+                  ? "Enter your phone number to receive a 6-digit SMS verification code."
+                  : "Register with your phone number to track orders and save addresses."}
+              </Text>
 
-          {/* Quick Fill for Owner Testing */}
-          {authMode === "LOGIN" && (
+              {error && (
+                <View style={styles.errorBox}>
+                  <Feather name="alert-circle" size={14} color={colors.error} />
+                  <Text style={styles.errorBoxText}>{error}</Text>
+                </View>
+              )}
+
+              {infoMessage && (
+                <View style={styles.infoBoxNotice}>
+                  <Feather name="info" size={14} color={colors.primary} />
+                  <Text style={styles.infoBoxNoticeText}>{infoMessage}</Text>
+                </View>
+              )}
+
+              {authMode === "REGISTER" && (
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>FULL NAME</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. Akua Mensah"
+                    placeholderTextColor={colors.textMuted}
+                    value={fullName}
+                    onChangeText={setFullName}
+                    autoCapitalize="words"
+                  />
+                </View>
+              )}
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>PHONE NUMBER (GHANA / INTERNATIONAL)</Text>
+                <View style={styles.phoneInputRow}>
+                  <Feather name="phone" size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={styles.phoneInput}
+                    placeholder="e.g. 024 123 4567 or +233..."
+                    placeholderTextColor={colors.textMuted}
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                    textContentType="telephoneNumber"
+                    autoComplete="tel"
+                  />
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.submitBtn, loading && { opacity: 0.7 }]}
+                onPress={handleSendOtp}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={styles.submitBtnText}>SEND VERIFICATION CODE</Text>
+                    <Feather name="send" size={14} color="#FFFFFF" />
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.staffLinkBtn}
+                onPress={() => {
+                  setShowStaffModal(true);
+                  setStaffError(null);
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather name="lock" size={12} color={colors.textSecondary} />
+                <Text style={styles.staffLinkText}>Store Management & Staff Sign In</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          /* Step 2: 6-Digit OTP Verification Screen */
+          <View style={styles.authCard}>
             <TouchableOpacity
-              style={styles.quickFillBtn}
-              onPress={handleQuickFillOwner}
+              style={styles.backBtnRow}
+              onPress={() => {
+                setAuthStep("PHONE");
+                setOtpCode("");
+                setError(null);
+                setInfoMessage(null);
+              }}
               activeOpacity={0.7}
             >
-              <Feather name="key" size={13} color={colors.primary} />
-              <Text style={styles.quickFillText}>
-                Quick Fill Owner Account (laluxurys@laluxurys.com)
-              </Text>
+              <Feather name="arrow-left" size={16} color={colors.primary} />
+              <Text style={styles.backBtnText}>Change phone number</Text>
             </TouchableOpacity>
-          )}
 
-          {/* Server Preset Selection */}
-          <View style={styles.serverRow}>
-            <Text style={styles.serverLabel}>TARGET SERVER:</Text>
-            <View style={styles.presetChips}>
-              {PRESETS.map((p) => {
-                const isSelected = serverUrl === p.url;
-                return (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={[
-                      styles.presetChip,
-                      isSelected && styles.presetChipActive,
-                    ]}
-                    onPress={() => handleSelectPreset(p.url)}
-                  >
-                    <Text
-                      style={[
-                        styles.presetChipText,
-                        isSelected && styles.presetChipTextActive,
-                      ]}
-                    >
-                      {p.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <Text style={styles.formTitle}>Enter Verification Code</Text>
+            <Text style={styles.formSub}>
+              Enter the 6-digit code sent via SMS to {phone}.
+            </Text>
+
+            {error && (
+              <View style={styles.errorBox}>
+                <Feather name="alert-circle" size={14} color={colors.error} />
+                <Text style={styles.errorBoxText}>{error}</Text>
+              </View>
+            )}
+
+            {infoMessage && (
+              <View style={styles.infoBoxNotice}>
+                <Feather name="check-circle" size={14} color={colors.primary} />
+                <Text style={styles.infoBoxNoticeText}>{infoMessage}</Text>
+              </View>
+            )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>6-DIGIT SMS CODE</Text>
+              <TextInput
+                style={styles.otpInput}
+                placeholder="000000"
+                placeholderTextColor={colors.textMuted}
+                value={otpCode}
+                onChangeText={handleOtpChange}
+                keyboardType="number-pad"
+                maxLength={6}
+                textContentType="oneTimeCode"
+                autoComplete="sms-otp"
+                autoFocus
+              />
+              <Text style={styles.otpAutoNotice}>
+                Detects SMS code and verifies automatically upon entry.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.submitBtn, loading && { opacity: 0.7 }]}
+              onPress={() => handleVerifyOtp()}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={styles.submitBtnText}>VERIFY & CONTINUE</Text>
+                  <Feather name="check" size={14} color="#FFFFFF" />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.resendRow}>
+              {resendCooldown > 0 ? (
+                <Text style={styles.resendCooldownText}>
+                  Resend SMS code in {resendCooldown}s
+                </Text>
+              ) : (
+                <TouchableOpacity onPress={handleSendOtp} disabled={loading} activeOpacity={0.7}>
+                  <Text style={styles.resendBtnText}>Resend SMS Code</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
-        </View>
+        )}
+
+        {/* Staff Management Modal */}
+        <Modal
+          visible={showStaffModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowStaffModal(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.staffModalOverlay}
+          >
+            <View style={styles.staffModalContent}>
+              <View style={styles.staffModalHeader}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Feather name="shield" size={18} color={colors.primary} />
+                  <Text style={styles.staffModalTitle}>Staff & Management Login</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowStaffModal(false)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <Feather name="x" size={20} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.staffModalSub}>
+                Authorized access for Noble Enclave store administrators, inventory managers, and staff.
+              </Text>
+
+              {staffError && (
+                <View style={styles.errorBox}>
+                  <Feather name="alert-circle" size={14} color={colors.error} />
+                  <Text style={styles.errorBoxText}>{staffError}</Text>
+                </View>
+              )}
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>STAFF EMAIL</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="admin@nobleenclave.com"
+                  placeholderTextColor={colors.textMuted}
+                  value={staffEmail}
+                  onChangeText={setStaffEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>PASSWORD</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="••••••••"
+                  placeholderTextColor={colors.textMuted}
+                  value={staffPassword}
+                  onChangeText={setStaffPassword}
+                  secureTextEntry
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.submitBtn, staffLoading && { opacity: 0.7 }]}
+                onPress={handleStaffLogin}
+                disabled={staffLoading}
+                activeOpacity={0.85}
+              >
+                {staffLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.submitBtnText}>SIGN IN AS STAFF</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
 
         {/* App Version & Updates */}
         {renderAppUpdateSection()}
@@ -1125,54 +1277,123 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 1.2,
   },
-  quickFillBtn: {
+  phoneInputRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    gap: 6,
-    marginBottom: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
   },
-  quickFillText: {
+  phoneInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: colors.text,
+  },
+  otpInput: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 24,
+    fontWeight: "700",
+    letterSpacing: 10,
+    textAlign: "center",
+    color: colors.text,
+  },
+  otpAutoNotice: {
     fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  resendRow: {
+    alignItems: "center",
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  resendCooldownText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  resendBtnText: {
+    fontSize: 12,
     color: colors.primary,
     fontWeight: "700",
   },
-  serverRow: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 12,
-  },
-  serverLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: colors.textSecondary,
-    letterSpacing: 0.8,
-    marginBottom: 8,
-  },
-  presetChips: {
+  backBtnRow: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 14,
   },
-  presetChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  presetChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  presetChipText: {
-    fontSize: 10,
-    color: colors.textSecondary,
+  backBtnText: {
+    fontSize: 12,
+    color: colors.primary,
     fontWeight: "700",
   },
-  presetChipTextActive: {
-    color: "#FFFFFF",
+  staffLinkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  staffLinkText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: "600",
+  },
+  staffModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  staffModalContent: {
+    backgroundColor: colors.surfaceWarm,
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  staffModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  staffModalTitle: {
+    fontFamily: "serif",
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  staffModalSub: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    lineHeight: 16,
+    marginBottom: 16,
+  },
+  infoBoxNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primaryTint,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 14,
+    gap: 8,
+  },
+  infoBoxNoticeText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: "600",
+    flex: 1,
   },
   updateCard: {
     backgroundColor: colors.surfaceWarm,

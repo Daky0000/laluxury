@@ -512,7 +512,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
               style={styles.input}
               value={brand}
               onChangeText={setBrand}
-              placeholder="e.g. LaLuxury"
+              placeholder="e.g. Noble Enclave"
               placeholderTextColor={colors.textSubtle}
             />
           </View>

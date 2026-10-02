@@ -7,14 +7,14 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   return NextResponse.json(
     {
-      latestVersion: "1.2.4",
-      versionCode: 6,
-      appName: "LaLuxury Atelier & Living",
+      latestVersion: "1.2.5",
+      versionCode: 7,
+      appName: "Noble Enclave Atelier & Living",
       downloadUrl: appDownloadUrl(),
       directUrl: "/api/app/download",
-      releaseNotes: "Swipeable product image carousel, Cloudflare CDN resolution for all catalog imagery, bulk order assistant with Evenly & Randomize distribution, user profile order details with official PDF receipt downloader & resend SMS/email, tap/close-to-dismiss update modal, and top status bar safe area clearance.",
+      releaseNotes: "Noble Enclave official release: SMS OTP phone login/registration with automatic SMS detection, clean production launch, and refined brand aesthetic.",
       minSupportedVersion: "1.0.0",
-      publishedAt: "2026-10-02T20:00:00.000Z",
+      publishedAt: "2026-10-02T21:00:00.000Z",
     },
     {
       headers: {

@@ -42,7 +42,18 @@ class ApiService {
         if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
           clean = `https://${clean}`;
         }
-        this.baseUrl = clean;
+        // In live mode, ignore and clear any old local testing URLs
+        if (
+          clean.includes("localhost") ||
+          clean.includes("127.0.0.1") ||
+          clean.includes("10.0.2.2") ||
+          clean.includes("192.168.")
+        ) {
+          this.baseUrl = DEFAULT_URL;
+          AsyncStorage.removeItem(STORAGE_KEY_URL).catch(() => {});
+        } else {
+          this.baseUrl = clean;
+        }
       } else {
         this.baseUrl = DEFAULT_URL;
       }
@@ -114,7 +125,7 @@ class ApiService {
       response = await fetch(url, { ...options, headers, cache: "no-store" });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Network request failed";
-      throw new Error(`Unable to connect to Laluxury server (${this.baseUrl}). ${msg}`);
+      throw new Error(`Unable to connect to Noble Enclave server (${this.baseUrl}). ${msg}`);
     }
 
     const data = await response.json().catch(() => null);
@@ -132,6 +143,37 @@ class ApiService {
   }
 
   // --- Auth -----------------------------------------------------------------
+
+  async sendAuthOtp(
+    phone: string,
+    purpose: "LOGIN" | "REGISTER" = "LOGIN",
+    name?: string,
+  ): Promise<{ ok: boolean; message: string; normalizedPhone?: string }> {
+    return this.request<{ ok: boolean; message: string; normalizedPhone?: string }>(
+      "/api/app/auth/otp/send",
+      {
+        method: "POST",
+        body: JSON.stringify({ phone, purpose, name }),
+      },
+    );
+  }
+
+  async verifyAuthOtp(data: {
+    phone: string;
+    code: string;
+    purpose?: "LOGIN" | "REGISTER";
+    name?: string;
+  }): Promise<{ token: string; user: User }> {
+    const res = await this.request<{ token: string; user: User }>(
+      "/api/app/auth/otp/verify",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    );
+    await this.setSession(res.token, res.user);
+    return res;
+  }
 
   async login(
     identifier: string,

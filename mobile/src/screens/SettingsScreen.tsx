@@ -155,10 +155,10 @@ export function SettingsScreen({ user, onLogout }: Props) {
 
         {/* About App */}
         <View style={styles.card}>
-          <Text style={styles.sectionLabel}>ABOUT LALUXURY ATELIER</Text>
+          <Text style={styles.sectionLabel}>ABOUT NOBLE ENCLAVE ATELIER</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Version:</Text>
-            <Text style={styles.infoVal}>1.2.2 (Build 3 - Latest)</Text>
+            <Text style={styles.infoVal}>1.2.5 (Build 7 - Official)</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Platform:</Text>

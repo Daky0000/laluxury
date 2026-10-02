@@ -105,7 +105,7 @@ export function StorefrontHomeScreen({
       const formattedPrice = formatCurrency(product.minPrice);
       await Share.share({
         title: product.title,
-        message: `Check out "${product.title}" (${formattedPrice}) from LaLuxury Atelier & Living:\n${url}`,
+        message: `Check out "${product.title}" (${formattedPrice}) from Noble Enclave Atelier & Living:\n${url}`,
         url,
       });
       if (onNotify) {
@@ -137,7 +137,7 @@ export function StorefrontHomeScreen({
         </TouchableOpacity>
 
         <View style={styles.brandContainer}>
-          <Text style={styles.brandTitle}>LALUXURY</Text>
+          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
           <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
         </View>
 
@@ -246,7 +246,7 @@ export function StorefrontHomeScreen({
             ) : (
               <View style={styles.heroPlaceholder}>
                 <Feather name="box" size={44} color={colors.primaryLight} />
-                <Text style={styles.heroPlaceholderText}>LALUXURY</Text>
+                <Text style={styles.heroPlaceholderText}>NOBLE ENCLAVE</Text>
               </View>
             )}
           </View>
