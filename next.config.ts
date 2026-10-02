@@ -30,6 +30,9 @@ const nextConfig: NextConfig = {
   // 1 MB — less than one photo off a phone. The media library refuses anything
   // over 8 MB itself; the rest is multipart overhead.
   experimental: {
+    // Railway's shared cache has contained missing Turbopack SST files.
+    // Compile cleanly rather than restoring an invalid persistent build cache.
+    turbopackFileSystemCacheForBuild: false,
     serverActions: { bodySizeLimit: "12mb" },
   },
 
