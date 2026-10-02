@@ -15,6 +15,7 @@ import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { Product, User, Category, AppConfig } from "../types";
 import { formatCurrency } from "../utils/format";
+import { resolveImageUrl } from "../utils/image";
 
 
 type Props = {
@@ -236,9 +237,9 @@ export function StorefrontHomeScreen({
           </View>
 
           <View style={styles.heroImageWrapper}>
-            {featuredHero?.images?.[0]?.url ? (
+            {resolveImageUrl(featuredHero?.images?.[0]?.url) ? (
               <Image
-                source={{ uri: featuredHero.images[0].url }}
+                source={{ uri: resolveImageUrl(featuredHero?.images?.[0]?.url)! }}
                 style={styles.heroImage}
                 resizeMode="cover"
               />
@@ -338,9 +339,9 @@ export function StorefrontHomeScreen({
                 activeOpacity={0.9}
               >
                 <View style={styles.productImageContainer}>
-                  {item.images?.[0]?.url ? (
+                  {resolveImageUrl(item.images?.[0]?.url) ? (
                     <Image
-                      source={{ uri: item.images[0].url }}
+                      source={{ uri: resolveImageUrl(item.images?.[0]?.url)! }}
                       style={styles.productImage}
                       resizeMode="cover"
                     />

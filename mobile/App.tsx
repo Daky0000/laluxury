@@ -69,7 +69,7 @@ import { PopNotification, PopNotificationData } from "./src/components/PopNotifi
 import { AppUpdateModal, AppUpdateInfo } from "./src/components/AppUpdateModal";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const CURRENT_APP_VERSION = "1.2.3";
+const CURRENT_APP_VERSION = "1.2.4";
 
 function isNewerVersion(current: string, latest: string): boolean {
   const cParts = current.split(".").map((n) => parseInt(n, 10) || 0);
@@ -518,7 +518,12 @@ function MainApp() {
   // Active Product Detail View in Storefront (Customer view)
   if (mode === "STOREFRONT" && selectedProductId) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView
+        style={[
+          styles.container,
+          { paddingTop: Math.max(insets.top, StatusBar.currentHeight || 0) },
+        ]}
+      >
         <ExpoStatusBar style="dark" />
         <StorefrontProductDetailScreen
           productId={selectedProductId}
@@ -547,7 +552,12 @@ function MainApp() {
   // Active Product Detail Editor in Backend (Staff/Owner editor view)
   if (mode === "BACKEND" && selectedProductId) {
     return (
-      <SafeAreaView style={styles.containerDark}>
+      <SafeAreaView
+        style={[
+          styles.containerDark,
+          { paddingTop: Math.max(insets.top, StatusBar.currentHeight || 0) },
+        ]}
+      >
         <ExpoStatusBar style="light" />
         <ProductDetailScreen
           productId={selectedProductId}
@@ -560,7 +570,10 @@ function MainApp() {
 
   return (
     <SafeAreaView
-      style={mode === "BACKEND" ? styles.containerDark : styles.container}
+      style={[
+        mode === "BACKEND" ? styles.containerDark : styles.container,
+        { paddingTop: Math.max(insets.top, StatusBar.currentHeight || 0) },
+      ]}
     >
       <ExpoStatusBar style={mode === "BACKEND" ? "light" : "dark"} />
 
@@ -784,12 +797,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: StatusBar.currentHeight || 0,
   },
   containerDark: {
     flex: 1,
     backgroundColor: colors.darkBg,
-    paddingTop: StatusBar.currentHeight || 0,
   },
   screenContent: {
     flex: 1,

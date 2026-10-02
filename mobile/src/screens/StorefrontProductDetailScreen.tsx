@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { ProductDetail, Variant, Product } from "../types";
 import { formatCurrency } from "../utils/format";
+import { resolveImageUrl } from "../utils/image";
 
 type Props = {
   productId: string;
@@ -186,6 +187,7 @@ export function StorefrontProductDetailScreen({
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const sliderRef = useRef<ScrollView>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addedToast, setAddedToast] = useState(false);
@@ -285,6 +287,7 @@ export function StorefrontProductDetailScreen({
     );
     if (imgIndex >= 0) {
       setSelectedImageIndex(imgIndex);
+      sliderRef.current?.scrollTo({ x: imgIndex * width, animated: true });
     }
   };
 
@@ -327,8 +330,8 @@ export function StorefrontProductDetailScreen({
 
   // Multi-variant bulk calculations
   const bulkSelectedVariants = (product?.variants || [])
-    .map((v) => ({ variant: v, quantity: bulkQuantities[v.id] || 0 }))
-    .filter((line) => line.quantity > 0);
+  .map((v) => ({ variant: v, quantity: bulkQuantities[v.id] || 0 }))
+  .filter((line) => line.quantity > 0);
 
   const totalBulkItems = bulkSelectedVariants.reduce((sum, line) => sum + line.quantity, 0);
   const totalBulkPrice = bulkSelectedVariants.reduce(
@@ -347,6 +350,29 @@ export function StorefrontProductDetailScreen({
     const nextQty: Record<string, number> = {};
     pool.forEach((v, index) => {
       nextQty[v.id] = perVar + (index < remainder ? 1 : 0);
+    });
+    setBulkQuantities(nextQty);
+  };
+
+  const handleRandomizeTarget = () => {
+    const target = parseInt(bulkTargetTotal, 10);
+    if (isNaN(target) || target <= 0 || !product?.variants || product.variants.length === 0) return;
+    const availableVars = product.variants.filter((v) => (v.stock ?? v.available ?? 10) > 0 || product.isPreorder);
+    const pool = availableVars.length > 0 ? availableVars : product.variants;
+    const k = pool.length;
+    if (k === 1) {
+      setBulkQuantities({ [pool[0].id]: target });
+      return;
+    }
+    // Random partition of target into k non-negative integers summing to target (stars and bars)
+    const cuts: number[] = [0, target];
+    for (let i = 0; i < k - 1; i++) {
+      cuts.push(Math.floor(Math.random() * (target + 1)));
+    }
+    cuts.sort((a, b) => a - b);
+    const nextQty: Record<string, number> = {};
+    pool.forEach((v, index) => {
+      nextQty[v.id] = cuts[index + 1] - cuts[index];
     });
     setBulkQuantities(nextQty);
   };
@@ -440,17 +466,54 @@ export function StorefrontProductDetailScreen({
       )}
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Large Product Image Gallery */}
+        {/* Large Product Image Gallery with Swipeable Carousel */}
         <View style={styles.galleryContainer}>
-          {product.images?.[selectedImageIndex]?.url ? (
-            <Image
-              source={{ uri: product.images[selectedImageIndex].url }}
-              style={styles.heroImage}
-              resizeMode="cover"
-            />
+          {product.images && product.images.length > 0 ? (
+            <ScrollView
+              ref={sliderRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => {
+                const offsetX = e.nativeEvent.contentOffset.x;
+                const idx = Math.round(offsetX / width);
+                if (idx >= 0 && idx < product.images.length && idx !== selectedImageIndex) {
+                  setSelectedImageIndex(idx);
+                }
+              }}
+              style={{ width, height: width * 0.85 }}
+            >
+              {product.images.map((img, idx) => {
+                const resolvedUri = resolveImageUrl(img.url);
+                return (
+                  <View key={img.id || idx} style={{ width, height: width * 0.85 }}>
+                    {resolvedUri ? (
+                      <Image
+                        source={{ uri: resolvedUri }}
+                        style={styles.heroImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.placeholderImage}>
+                        <Feather name="box" size={64} color={colors.primaryLight} />
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
           ) : (
             <View style={styles.placeholderImage}>
               <Feather name="box" size={64} color={colors.primaryLight} />
+            </View>
+          )}
+
+          {/* Photo Counter Badge */}
+          {product.images && product.images.length > 1 && (
+            <View style={styles.imageCounterBadge}>
+              <Text style={styles.imageCounterText}>
+                {selectedImageIndex + 1} / {product.images.length}
+              </Text>
             </View>
           )}
 
@@ -464,12 +527,49 @@ export function StorefrontProductDetailScreen({
                     styles.dot,
                     selectedImageIndex === idx && styles.dotActive,
                   ]}
-                  onPress={() => setSelectedImageIndex(idx)}
+                  onPress={() => {
+                    setSelectedImageIndex(idx);
+                    sliderRef.current?.scrollTo({ x: idx * width, animated: true });
+                  }}
+                  activeOpacity={0.8}
                 />
               ))}
             </View>
           )}
         </View>
+
+        {/* Thumbnail Row if multiple images */}
+        {product.images && product.images.length > 1 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.thumbnailStrip}
+          >
+            {product.images.map((img, idx) => {
+              const resolvedUri = resolveImageUrl(img.url);
+              const isSelected = selectedImageIndex === idx;
+              return (
+                <TouchableOpacity
+                  key={`thumb_${img.id || idx}`}
+                  style={[styles.thumbnailWrap, isSelected && styles.thumbnailWrapActive]}
+                  onPress={() => {
+                    setSelectedImageIndex(idx);
+                    sliderRef.current?.scrollTo({ x: idx * width, animated: true });
+                  }}
+                  activeOpacity={0.7}
+                >
+                  {resolvedUri ? (
+                    <Image source={{ uri: resolvedUri }} style={styles.thumbnailImg} resizeMode="cover" />
+                  ) : (
+                    <View style={styles.thumbnailPlaceholder}>
+                      <Feather name="image" size={16} color={colors.textMuted} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
 
         {/* Product Details Section */}
         <View style={styles.detailsContainer}>
@@ -622,37 +722,26 @@ export function StorefrontProductDetailScreen({
         </View>
       </ScrollView>
 
-      {/* Floating Hover Spark Symbol for Bulk Add */}
-      <TouchableOpacity
-        style={[
-          styles.floatingSparkBtn,
-          { bottom: 84 + Math.max(insets.bottom, 16) },
-        ]}
-        onPress={() => {
-          if (Object.keys(bulkQuantities).length === 0 && activeVariant) {
-            setBulkQuantities({ [activeVariant.id]: quantity });
-          }
-          setShowBulkModal(true);
-        }}
-        activeOpacity={0.85}
-      >
-        <View style={styles.floatingSparkIconWrap}>
-          <Feather name="zap" size={14} color="#FFFFFF" />
-        </View>
-        <Text style={styles.floatingSparkText}>
-          {totalBulkItems > 1 ? `Bulk (${totalBulkItems}) ✨` : "Bulk Add ✨"}
-        </Text>
-      </TouchableOpacity>
-
       {/* Sticky Bottom Purchase Bar */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        {/* Icon-only Bulk Add Assistant button */}
         <TouchableOpacity
-          style={styles.bottomShareBtn}
-          onPress={handleShare}
+          style={styles.bottomSparkBtn}
+          onPress={() => {
+            if (Object.keys(bulkQuantities).length === 0 && activeVariant) {
+              setBulkQuantities({ [activeVariant.id]: quantity });
+            }
+            setShowBulkModal(true);
+          }}
           activeOpacity={0.7}
-          accessibilityLabel="Share piece"
+          accessibilityLabel="Bulk add options"
         >
-          <Feather name="share-2" size={18} color={colors.text} />
+          <Feather name="zap" size={20} color={colors.gold} />
+          {totalBulkItems > 0 && (
+            <View style={styles.sparkBadge}>
+              <Text style={styles.sparkBadgeText}>{totalBulkItems}</Text>
+            </View>
+          )}
         </TouchableOpacity>
 
         <View style={styles.bottomQtyGroup}>
@@ -733,7 +822,7 @@ export function StorefrontProductDetailScreen({
               {/* Optional Quick Total Input */}
               <View style={styles.targetTotalBox}>
                 <Text style={styles.targetTotalLabel}>Target total pieces needed (optional):</Text>
-                <View style={{ flexDirection: "row", gap: 8, alignItems: "center", marginTop: 4 }}>
+                <View style={{ flexDirection: "row", gap: 8, alignItems: "center", marginTop: 6 }}>
                   <TextInput
                     style={styles.targetTotalInput}
                     placeholder="e.g. 10"
@@ -747,7 +836,15 @@ export function StorefrontProductDetailScreen({
                     onPress={handleDistributeTarget}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.distributeBtnText}>Distribute Evenly</Text>
+                    <Text style={styles.distributeBtnText}>Evenly</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.randomizeBtn}
+                    onPress={handleRandomizeTarget}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="shuffle" size={13} color={colors.primary} style={{ marginRight: 4 }} />
+                    <Text style={styles.randomizeBtnText}>Randomize</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -991,6 +1088,47 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     width: 14,
   },
+  imageCounterBadge: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  imageCounterText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  thumbnailStrip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    backgroundColor: colors.background,
+  },
+  thumbnailWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  thumbnailWrapActive: {
+    borderColor: colors.primary,
+  },
+  thumbnailImg: {
+    width: "100%",
+    height: "100%",
+  },
+  thumbnailPlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceWarm,
+  },
   detailsContainer: {
     paddingHorizontal: 20,
     paddingTop: 18,
@@ -1198,15 +1336,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  bottomShareBtn: {
+  bottomSparkBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.gold,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surfaceWarm,
+    backgroundColor: "#181314",
+    position: "relative",
+  },
+  sparkBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: colors.gold,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  sparkBadgeText: {
+    color: "#181314",
+    fontSize: 9,
+    fontWeight: "900",
   },
   bottomQtyGroup: {
     flexDirection: "row",
@@ -1280,39 +1436,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
-  floatingSparkBtn: {
-    position: "absolute",
-    right: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#181314",
-    borderRadius: 24,
-    paddingVertical: 9,
-    paddingHorizontal: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
-    borderWidth: 1.5,
-    borderColor: colors.gold,
-    zIndex: 99,
-  },
-  floatingSparkIconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 7,
-  },
-  floatingSparkText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -1384,6 +1507,22 @@ const styles = StyleSheet.create({
   },
   distributeBtnText: {
     color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  randomizeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: 12,
+    height: 40,
+    borderRadius: 8,
+    justifyContent: "center",
+  },
+  randomizeBtnText: {
+    color: colors.primary,
     fontSize: 12,
     fontWeight: "700",
   },

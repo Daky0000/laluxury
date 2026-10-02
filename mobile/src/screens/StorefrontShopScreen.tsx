@@ -16,6 +16,7 @@ import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { Product } from "../types";
 import { formatCurrency } from "../utils/format";
+import { resolveImageUrl } from "../utils/image";
 
 type Props = {
   initialFilter?: string;
@@ -259,9 +260,9 @@ export function StorefrontShopScreen({
               >
                 {/* Product Thumbnail */}
                 <View style={styles.productImageContainer}>
-                  {product.images?.[0]?.url ? (
+                  {resolveImageUrl(product.images?.[0]?.url) ? (
                     <Image
-                      source={{ uri: product.images[0].url }}
+                      source={{ uri: resolveImageUrl(product.images?.[0]?.url)! }}
                       style={styles.productImage}
                       resizeMode="cover"
                     />

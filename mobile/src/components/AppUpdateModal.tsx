@@ -4,6 +4,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   StyleSheet,
   Linking,
   ScrollView,
@@ -54,13 +55,25 @@ export function AppUpdateModal({
       animationType="fade"
       onRequestClose={onDismiss}
     >
-      <View style={styles.overlay}>
-        <View style={styles.card}>
-          {/* Top Decorative Header */}
-          <View style={styles.header}>
-            <View style={styles.iconCircle}>
-              <Feather name="arrow-down-circle" size={26} color={colors.primary} />
-            </View>
+      <TouchableWithoutFeedback onPress={onDismiss}>
+        <View style={styles.overlay}>
+          <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+            <View style={styles.card}>
+              {/* Top-Right Dismiss X Icon */}
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={onDismiss}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityLabel="Dismiss update popup"
+              >
+                <Feather name="x" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              {/* Top Decorative Header */}
+              <View style={styles.header}>
+                <View style={styles.iconCircle}>
+                  <Feather name="arrow-down-circle" size={26} color={colors.primary} />
+                </View>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>NEW RELEASE AVAILABLE</Text>
             </View>
@@ -118,8 +131,10 @@ export function AppUpdateModal({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-    </Modal>
+      </TouchableWithoutFeedback>
+    </View>
+  </TouchableWithoutFeedback>
+</Modal>
   );
 }
 
@@ -142,6 +157,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 20,
     elevation: 10,
+    position: "relative",
+  },
+  closeBtn: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F4EBEB",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
   },
   header: {
     alignItems: "center",

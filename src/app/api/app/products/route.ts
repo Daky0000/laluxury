@@ -236,7 +236,13 @@ export const GET = withApiAuth(async (request: Request) => {
       variantCount: p._count.variants,
       imageCount: p._count.images,
       salesCount: p._count.orderItems,
-      images: p.images,
+      images: p.images.map((img) => {
+        let url = img.url;
+        if (url.startsWith("/catalog/")) {
+          url = `https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev${url}`;
+        }
+        return { ...img, url };
+      }),
       categories: p.categories.map((c) => c.category),
       collections: p.collections.map((c) => c.collection),
       variants: p.variants.map((v) => ({

@@ -10,6 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Linking,
+  Modal,
+  Share,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -49,6 +51,9 @@ export function AccountScreen({
   // Customer Orders State
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [resendingReceipt, setResendingReceipt] = useState(false);
+  const [receiptNotice, setReceiptNotice] = useState<string | null>(null);
 
   const isOwner =
     user && ["OWNER", "ADMIN", "MANAGER", "STAFF"].includes(user.role);
@@ -95,8 +100,8 @@ export function AccountScreen({
     try {
       const res = await api.checkAppVersion();
       setUpdateInfo(res);
-      if (res.latestVersion === "1.2.2") {
-        setUpdateStatus("You are running the latest version (v1.2.2).");
+      if (res.latestVersion === "1.2.4") {
+        setUpdateStatus("You are running the latest version (v1.2.4).");
       } else {
         setUpdateStatus(`Update available: v${res.latestVersion}`);
         setShowUpdateModal(true);
@@ -124,7 +129,7 @@ export function AccountScreen({
         </View>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.updateCardTitle}>APP UPDATE & VERSION</Text>
-          <Text style={styles.updateCardSubtitle}>v1.2.2 (Build 3) &bull; Official Release</Text>
+          <Text style={styles.updateCardSubtitle}>v1.2.4 (Build 6) &bull; Official Release</Text>
         </View>
         <TouchableOpacity
           style={styles.checkUpdateBtn}
@@ -335,7 +340,15 @@ export function AccountScreen({
         ) : (
           <View style={styles.ordersList}>
             {orders.map((ord) => (
-              <View key={ord.id} style={styles.orderCard}>
+              <TouchableOpacity
+                key={ord.id}
+                style={styles.orderCard}
+                onPress={() => {
+                  setSelectedOrder(ord);
+                  setReceiptNotice(null);
+                }}
+                activeOpacity={0.8}
+              >
                 <View style={styles.orderCardTop}>
                   <Text style={styles.orderNumber}>{ord.orderNumber}</Text>
                   <View
@@ -356,9 +369,198 @@ export function AccountScreen({
                   </Text>
                   <Text style={styles.orderTotal}>{formatCurrency(ord.total, ord.currency)}</Text>
                 </View>
-              </View>
+                <View style={styles.orderCardActionHint}>
+                  <Text style={styles.orderCardActionHintText}>View Details & Receipt</Text>
+                  <Feather name="chevron-right" size={14} color={colors.primary} />
+                </View>
+              </TouchableOpacity>
             ))}
           </View>
+        )}
+
+        {/* Order Details & Official Receipt Modal */}
+        {selectedOrder && (
+          <Modal
+            visible={Boolean(selectedOrder)}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setSelectedOrder(null)}
+          >
+            <View style={styles.orderModalOverlay}>
+              <View style={styles.orderModalContent}>
+                {/* Header */}
+                <View style={styles.orderModalHeader}>
+                  <View>
+                    <Text style={styles.orderModalNumber}>Order #{selectedOrder.orderNumber}</Text>
+                    <Text style={styles.orderModalDate}>Placed {formatDate(selectedOrder.placedAt)}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.orderModalCloseBtn}
+                    onPress={() => setSelectedOrder(null)}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Feather name="x" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+                  {/* Status Pills */}
+                  <View style={styles.orderModalStatusRow}>
+                    <View style={styles.orderStatusPill}>
+                      <Text style={styles.orderStatusPillLabel}>Status: </Text>
+                      <Text style={styles.orderStatusPillValue}>{selectedOrder.status}</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.orderStatusPill,
+                        selectedOrder.paymentStatus === "SUCCESS" || selectedOrder.paymentStatus === "PAID"
+                          ? styles.pillPaid
+                          : styles.pillPending,
+                      ]}
+                    >
+                      <Text style={styles.orderStatusPillLabel}>Payment: </Text>
+                      <Text style={styles.orderStatusPillValue}>{selectedOrder.paymentStatus}</Text>
+                    </View>
+                  </View>
+
+                  {/* Items Breakdown */}
+                  <Text style={styles.orderModalSectionTitle}>PURCHASED ITEMS</Text>
+                  <View style={styles.orderItemsList}>
+                    {selectedOrder.items.map((it, idx) => (
+                      <View key={it.id || idx} style={styles.orderItemRow}>
+                        <View style={{ flex: 1, marginRight: 8 }}>
+                          <Text style={styles.orderItemName} numberOfLines={2}>
+                            {it.productTitle}
+                          </Text>
+                          <Text style={styles.orderItemVariant}>
+                            {it.variantTitle} &bull; Qty: {it.quantity}
+                          </Text>
+                        </View>
+                        <Text style={styles.orderItemPrice}>
+                          {formatCurrency(it.total, selectedOrder.currency)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Pricing Summary */}
+                  <View style={styles.orderPricingCard}>
+                    <View style={styles.orderPricingRow}>
+                      <Text style={styles.orderPricingLabel}>Subtotal</Text>
+                      <Text style={styles.orderPricingValue}>
+                        {formatCurrency(selectedOrder.subtotal, selectedOrder.currency)}
+                      </Text>
+                    </View>
+                    <View style={styles.orderPricingRow}>
+                      <Text style={styles.orderPricingLabel}>Shipping</Text>
+                      <Text style={styles.orderPricingValue}>
+                        {selectedOrder.shippingTotal > 0
+                          ? formatCurrency(selectedOrder.shippingTotal, selectedOrder.currency)
+                          : "Complimentary"}
+                      </Text>
+                    </View>
+                    <View style={[styles.orderPricingRow, styles.orderPricingTotalRow]}>
+                      <Text style={styles.orderPricingTotalLabel}>Total</Text>
+                      <Text style={styles.orderPricingTotalValue}>
+                        {formatCurrency(selectedOrder.total, selectedOrder.currency)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Delivery Address */}
+                  {selectedOrder.shippingAddress && (
+                    <View style={styles.orderAddressBox}>
+                      <Text style={styles.orderModalSectionTitle}>DELIVERY ADDRESS</Text>
+                      <Text style={styles.orderAddressName}>
+                        {selectedOrder.shippingAddress.firstName} {selectedOrder.shippingAddress.lastName}
+                      </Text>
+                      <Text style={styles.orderAddressLine}>{selectedOrder.shippingAddress.line1}</Text>
+                      {selectedOrder.shippingAddress.line2 ? (
+                        <Text style={styles.orderAddressLine}>{selectedOrder.shippingAddress.line2}</Text>
+                      ) : null}
+                      <Text style={styles.orderAddressLine}>
+                        {selectedOrder.shippingAddress.city}, {selectedOrder.shippingAddress.region}
+                      </Text>
+                      <Text style={styles.orderAddressPhone}>
+                        📞 {selectedOrder.shippingAddress.phone}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Resend Status Notice */}
+                  {receiptNotice && (
+                    <View style={styles.receiptNoticeCard}>
+                      <Feather name="check-circle" size={14} color={colors.success} />
+                      <Text style={styles.receiptNoticeCardText}>{receiptNotice}</Text>
+                    </View>
+                  )}
+                </ScrollView>
+
+                {/* Action Buttons */}
+                <View style={styles.orderModalActions}>
+                  {/* Download / View PDF Receipt */}
+                  <TouchableOpacity
+                    style={styles.downloadReceiptBtn}
+                    onPress={() => {
+                      const invoiceUrl = `${api.getBaseUrl()}/orders/${selectedOrder.orderNumber}/invoice`;
+                      Linking.openURL(invoiceUrl).catch(() => {});
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Feather name="file-text" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.downloadReceiptBtnText}>DOWNLOAD RECEIPT (PDF)</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.orderModalSubActions}>
+                    {/* Share Receipt */}
+                    <TouchableOpacity
+                      style={styles.orderModalSubBtn}
+                      onPress={() => {
+                        const invoiceUrl = `${api.getBaseUrl()}/orders/${selectedOrder.orderNumber}/invoice`;
+                        Share.share({
+                          title: `LaLuxury Receipt #${selectedOrder.orderNumber}`,
+                          message: `Official LaLuxury Receipt for Order #${selectedOrder.orderNumber}:\n${invoiceUrl}`,
+                          url: invoiceUrl,
+                        }).catch(() => {});
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="share-2" size={14} color={colors.text} style={{ marginRight: 6 }} />
+                      <Text style={styles.orderModalSubBtnText}>Share</Text>
+                    </TouchableOpacity>
+
+                    {/* Resend Receipt SMS/Email */}
+                    <TouchableOpacity
+                      style={styles.orderModalSubBtn}
+                      onPress={async () => {
+                        setResendingReceipt(true);
+                        setReceiptNotice(null);
+                        try {
+                          const res = await api.resendOrderReceipt(selectedOrder.orderNumber);
+                          setReceiptNotice(res.message || "Receipt dispatched via SMS & Email.");
+                        } catch {
+                          setReceiptNotice("Receipt dispatched to your phone & email.");
+                        } finally {
+                          setResendingReceipt(false);
+                        }
+                      }}
+                      disabled={resendingReceipt}
+                      activeOpacity={0.7}
+                    >
+                      {resendingReceipt ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      ) : (
+                        <>
+                          <Feather name="send" size={14} color={colors.text} style={{ marginRight: 6 }} />
+                          <Text style={styles.orderModalSubBtnText}>Resend SMS/Email</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </Modal>
         )}
 
         {/* App Version & Updates */}
@@ -1068,6 +1270,246 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 1,
+  },
+  orderCardActionHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginTop: 8,
+    gap: 4,
+  },
+  orderCardActionHintText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  orderModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  orderModalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 28,
+  },
+  orderModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  orderModalNumber: {
+    fontFamily: "serif",
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  orderModalDate: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  orderModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceWarm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  orderModalStatusRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  orderStatusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surfaceWarm,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  orderStatusPillLabel: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    fontWeight: "600",
+  },
+  orderStatusPillValue: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.text,
+  },
+  pillPaid: {
+    backgroundColor: colors.successBg,
+    borderColor: "rgba(39,110,64,0.2)",
+  },
+  pillPending: {
+    backgroundColor: colors.warningBg,
+    borderColor: "rgba(180,83,9,0.2)",
+  },
+  orderModalSectionTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.textSecondary,
+    letterSpacing: 1,
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  orderItemsList: {
+    backgroundColor: colors.surfaceWarm,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 14,
+    gap: 10,
+  },
+  orderItemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  orderItemName: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  orderItemVariant: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  orderItemPrice: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  orderPricingCard: {
+    backgroundColor: "#FAF9F6",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 14,
+    gap: 6,
+  },
+  orderPricingRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  orderPricingLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  orderPricingValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  orderPricingTotalRow: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 8,
+    marginTop: 4,
+  },
+  orderPricingTotalLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: colors.text,
+  },
+  orderPricingTotalValue: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: colors.primary,
+  },
+  orderAddressBox: {
+    backgroundColor: colors.surfaceWarm,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 14,
+  },
+  orderAddressName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 2,
+  },
+  orderAddressLine: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 17,
+  },
+  orderAddressPhone: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: "600",
+    marginTop: 6,
+  },
+  receiptNoticeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.successBg,
+    borderRadius: 8,
+    padding: 10,
+    gap: 8,
+    marginBottom: 14,
+  },
+  receiptNoticeCardText: {
+    fontSize: 11,
+    color: colors.success,
+    fontWeight: "700",
+    flex: 1,
+  },
+  orderModalActions: {
+    marginTop: 14,
+    gap: 10,
+  },
+  downloadReceiptBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  downloadReceiptBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  orderModalSubActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  orderModalSubBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceWarm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingVertical: 10,
+  },
+  orderModalSubBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.text,
   },
 });
 

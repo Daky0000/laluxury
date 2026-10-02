@@ -141,6 +141,13 @@ export const GET = withApiAuth(
     return NextResponse.json({
       product: {
         ...product,
+        images: product.images.map((img) => {
+          let url = img.url;
+          if (url.startsWith("/catalog/")) {
+            url = `https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev${url}`;
+          }
+          return { ...img, url };
+        }),
         totalStock,
         totalAvailable,
         variants: variantsWithStock,

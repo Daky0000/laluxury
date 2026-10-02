@@ -20,6 +20,7 @@ import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { CartItem, User, ShippingAddress, ShippingRate, GHANA_REGIONS } from "../types";
 import { formatCurrency } from "../utils/format";
+import { resolveImageUrl } from "../utils/image";
 
 type Props = {
   cart: CartItem[];
@@ -703,9 +704,9 @@ export function StorefrontCartScreen({
             <View key={item.variant.id} style={styles.cartItemRow}>
               {/* Product Thumbnail */}
               <View style={styles.thumbnailContainer}>
-                {item.product.images?.[0]?.url ? (
+                {resolveImageUrl(item.product.images?.[0]?.url) ? (
                   <Image
-                    source={{ uri: item.product.images[0].url }}
+                    source={{ uri: resolveImageUrl(item.product.images?.[0]?.url)! }}
                     style={styles.thumbnailImage}
                     resizeMode="cover"
                   />
