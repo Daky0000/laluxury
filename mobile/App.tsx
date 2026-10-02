@@ -69,7 +69,7 @@ import { PopNotification, PopNotificationData } from "./src/components/PopNotifi
 import { AppUpdateModal, AppUpdateInfo } from "./src/components/AppUpdateModal";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const CURRENT_APP_VERSION = "1.2.5";
+const CURRENT_APP_VERSION = "1.2.6";
 
 function isNewerVersion(current: string, latest: string): boolean {
   const cParts = current.split(".").map((n) => parseInt(n, 10) || 0);

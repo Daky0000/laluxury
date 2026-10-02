@@ -169,7 +169,7 @@ export function AccountScreen({
       <AppUpdateModal
         visible={showUpdateModal}
         updateInfo={updateInfo}
-        currentVersion="1.2.5"
+        currentVersion="1.2.6"
         onDismiss={() => setShowUpdateModal(false)}
       />
     </View>
