@@ -26,6 +26,13 @@ Generate a secret with `openssl rand -base64 32`.
 
 ## Deploying to Railway
 
+Configure R2 for production media delivery. Without R2 or Cloudinary, uploads
+fall back to PostgreSQL and Railway serves the image bytes. Set
+`APK_DOWNLOAD_URL` to a verified HTTPS release object. Set `CATALOG_CDN_URL`
+only after uploading and verifying the catalog. See
+[the cost reduction runbook](docs/RAILWAY_COST_REDUCTION.md) for migration,
+cache boundaries, deployment checks, and rollback.
+
 1. Create a project, add a **Postgres** service. Railway sets `DATABASE_URL` for you.
 2. Add a service from this repo. Railway detects Next.js and runs `npm run build` / `npm start`.
 3. Set the environment variables below in the service's Variables tab.

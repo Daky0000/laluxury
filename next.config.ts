@@ -35,14 +35,30 @@ const nextConfig: NextConfig = {
 
   async redirects() {
     return [
+      // Enable only after every catalog object has been uploaded and verified.
+      ...(process.env.CATALOG_CDN_URL ? [{
+        source: "/catalog/:path*",
+        destination: `${process.env.CATALOG_CDN_URL.replace(/\/$/, "")}/catalog/:path*`,
+        permanent: false,
+      }] : []),
+      {
+        source: "/downloads/:file(.*\\.apk)",
+        destination: "/api/app/download",
+        permanent: false,
+      },
+      {
+        source: "/LaLuxury-Management.apk",
+        destination: "/api/app/download",
+        permanent: false,
+      },
       {
         source: "/download",
-        destination: "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/LaLuxury-Management.apk",
+        destination: "/api/app/download",
         permanent: false,
       },
       {
         source: "/app/download",
-        destination: "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/LaLuxury-Management.apk",
+        destination: "/api/app/download",
         permanent: false,
       },
     ];

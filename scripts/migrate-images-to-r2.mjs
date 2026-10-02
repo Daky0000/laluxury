@@ -36,7 +36,7 @@ async function migrate() {
   try {
     console.log("Searching for image assets stored in PostgreSQL...");
     const res = await pool.query(
-      `SELECT id, filename, "mimeType", folder, data, size FROM "MediaAsset" WHERE source = 'DATABASE' AND data IS NOT NULL`
+      `SELECT id, filename, "mimeType", folder, size FROM "MediaAsset" WHERE source = 'DATABASE' AND data IS NOT NULL`
     );
 
     const assets = res.rows;
@@ -44,6 +44,7 @@ async function migrate() {
 
     let totalBytesFreed = 0;
     let successCount = 0;
+    let failureCount = 0;
 
     for (let i = 0; i < assets.length; i++) {
       const asset = assets[i];
@@ -56,6 +57,10 @@ async function migrate() {
       );
 
       try {
+        // Fetch only one binary at a time; metadata lists do not retain every image buffer.
+        const binary = await pool.query(`SELECT data FROM "MediaAsset" WHERE id = $1 AND source = 'DATABASE' AND data IS NOT NULL`, [asset.id]);
+        asset.data = binary.rows[0]?.data;
+        if (!asset.data) continue;
         await s3.send(
           new PutObjectCommand({
             Bucket: bucketName,
@@ -66,6 +71,10 @@ async function migrate() {
           })
         );
 
+        const delivered = await fetch(destinationUrl, { method: "HEAD", signal: AbortSignal.timeout(20_000) });
+        if (!delivered.ok || Number(delivered.headers.get("content-length")) !== asset.data.length) {
+          throw new Error("Public R2 object verification failed; database bytes retained.");
+        }
         await pool.query(
           `UPDATE "MediaAsset" SET source = 'CDN', url = $1, "publicId" = $2, data = NULL WHERE id = $3`,
           [destinationUrl, key, asset.id]
@@ -75,7 +84,10 @@ async function migrate() {
         successCount++;
         console.log("OK!");
       } catch (err) {
+        failureCount++;
         console.error(`FAILED: ${err.message}`);
+      } finally {
+        asset.data = null;
       }
     }
 
@@ -102,44 +114,19 @@ async function migrate() {
     `);
     console.log(`Updated ${piApiRes.rowCount ?? 0} ProductImage row(s) with /api/media/ URLs.`);
 
-    // 3. Update ProductImage with /catalog/ URLs
-    const piCatRes = await pool.query(`
-      UPDATE "ProductImage"
-      SET url = $1 || url
-      WHERE url LIKE '/catalog/%'
-    `, [publicUrl]);
-    console.log(`Updated ${piCatRes.rowCount ?? 0} ProductImage row(s) pointing to /catalog/.`);
-
-    // 4. Update Category image URLs
-    const catRes = await pool.query(`
-      UPDATE "Category"
-      SET "imageUrl" = $1 || "imageUrl"
-      WHERE "imageUrl" LIKE '/catalog/%'
-    `, [publicUrl]);
-    console.log(`Updated ${catRes.rowCount ?? 0} Category row(s) pointing to /catalog/.`);
-
-    // 5. Update Collection image URLs
-    const colRes = await pool.query(`
-      UPDATE "Collection"
-      SET "imageUrl" = $1 || "imageUrl"
-      WHERE "imageUrl" LIKE '/catalog/%'
-    `, [publicUrl]);
-    console.log(`Updated ${colRes.rowCount ?? 0} Collection row(s) pointing to /catalog/.`);
-
-    // 6. Update Setting JSON references to /catalog/
-    const setCatRes = await pool.query(`
-      UPDATE "Setting"
-      SET value = replace(value::text, '"/catalog/', '"' || $1 || '/catalog/')::jsonb
-      WHERE value::text LIKE '%"/catalog/%'
-    `, [publicUrl]);
-    console.log(`Updated ${setCatRes.rowCount ?? 0} Setting row(s) containing /catalog/ references.`);
+    // Catalog references must not be rewritten until those objects have been uploaded
+    // and verified separately. A URL prefix change alone can break every catalog image.
+    const remaining = await pool.query(`SELECT count(*)::int AS count FROM "MediaAsset" WHERE source = 'DATABASE' AND data IS NOT NULL`);
+    console.log(`Database-backed images remaining: ${remaining.rows[0].count}`);
+    if (failureCount || remaining.rows[0].count) throw new Error("Image migration incomplete; inspect failed assets.");
 
     console.log("\nAll database image references have been migrated to Cloudflare R2!");
   } catch (err) {
     console.error("Migration check encountered error:", err.message);
+    process.exitCode = 1;
   } finally {
     await pool.end();
   }
 }
 
-migrate().catch(console.error);
+migrate().catch((error) => { console.error(error.message); process.exitCode = 1; });

@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { requireBearerPermission, getOptionalBearerStaff, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { can } from "@/lib/auth/rbac";
 import { uniqueSlug, slugify } from "@/lib/slug";
-import { buildSearchText } from "@/lib/catalog";
+import { buildSearchText, refreshPriceRange } from "@/lib/catalog";
+import { setStockLevel } from "@/lib/inventory";
 import { recordAudit } from "@/lib/audit";
 import { revalidateProductCatalog } from "@/lib/catalog-revalidate";
 import type { ProductStatus } from "@/generated/prisma";
@@ -19,7 +20,9 @@ const updateProductSchema = z.object({
   title: z.string().trim().min(1).optional(),
   slug: z.string().trim().optional(),
   status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]).optional(),
+  price: z.number().min(0).optional(),
   compareAtPrice: z.number().min(0).nullable().optional(),
+  stock: z.number().int().min(0).optional(),
   shortDescription: z.string().trim().nullable().optional(),
   description: z.string().trim().nullable().optional(),
   brand: z.string().trim().nullable().optional(),
@@ -123,9 +126,24 @@ export const GET = withApiAuth(
       _sum: { quantity: true },
     });
 
+    const totalStock = product.variants.reduce((sum, v) => sum + (v.inventory?.onHand ?? 0), 0);
+    const totalAvailable = product.variants.reduce(
+      (sum, v) => sum + (v.inventory ? Math.max(0, v.inventory.onHand - v.inventory.reserved) : 0),
+      0,
+    );
+
+    const variantsWithStock = product.variants.map((v) => ({
+      ...v,
+      stock: v.inventory?.onHand ?? 0,
+      available: v.inventory ? Math.max(0, v.inventory.onHand - v.inventory.reserved) : 0,
+    }));
+
     return NextResponse.json({
       product: {
         ...product,
+        totalStock,
+        totalAvailable,
+        variants: variantsWithStock,
         categories: product.categories.map((c) => c.category),
         collections: product.collections.map((c) => c.collection),
         stats: {
@@ -260,6 +278,28 @@ export const PATCH = withApiAuth(
       }
     });
 
+    if (data.stock !== undefined || data.price !== undefined) {
+      const defaultVariant = await db.variant.findFirst({
+        where: { productId: id },
+        orderBy: { position: "asc" },
+      });
+      if (defaultVariant) {
+        if (data.price !== undefined) {
+          await db.variant.update({
+            where: { id: defaultVariant.id },
+            data: {
+              price: toMinor(data.price),
+              compareAtPrice,
+            },
+          });
+          await refreshPriceRange(id);
+        }
+        if (data.stock !== undefined) {
+          await setStockLevel(defaultVariant.id, data.stock, "App product update", actor.id);
+        }
+      }
+    }
+
     await recordAudit({
       actorId: actor.id,
       action: "product.update",
@@ -270,19 +310,48 @@ export const PATCH = withApiAuth(
       after: { title, status: data.status ?? existing.status, isPreorder },
     });
 
-    revalidateProductCatalog(id);
+    revalidateProductCatalog(id, slug);
 
     const updated = await db.product.findUnique({
       where: { id },
       include: {
         images: { orderBy: { position: "asc" } },
-        variants: { include: { inventory: true } },
+        variants: {
+          orderBy: { position: "asc" },
+          include: { inventory: true },
+        },
         categories: { include: { category: true } },
         collections: { include: { collection: true } },
       },
     });
 
-    return NextResponse.json({ ok: true, product: updated });
+    if (!updated) {
+      return NextResponse.json({ error: "Product not found." }, { status: 404 });
+    }
+
+    const totalStock = updated.variants.reduce((sum, v) => sum + (v.inventory?.onHand ?? 0), 0);
+    const totalAvailable = updated.variants.reduce(
+      (sum, v) => sum + (v.inventory ? Math.max(0, v.inventory.onHand - v.inventory.reserved) : 0),
+      0,
+    );
+
+    const variantsWithStock = updated.variants.map((v) => ({
+      ...v,
+      stock: v.inventory?.onHand ?? 0,
+      available: v.inventory ? Math.max(0, v.inventory.onHand - v.inventory.reserved) : 0,
+    }));
+
+    return NextResponse.json({
+      ok: true,
+      product: {
+        ...updated,
+        totalStock,
+        totalAvailable,
+        variants: variantsWithStock,
+        categories: updated.categories.map((c) => c.category),
+        collections: updated.collections.map((c) => c.collection),
+      },
+    });
   },
 );
 

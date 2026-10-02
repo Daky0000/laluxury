@@ -70,6 +70,13 @@ async function uploadCatalog() {
           CacheControl: "public, max-age=31536000, immutable",
         })
       );
+      const delivered = await fetch(`${publicUrl}/${rel}`, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!delivered.ok || Number(delivered.headers.get("content-length")) !== bytes.length) {
+        throw new Error(`Public object verification failed for ${rel}`);
+      }
       console.log("OK!");
       count++;
     } catch (err) {
@@ -79,6 +86,12 @@ async function uploadCatalog() {
 
   console.log(`\nSuccessfully uploaded ${count}/${files.length} files to Cloudflare R2!`);
   console.log(`Base URL: ${publicUrl}/catalog/`);
+  if (count !== files.length) {
+    throw new Error("Catalog upload incomplete; do not enable CATALOG_CDN_URL.");
+  }
 }
 
-uploadCatalog().catch(console.error);
+uploadCatalog().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

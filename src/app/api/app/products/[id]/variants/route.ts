@@ -69,7 +69,13 @@ export const GET = withApiAuth(
       },
     });
 
-    return NextResponse.json({ variants });
+    const variantsWithStock = variants.map((v) => ({
+      ...v,
+      stock: v.inventory?.onHand ?? 0,
+      available: v.inventory ? Math.max(0, v.inventory.onHand - v.inventory.reserved) : 0,
+    }));
+
+    return NextResponse.json({ variants: variantsWithStock });
   },
 );
 
@@ -84,7 +90,7 @@ export const POST = withApiAuth(
 
     const product = await db.product.findUnique({
       where: { id: productId },
-      select: { id: true, isPreorder: true },
+      select: { id: true, isPreorder: true, slug: true },
     });
     if (!product) {
       return NextResponse.json({ error: "Product not found." }, { status: 404 });
@@ -148,8 +154,21 @@ export const POST = withApiAuth(
       },
     });
 
+    if (data.stock > 0 && variant.inventory) {
+      await db.inventoryMovement.create({
+        data: {
+          inventoryItemId: variant.inventory.id,
+          type: "RESTOCK",
+          quantity: data.stock,
+          onHandAfter: data.stock,
+          reason: "Initial variant creation",
+          actorId: actor.id,
+        },
+      });
+    }
+
     await refreshPriceRange(productId);
-    revalidateProductCatalog(productId);
+    revalidateProductCatalog(productId, product.slug);
 
     await recordAudit({
       actorId: actor.id,
@@ -160,7 +179,13 @@ export const POST = withApiAuth(
       after: { sku: variant.sku, price: variant.price, title: variant.title },
     });
 
-    return NextResponse.json({ ok: true, variant }, { status: 201 });
+    const variantWithStock = {
+      ...variant,
+      stock: variant.inventory?.onHand ?? 0,
+      available: variant.inventory ? Math.max(0, variant.inventory.onHand - variant.inventory.reserved) : 0,
+    };
+
+    return NextResponse.json({ ok: true, variant: variantWithStock }, { status: 201 });
   },
 );
 
@@ -175,7 +200,7 @@ export const PATCH = withApiAuth(
 
     const product = await db.product.findUnique({
       where: { id: productId },
-      select: { id: true },
+      select: { id: true, slug: true },
     });
     if (!product) {
       return NextResponse.json({ error: "Product not found." }, { status: 404 });
@@ -245,17 +270,37 @@ export const PATCH = withApiAuth(
         }
 
         if (update.stock !== undefined) {
-          await tx.inventoryItem.upsert({
+          const existingItem = await tx.inventoryItem.findUnique({
+            where: { variantId: update.id },
+            select: { id: true, onHand: true },
+          });
+          const oldOnHand = existingItem?.onHand ?? 0;
+          const delta = update.stock - oldOnHand;
+
+          const item = await tx.inventoryItem.upsert({
             where: { variantId: update.id },
             create: { variantId: update.id, onHand: update.stock },
             update: { onHand: update.stock },
           });
+
+          if (delta !== 0) {
+            await tx.inventoryMovement.create({
+              data: {
+                inventoryItemId: item.id,
+                type: "ADJUSTMENT",
+                quantity: delta,
+                onHandAfter: update.stock,
+                reason: "Mobile variant stock adjustment",
+                actorId: actor.id,
+              },
+            });
+          }
         }
       }
     });
 
     await refreshPriceRange(productId);
-    revalidateProductCatalog(productId);
+    revalidateProductCatalog(productId, product.slug);
 
     await recordAudit({
       actorId: actor.id,
@@ -277,6 +322,12 @@ export const PATCH = withApiAuth(
       },
     });
 
-    return NextResponse.json({ ok: true, variants: updatedVariants });
+    const variantsWithStock = updatedVariants.map((v) => ({
+      ...v,
+      stock: v.inventory?.onHand ?? 0,
+      available: v.inventory ? Math.max(0, v.inventory.onHand - v.inventory.reserved) : 0,
+    }));
+
+    return NextResponse.json({ ok: true, variants: variantsWithStock });
   },
 );

@@ -101,6 +101,13 @@ Classification:
 
 ## 8. Operations & Releases
 
+APK delivery uses `src/lib/app-release.ts` as the server-side source for
+`/api/app/version.downloadUrl` and `/api/app/download`. `APK_DOWNLOAD_URL`
+can select a verified HTTPS release object. Web and legacy download links
+resolve through the same redirect endpoint; existing mobile response fields
+remain unchanged. Optional `CATALOG_CDN_URL` redirects public catalog assets
+after upload verification. See `RAILWAY_COST_REDUCTION.md` for rollout checks.
+
 | Module / Feature | Authoritative Source | Web Status | App Status | Refresh Trigger | Classification | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | App Release Version | `mobile/app.json` (1.2.2) | Web direct download | `/api/app/version` | In-app update check | **Shared (Parity Achieved)** | Aligned at version `1.2.2` (code 3) |

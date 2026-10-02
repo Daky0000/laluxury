@@ -40,6 +40,15 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
   const [brand, setBrand] = useState("");
   const [material, setMaterial] = useState("");
   const [shortDesc, setShortDesc] = useState("");
+  const [variantRows, setVariantRows] = useState<
+    Array<{ id: string; title: string; sku: string; priceGHS: string; stock: string }>
+  >([]);
+
+  const updateVariantRow = (id: string, field: "priceGHS" | "stock", val: string) => {
+    setVariantRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [field]: val } : r)),
+    );
+  };
 
   const loadProduct = async () => {
     try {
@@ -50,7 +59,24 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
       setTitle(p.title);
       setPriceGHS((p.minPrice / 100).toString());
       setComparePriceGHS(p.compareAtPrice ? (p.compareAtPrice / 100).toString() : "");
-      setStock((p.totalStock ?? 0).toString());
+
+      const defaultVariant = p.variants?.[0];
+      const initialStock =
+        defaultVariant?.inventory?.onHand ?? defaultVariant?.stock ?? p.totalStock ?? 0;
+      setStock(initialStock.toString());
+
+      if (p.variants && p.variants.length > 0) {
+        setVariantRows(
+          p.variants.map((v) => ({
+            id: v.id,
+            title: v.title,
+            sku: v.sku,
+            priceGHS: (v.price / 100).toString(),
+            stock: (v.inventory?.onHand ?? v.stock ?? 0).toString(),
+          })),
+        );
+      }
+
       setStatus(p.status);
       setIsPreorder(p.isPreorder);
       setBrand(p.brand || "");
@@ -171,18 +197,29 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
         isPreorder,
       });
 
-      // 2. Update default variant price & stock if applicable
-      const defaultVariant = product?.variants?.[0];
-      if (defaultVariant) {
-        const numStock = parseInt(stock, 10);
-        await api.updateVariants(productId, [
-          {
-            id: defaultVariant.id,
-            price: minorPrice,
-            compareAtPrice: minorCompare,
-            stock: isNaN(numStock) ? 0 : numStock,
-          },
-        ]);
+      // 2. Update variants stock & pricing
+      if (variantRows.length > 1) {
+        await api.updateVariants(
+          productId,
+          variantRows.map((vr) => ({
+            id: vr.id,
+            price: Math.round((parseFloat(vr.priceGHS) || 0) * 100),
+            stock: parseInt(vr.stock, 10) || 0,
+          })),
+        );
+      } else {
+        const defaultVariant = product?.variants?.[0];
+        if (defaultVariant) {
+          const numStock = parseInt(stock, 10);
+          await api.updateVariants(productId, [
+            {
+              id: defaultVariant.id,
+              price: minorPrice,
+              compareAtPrice: minorCompare,
+              stock: isNaN(numStock) ? 0 : numStock,
+            },
+          ]);
+        }
       }
 
       await loadProduct();
@@ -351,17 +388,26 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
           </View>
 
           <View style={styles.row}>
-            <View style={[styles.inputCol, { flex: 1, marginRight: 8 }]}>
-              <Text style={styles.inputLabel}>STOCK ON HAND</Text>
-              <TextInput
-                style={styles.input}
-                value={stock}
-                onChangeText={setStock}
-                keyboardType="number-pad"
-                placeholder="0"
-                placeholderTextColor={colors.textSubtle}
-              />
-            </View>
+            {variantRows.length <= 1 ? (
+              <View style={[styles.inputCol, { flex: 1, marginRight: 8 }]}>
+                <Text style={styles.inputLabel}>STOCK ON HAND</Text>
+                <TextInput
+                  style={styles.input}
+                  value={stock}
+                  onChangeText={setStock}
+                  keyboardType="number-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.textSubtle}
+                />
+              </View>
+            ) : (
+              <View style={[styles.inputCol, { flex: 1, marginRight: 8, justifyContent: "center" }]}>
+                <Text style={styles.inputLabel}>TOTAL STOCK</Text>
+                <Text style={styles.totalVariantsBadge}>
+                  {variantRows.reduce((sum, r) => sum + (parseInt(r.stock, 10) || 0), 0)} units ({variantRows.length} variants)
+                </Text>
+              </View>
+            )}
 
             <View style={[styles.inputCol, { flex: 1, marginLeft: 8, justifyContent: "center" }]}>
               <View style={styles.switchRow}>
@@ -376,6 +422,51 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
             </View>
           </View>
         </View>
+
+        {/* Variants & Stock Matrix */}
+        {variantRows.length > 1 && (
+          <View style={styles.section}>
+            <View style={styles.variantHeaderRow}>
+              <Text style={styles.sectionTitle}>VARIANTS &amp; STOCK MATRIX ({variantRows.length})</Text>
+              <Text style={styles.variantHeaderHint}>Real-time web sync</Text>
+            </View>
+
+            {variantRows.map((vr) => (
+              <View key={vr.id} style={styles.variantRowCard}>
+                <View style={styles.variantRowHeader}>
+                  <Text style={styles.variantRowTitle}>{vr.title}</Text>
+                  <Text style={styles.variantRowSku}>SKU: {vr.sku}</Text>
+                </View>
+
+                <View style={styles.row}>
+                  <View style={[styles.inputCol, { flex: 1, marginRight: 8 }]}>
+                    <Text style={styles.inputLabel}>PRICE (GHS)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={vr.priceGHS}
+                      onChangeText={(val) => updateVariantRow(vr.id, "priceGHS", val)}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSubtle}
+                    />
+                  </View>
+
+                  <View style={[styles.inputCol, { flex: 1, marginLeft: 8 }]}>
+                    <Text style={styles.inputLabel}>STOCK ON HAND</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={vr.stock}
+                      onChangeText={(val) => updateVariantRow(vr.id, "stock", val)}
+                      keyboardType="number-pad"
+                      placeholder="0"
+                      placeholderTextColor={colors.textSubtle}
+                    />
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Status Selector */}
         <View style={styles.section}>
@@ -730,5 +821,50 @@ const styles = StyleSheet.create({
     color: colors.gold,
     fontSize: 16,
     fontWeight: "700",
+  },
+  totalVariantsBadge: {
+    color: colors.gold,
+    fontSize: 13,
+    fontWeight: "700",
+    paddingVertical: 10,
+  },
+  variantHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  variantHeaderHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  variantRowCard: {
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    marginBottom: 10,
+  },
+  variantRowHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingBottom: 6,
+  },
+  variantRowTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "700",
+    flex: 1,
+  },
+  variantRowSku: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontFamily: "monospace",
   },
 });

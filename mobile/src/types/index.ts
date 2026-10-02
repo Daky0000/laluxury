@@ -38,6 +38,34 @@ export type InventoryItem = {
   allowBackorder: boolean;
 };
 
+export type ProductOptionValue = {
+  id: string;
+  optionId: string;
+  value: string;
+  hexColor?: string | null;
+  position: number;
+};
+
+export type ProductOption = {
+  id: string;
+  productId: string;
+  name: string;
+  position: number;
+  values: ProductOptionValue[];
+};
+
+export type VariantOptionValue = {
+  variantId?: string;
+  optionValueId: string;
+  optionValue?: {
+    id: string;
+    value: string;
+    hexColor?: string | null;
+    optionId: string;
+    option?: { id: string; name: string };
+  };
+};
+
 export type Variant = {
   id: string;
   title: string;
@@ -46,7 +74,10 @@ export type Variant = {
   compareAtPrice: number | null;
   costPrice: number | null;
   isActive: boolean;
+  stock?: number;
+  available?: number;
   inventory?: InventoryItem | null;
+  optionValues?: VariantOptionValue[];
 };
 
 export type Product = {
@@ -63,11 +94,13 @@ export type Product = {
   isPreorder: boolean;
   tags: string[];
   totalStock: number;
+  totalAvailable?: number;
   variantCount: number;
   imageCount: number;
   images: ProductImage[];
   categories: Category[];
   collections: Collection[];
+  options?: ProductOption[];
   variants?: Variant[];
   createdAt: string;
   updatedAt: string;
@@ -76,6 +109,7 @@ export type Product = {
 export type ProductDetail = Product & {
   shortDescription: string | null;
   description: string | null;
+  options: ProductOption[];
   variants: Variant[];
   stats?: {
     ordersCount: number;

@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Dimensions,
   Share,
-  Modal,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -33,6 +32,139 @@ type Props = {
 
 const { width } = Dimensions.get("window");
 
+type DisplayOptionValue = {
+  id: string;
+  value: string;
+  hexColor?: string | null;
+};
+
+type DisplayOption = {
+  id: string;
+  name: string;
+  isColor: boolean;
+  values: DisplayOptionValue[];
+};
+
+function getProductDisplayOptions(product: ProductDetail): DisplayOption[] {
+  // 1. If product has options configured in DB
+  if (product.options && product.options.length > 0) {
+    const validOpts = product.options
+      .filter((opt) => opt.values && opt.values.length > 0)
+      .map((opt) => ({
+        id: opt.id,
+        name: opt.name,
+        isColor:
+          opt.name.toLowerCase().includes("color") ||
+          opt.name.toLowerCase().includes("colour") ||
+          opt.name.toLowerCase().includes("finish") ||
+          opt.values.some((v) => Boolean(v.hexColor)),
+        values: opt.values.map((v) => ({
+          id: v.id,
+          value: v.value,
+          hexColor: v.hexColor,
+        })),
+      }));
+    if (validOpts.length > 0) return validOpts;
+  }
+
+  // 2. If product options are empty or not populated, but variants have multi-part titles (e.g. "200cm / Walnut")
+  const nonDefaultVariants = (product.variants || []).filter(
+    (v) => v.title && v.title.trim().toLowerCase() !== "default",
+  );
+
+  if (nonDefaultVariants.length > 1) {
+    const hasSlashes = nonDefaultVariants.some((v) => v.title.includes("/"));
+    if (hasSlashes) {
+      const part0Map = new Map<string, string>();
+      const part1Map = new Map<string, string>();
+
+      nonDefaultVariants.forEach((v) => {
+        const parts = v.title.split("/").map((p) => p.trim());
+        if (parts[0]) part0Map.set(parts[0].toLowerCase(), parts[0]);
+        if (parts[1]) part1Map.set(parts[1].toLowerCase(), parts[1]);
+      });
+
+      const part0Values = Array.from(part0Map.values());
+      const part1Values = Array.from(part1Map.values());
+
+      if (part0Values.length > 0 && part1Values.length > 0) {
+        const isDim = (str: string) =>
+          /\d|(cm|mm|m|ft|inch|"|king|queen|single|double|large|small|medium)/i.test(str);
+        const part0HasDim = part0Values.some(isDim);
+        const name0 = part0HasDim ? "Size / Length" : "Style";
+        const name1 = "Color / Finish";
+
+        return [
+          {
+            id: "opt_part0",
+            name: name0,
+            isColor: false,
+            values: part0Values.map((val) => ({ id: val, value: val })),
+          },
+          {
+            id: "opt_part1",
+            name: name1,
+            isColor: true,
+            values: part1Values.map((val) => ({ id: val, value: val })),
+          },
+        ];
+      }
+    }
+
+    // Single option fallback if no slashes but multiple variants
+    return [
+      {
+        id: "opt_single",
+        name: "Option",
+        isColor: false,
+        values: nonDefaultVariants.map((v) => ({ id: v.id, value: v.title })),
+      },
+    ];
+  }
+
+  return [];
+}
+
+function resolveVariant(
+  product: ProductDetail,
+  displayOptions: DisplayOption[],
+  selectedOptions: Record<string, string>,
+): Variant | null {
+  if (!product.variants || product.variants.length === 0) return null;
+  if (displayOptions.length === 0) return product.variants[0];
+
+  // 1. Try matching with DB optionValues
+  const byDbOptionValues = product.variants.find((v) => {
+    if (!v.optionValues || v.optionValues.length === 0) return false;
+    return displayOptions.every((opt) => {
+      const selectedValId = selectedOptions[opt.id];
+      if (!selectedValId) return true;
+      return v.optionValues?.some(
+        (ov) =>
+          ov.optionValueId === selectedValId ||
+          ov.optionValue?.id === selectedValId ||
+          ov.optionValue?.value.toLowerCase() ===
+            opt.values.find((val) => val.id === selectedValId)?.value.toLowerCase(),
+      );
+    });
+  });
+
+  if (byDbOptionValues) return byDbOptionValues;
+
+  // 2. Try matching by variant title parts
+  const byTitleMatch = product.variants.find((v) => {
+    return displayOptions.every((opt) => {
+      const selectedValId = selectedOptions[opt.id];
+      if (!selectedValId) return true;
+      const valObj = opt.values.find((val) => val.id === selectedValId);
+      const valStr = valObj ? valObj.value.toLowerCase() : selectedValId.toLowerCase();
+      return v.title.toLowerCase().includes(valStr);
+    });
+  });
+
+  return byTitleMatch || product.variants[0] || null;
+}
+
 export function StorefrontProductDetailScreen({
   productId,
   cartCount,
@@ -43,22 +175,41 @@ export function StorefrontProductDetailScreen({
 }: Props) {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addedToast, setAddedToast] = useState(false);
-  const [showOptionModal, setShowOptionModal] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
         setLoading(true);
         const res = await api.getProduct(productId);
-        setProduct(res.product);
-        if (res.product.variants && res.product.variants.length > 0) {
-          setSelectedVariant(res.product.variants[0]);
-        }
+        const p = res.product;
+        setProduct(p);
+
+        const opts = getProductDisplayOptions(p);
+        const firstVariant = p.variants?.[0];
+        const initialSelected: Record<string, string> = {};
+        opts.forEach((opt) => {
+          const matchingVal = opt.values.find((v) => {
+            if (
+              firstVariant?.optionValues?.some(
+                (ov) => ov.optionValueId === v.id || ov.optionValue?.id === v.id,
+              )
+            ) {
+              return true;
+            }
+            return firstVariant?.title.toLowerCase().includes(v.value.toLowerCase());
+          });
+          initialSelected[opt.id] = matchingVal ? matchingVal.id : opt.values[0]?.id;
+        });
+
+        setSelectedOptions(initialSelected);
+        const initialVariant = resolveVariant(p, opts, initialSelected) || firstVariant || null;
+        setSelectedVariant(initialVariant);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Failed to load product.";
         setError(msg);
@@ -89,20 +240,42 @@ export function StorefrontProductDetailScreen({
     );
   }
 
-  // Filter out redundant "Default" variants if there is no actual variant choice
-  const availableVariants = (product.variants || []).filter(
-    (v) => v.title && v.title.trim().toLowerCase() !== "default",
-  );
-  const hasOptions = availableVariants.length > 1;
-
+  const displayOptions = getProductDisplayOptions(product);
   const activeVariant =
-    selectedVariant || (hasOptions ? availableVariants[0] : product.variants[0]);
+    selectedVariant || resolveVariant(product, displayOptions, selectedOptions) || product.variants[0];
   const price = activeVariant?.price ?? product.minPrice;
   const compareAt = activeVariant?.compareAtPrice ?? product.compareAtPrice;
   const hasDiscount = compareAt && compareAt > price;
 
+  const variantStock =
+    activeVariant?.stock ?? activeVariant?.inventory?.onHand ?? product.totalStock ?? 0;
+  const variantAvailable =
+    activeVariant?.available ??
+    (activeVariant?.inventory
+      ? Math.max(0, activeVariant.inventory.onHand - activeVariant.inventory.reserved)
+      : variantStock);
+  const isSoldOut = !product.isPreorder && variantAvailable <= 0;
+
+  const handleSelectOption = (optionId: string, valueId: string) => {
+    const nextSelected = { ...selectedOptions, [optionId]: valueId };
+    setSelectedOptions(nextSelected);
+
+    const nextVariant = resolveVariant(product, displayOptions, nextSelected);
+    if (nextVariant) {
+      setSelectedVariant(nextVariant);
+    }
+
+    // Switch image if this valueId is associated with an image
+    const imgIndex = product.images.findIndex(
+      (img) => (img as any).optionValueId === valueId,
+    );
+    if (imgIndex >= 0) {
+      setSelectedImageIndex(imgIndex);
+    }
+  };
+
   const handleAdd = () => {
-    if (!activeVariant) return;
+    if (!activeVariant || isSoldOut) return;
     onAddToCart(product, activeVariant, quantity);
     setAddedToast(true);
     setTimeout(() => setAddedToast(false), 2200);
@@ -224,9 +397,13 @@ export function StorefrontProductDetailScreen({
               <View style={styles.preorderBadge}>
                 <Text style={styles.preorderText}>PRE-ORDER / MADE TO ORDER</Text>
               </View>
-            ) : product.totalStock > 0 ? (
+            ) : !isSoldOut ? (
               <View style={styles.stockBadge}>
-                <Text style={styles.stockText}>IN STOCK</Text>
+                <Text style={styles.stockText}>
+                  {variantAvailable <= 5 && variantAvailable > 0
+                    ? `IN STOCK · ONLY ${variantAvailable} LEFT`
+                    : "IN STOCK"}
+                </Text>
               </View>
             ) : (
               <View style={styles.outOfStockBadge}>
@@ -252,35 +429,92 @@ export function StorefrontProductDetailScreen({
             )}
           </View>
 
-          {/* Simple & Clean Options Selector */}
-          {hasOptions && (
-            <View style={styles.variantSection}>
-              <View style={styles.optionHeaderRow}>
-                <Text style={styles.sectionHeading}>SELECT OPTION</Text>
-                <Text style={styles.optionCountBadge}>
-                  {availableVariants.length} options available
-                </Text>
-              </View>
+          {/* Separate Option Selectors */}
+          {displayOptions.length > 0 && (
+            <View style={styles.optionsWrapper}>
+              {displayOptions.map((opt) => {
+                const selectedValId = selectedOptions[opt.id];
+                const selectedValObj = opt.values.find((v) => v.id === selectedValId);
 
-              <TouchableOpacity
-                style={styles.optionSelectCard}
-                onPress={() => setShowOptionModal(true)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.optionSelectLeft}>
-                  <Text style={styles.optionSelectTitle} numberOfLines={1}>
-                    {activeVariant?.title}
-                  </Text>
-                  <Text style={styles.optionSelectSubtitle}>
-                    {formatCurrency(price)}
-                    {activeVariant?.sku ? ` · ${activeVariant.sku}` : ""}
-                  </Text>
-                </View>
-                <View style={styles.optionSelectRight}>
-                  <Text style={styles.optionSelectAction}>Change</Text>
-                  <Feather name="chevron-down" size={16} color={colors.primary} />
-                </View>
-              </TouchableOpacity>
+                return (
+                  <View key={opt.id} style={styles.optionSection}>
+                    <View style={styles.optionHeaderRow}>
+                      <Text style={styles.sectionHeading}>{opt.name.toUpperCase()}</Text>
+                      {selectedValObj ? (
+                        <Text style={styles.optionSelectedValueText}>
+                          {selectedValObj.value}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.optionChipsRow}>
+                      {opt.values.map((val) => {
+                        const isSelected = selectedOptions[opt.id] === val.id;
+
+                        if (opt.isColor) {
+                          return (
+                            <TouchableOpacity
+                              key={val.id}
+                              style={[
+                                styles.colorOptionChip,
+                                isSelected && styles.colorOptionChipActive,
+                              ]}
+                              onPress={() => handleSelectOption(opt.id, val.id)}
+                              activeOpacity={0.7}
+                            >
+                              {val.hexColor ? (
+                                <View
+                                  style={[
+                                    styles.colorDot,
+                                    { backgroundColor: val.hexColor },
+                                  ]}
+                                />
+                              ) : null}
+                              <Text
+                                style={[
+                                  styles.colorOptionText,
+                                  isSelected && styles.colorOptionTextActive,
+                                ]}
+                              >
+                                {val.value}
+                              </Text>
+                              {isSelected && (
+                                <Feather
+                                  name="check"
+                                  size={12}
+                                  color={colors.primary}
+                                  style={{ marginLeft: 4 }}
+                                />
+                              )}
+                            </TouchableOpacity>
+                          );
+                        }
+
+                        return (
+                          <TouchableOpacity
+                            key={val.id}
+                            style={[
+                              styles.sizeOptionChip,
+                              isSelected && styles.sizeOptionChipActive,
+                            ]}
+                            onPress={() => handleSelectOption(opt.id, val.id)}
+                            activeOpacity={0.7}
+                          >
+                            <Text
+                              style={[
+                                styles.sizeOptionText,
+                                isSelected && styles.sizeOptionTextActive,
+                              ]}
+                            >
+                              {val.value}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })}
             </View>
           )}
 
@@ -334,82 +568,26 @@ export function StorefrontProductDetailScreen({
         </View>
 
         <TouchableOpacity
-          style={styles.addToBagBtn}
+          style={[styles.addToBagBtn, isSoldOut && styles.addToBagBtnDisabled]}
           onPress={handleAdd}
+          disabled={isSoldOut}
           activeOpacity={0.85}
         >
-          <Feather name="shopping-bag" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+          <Feather
+            name={isSoldOut ? "alert-circle" : "shopping-bag"}
+            size={16}
+            color="#FFFFFF"
+            style={{ marginRight: 8 }}
+          />
           <Text style={styles.addToBagText}>
-            ADD TO BAG · {formatCurrency(price * quantity)}
+            {isSoldOut
+              ? "SOLD OUT"
+              : product.isPreorder
+                ? `PRE-ORDER · ${formatCurrency(price * quantity)}`
+                : `ADD TO BAG · ${formatCurrency(price * quantity)}`}
           </Text>
         </TouchableOpacity>
       </View>
-
-      {/* Simple Option Selection Modal */}
-      {hasOptions && (
-        <Modal visible={showOptionModal} transparent animationType="slide">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <View>
-                  <Text style={styles.modalTitle}>Select Option</Text>
-                  <Text style={styles.modalSubTitle}>Choose your preferred size or variation</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setShowOptionModal(false)}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                >
-                  <Feather name="x" size={20} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
-                {availableVariants.map((v) => {
-                  const isSelected = activeVariant?.id === v.id;
-                  return (
-                    <TouchableOpacity
-                      key={v.id}
-                      style={[
-                        styles.optionRow,
-                        isSelected && styles.optionRowSelected,
-                      ]}
-                      onPress={() => {
-                        setSelectedVariant(v);
-                        setShowOptionModal(false);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={[
-                            styles.optionRowTitle,
-                            isSelected && styles.optionRowTitleSelected,
-                          ]}
-                        >
-                          {v.title}
-                        </Text>
-                        <Text style={styles.optionRowPrice}>
-                          {formatCurrency(v.price)}
-                        </Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.optionRadio,
-                          isSelected && styles.optionRadioSelected,
-                        ]}
-                      >
-                        {isSelected ? (
-                          <Feather name="check" size={13} color="#FFFFFF" />
-                        ) : null}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-      )}
     </View>
   );
 }
@@ -603,15 +781,19 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textDecorationLine: "line-through",
   },
-  variantSection: {
+  optionsWrapper: {
     marginBottom: 20,
+    gap: 16,
+  },
+  optionSection: {
+    marginBottom: 4,
   },
   sectionHeading: {
     fontSize: 10,
     fontWeight: "800",
     color: colors.textSecondary,
     letterSpacing: 1,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   optionHeaderRow: {
     flexDirection: "row",
@@ -619,115 +801,73 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  optionCountBadge: {
-    fontSize: 10,
-    fontWeight: "600",
+  optionSelectedValueText: {
+    fontSize: 12,
+    fontWeight: "700",
     color: colors.primary,
   },
-  optionSelectCard: {
+  optionChipsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: colors.surfaceWarm,
-    borderRadius: 14,
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  sizeOptionChip: {
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  optionSelectLeft: {
-    flex: 1,
-    paddingRight: 10,
-  },
-  optionSelectTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  optionSelectSubtitle: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  optionSelectRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  optionSelectAction: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.primary,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontFamily: "serif",
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  modalSubTitle: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  optionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceWarm,
-    marginVertical: 4,
-  },
-  optionRowSelected: {
-    borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: "#F7F4EE",
-  },
-  optionRowTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.text,
-  },
-  optionRowTitleSelected: {
-    fontWeight: "700",
-    color: colors.primary,
-  },
-  optionRowPrice: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  optionRadio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.surfaceWarm,
     alignItems: "center",
     justifyContent: "center",
   },
-  optionRadioSelected: {
-    backgroundColor: colors.primary,
+  sizeOptionChipActive: {
     borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  sizeOptionText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  sizeOptionTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  colorOptionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceWarm,
+    gap: 6,
+  },
+  colorOptionChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: "#F7F4EE",
+  },
+  colorDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.15)",
+  },
+  colorOptionText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  colorOptionTextActive: {
+    color: colors.primary,
+    fontWeight: "700",
+  },
+  addToBagBtnDisabled: {
+    backgroundColor: colors.textMuted,
+    opacity: 0.5,
   },
   descriptionSection: {
     marginBottom: 20,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { appDownloadUrl } from "@/lib/app-release";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export async function GET() {
       latestVersion: "1.2.2",
       versionCode: 3,
       appName: "LaLuxury Atelier & Living",
-      downloadUrl: "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/LaLuxury-Management.apk",
+      downloadUrl: appDownloadUrl(),
       directUrl: "/api/app/download",
       releaseNotes: "Unified business rules, real-time dynamic shipping calculation, server-side cart sync, and dynamic storefront settings.",
       minSupportedVersion: "1.0.0",
