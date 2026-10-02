@@ -282,7 +282,7 @@ export function AdminNav({
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-bold tracking-tight text-stone-900">
-              LaLuxury
+              Nobel Enclave
             </span>
             <span className="text-[10px] font-semibold tracking-wider uppercase text-stone-400">
               Admin Console
@@ -414,7 +414,7 @@ export function AdminNav({
             </div>
             <div className="min-w-0 flex-1">
               <span className="block text-[11px] font-semibold text-stone-900 leading-tight">
-                LaLuxury Accra
+                Nobel Enclave Accra
               </span>
               <span className="block text-[10px] text-stone-500 mt-0.5 truncate">
                 Store Online · Live Orders
@@ -492,7 +492,7 @@ export function AdminNav({
       {/* Top section: Logo + Search + Icons */}
       <div className="flex flex-col items-center w-full">
         {/* Brand Icon */}
-        <Link href="/admin" title="LaLuxury Admin Console" className="mb-4">
+        <Link href="/admin" title="Nobel Enclave Admin Console" className="mb-4">
           <div className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-tr from-[var(--accent)] to-[#a84b55] text-white shadow-xs hover:opacity-90 transition-opacity">
             <Sparkles className="h-4 w-4" />
           </div>

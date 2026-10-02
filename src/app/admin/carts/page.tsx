@@ -116,10 +116,10 @@ export default async function AbandonedCartsPage() {
             const firstName = row.customer ? ` ${row.customer.name.split(" ")[0]}` : "";
             const pieceLabel = row.items.length === 1 ? row.items[0].title : `${row.count} curated pieces`;
             const message = encodeURIComponent(
-              `Hello${firstName}, this is the LaLuxury Concierge. We noticed you left ${pieceLabel} (${formatMoney(row.total)}) in your bag. May we assist with delivery scheduling or fabric details?`,
+              `Hello${firstName}, this is the Nobel Enclave Concierge. We noticed you left ${pieceLabel} (${formatMoney(row.total)}) in your bag. May we assist with delivery scheduling or fabric details?`,
             );
             const vipMessage = encodeURIComponent(
-              `Hello${firstName}, this is the LaLuxury Concierge. Your selection (${pieceLabel}) is reserved in your bag. Use private courtesy code BAG5 at checkout for 5% off your order today.`,
+              `Hello${firstName}, this is the Nobel Enclave Concierge. Your selection (${pieceLabel}) is reserved in your bag. Use private courtesy code BAG5 at checkout for 5% off your order today.`,
             );
             const cleanPhone = row.phone ? row.phone.replace(/[^0-9]/g, "") : "";
             return (
@@ -195,7 +195,7 @@ export default async function AbandonedCartsPage() {
                       ) : null}
                       {row.email ? (
                         <a
-                          href={`mailto:${row.email}?subject=${encodeURIComponent("Your reserved LaLuxury selection + 5% Courtesy Code (BAG5)")}&body=${vipMessage}`}
+                          href={`mailto:${row.email}?subject=${encodeURIComponent("Your reserved Nobel Enclave selection + 5% Courtesy Code (BAG5)")}&body=${vipMessage}`}
                           className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2.5 py-1 text-xs hover:bg-[var(--surface-sunken)]"
                         >
                           Email Client

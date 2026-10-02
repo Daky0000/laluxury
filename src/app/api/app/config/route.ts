@@ -48,7 +48,7 @@ export async function GET() {
       ok: true,
       apiVersion: "1.2.2",
       revision: 1,
-      storeName: settings?.storeName || "LaLuxury",
+      storeName: settings?.storeName || "Nobel Enclave",
       tagline: settings?.tagline || "Atelier & Living",
       currency: "GHS",
       paymentMode: activeMode,

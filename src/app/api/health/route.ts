@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const base = {
     status: "ok",
-    service: "LaLuxury Commerce",
+    service: "Nobel Enclave Commerce",
     uptimeSeconds: Math.round(process.uptime()),
     stamp: process.env.BUILD_STAMP ?? "unknown",
     commit: process.env.RAILWAY_GIT_COMMIT_SHA ?? null,

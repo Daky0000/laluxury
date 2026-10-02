@@ -733,7 +733,7 @@ export function VariantPicker({
       <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
         <a
           href={`https://wa.me/233240000000?text=${encodeURIComponent(
-            `Hello LaLuxury Concierge, I am interested in "${productTitle}"${activeVariant && activeVariant.title !== "Default" ? ` (${activeVariant.title})` : ""}${activeVariant ? ` — ${formatPrice(activeVariant.price)}` : ""}. ${isPreorder ? "I would like to confirm Pre-Order availability and lead time." : "Is this available for immediate dispatch?"}`,
+            `Hello Nobel Enclave Concierge, I am interested in "${productTitle}"${activeVariant && activeVariant.title !== "Default" ? ` (${activeVariant.title})` : ""}${activeVariant ? ` — ${formatPrice(activeVariant.price)}` : ""}. ${isPreorder ? "I would like to confirm Pre-Order availability and lead time." : "Is this available for immediate dispatch?"}`,
           )}`}
           target="_blank"
           rel="noreferrer"

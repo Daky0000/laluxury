@@ -58,7 +58,7 @@ export default function GlobalError({
               letterSpacing: 1,
             }}
           >
-            LaLuxury Atelier &amp; Living
+            Nobel Enclave Atelier &amp; Living
           </h1>
           <p
             style={{

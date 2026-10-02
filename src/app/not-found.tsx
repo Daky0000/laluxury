@@ -33,7 +33,7 @@ export default function NotFound() {
           href="/"
           className="mt-8 inline-flex items-center justify-center rounded-(--radius-card) border border-transparent bg-[var(--accent)] px-6 py-3.5 text-sm font-medium tracking-wide text-[var(--accent-contrast)] transition-colors hover:bg-ink-800"
         >
-          Back to LaLuxury
+          Back to Nobel Enclave
         </Link>
       </div>
     </main>

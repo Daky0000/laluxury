@@ -23,14 +23,14 @@ export const metadata: Metadata = {
   // shop's traffic arrives — previews with no picture.
   metadataBase: new URL(env.siteUrl()),
   title: {
-    default: "LaLuxury — Quiet luxury for the modern home",
-    template: "%s · LaLuxury",
+    default: "Nobel Enclave — Quiet luxury for the modern home",
+    template: "%s · Nobel Enclave",
   },
   description:
     "Bedding, carpets, curtains and furnishings for Ghanaian homes. Delivered nationwide, paid by Mobile Money (MTN, Telecel, AirtelTigo), card or bank transfer.",
   openGraph: {
     type: "website",
-    siteName: "LaLuxury",
+    siteName: "Nobel Enclave",
   },
 };
 

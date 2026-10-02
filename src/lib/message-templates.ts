@@ -35,7 +35,7 @@ export type MessageTemplate = {
 export type MessageTemplatesConfig = Record<MessageTemplateKey, MessageTemplate>;
 
 const COMMON_TAGS: TemplateTag[] = [
-  { tag: "{store_name}", description: "Your shop name (e.g. LaLuxury)" },
+  { tag: "{store_name}", description: "Your shop name (e.g. Nobel Enclave)" },
   { tag: "{customer_name}", description: "Customer first name or 'there'" },
   { tag: "{site_url}", description: "Public storefront link" },
   { tag: "{contact_url}", description: "Contact & concierge page link" },

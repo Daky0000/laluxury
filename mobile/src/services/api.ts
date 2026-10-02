@@ -125,7 +125,7 @@ class ApiService {
       response = await fetch(url, { ...options, headers, cache: "no-store" });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Network request failed";
-      throw new Error(`Unable to connect to Noble Enclave server (${this.baseUrl}). ${msg}`);
+      throw new Error(`Unable to connect to Nobel Enclave server (${this.baseUrl}). ${msg}`);
     }
 
     const data = await response.json().catch(() => null);

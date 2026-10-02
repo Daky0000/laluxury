@@ -169,7 +169,7 @@ export function ProductsListScreen({
       {/* Top Bar */}
       <View style={styles.topBar}>
         <View>
-          <Text style={styles.topLogo}>NOBLE ENCLAVE</Text>
+          <Text style={styles.topLogo}>NOBEL ENCLAVE</Text>
           <Text style={styles.staffGreeting}>
             {user.firstName || user.email || "Staff"} ({user.role})
           </Text>

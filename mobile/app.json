@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Noble Enclave",
+    "name": "Nobel Enclave",
     "slug": "danny",
     "owner": "danny1999s-team",
     "version": "1.2.5",
@@ -33,8 +33,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Noble Enclave to access your photos to attach product imagery.",
-          "cameraPermission": "Allow Noble Enclave to capture inventory photos directly with camera."
+          "photosPermission": "Allow Nobel Enclave to access your photos to attach product imagery.",
+          "cameraPermission": "Allow Nobel Enclave to capture inventory photos directly with camera."
         }
       ]
     ],

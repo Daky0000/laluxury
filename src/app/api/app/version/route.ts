@@ -9,10 +9,10 @@ export async function GET() {
     {
       latestVersion: "1.2.5",
       versionCode: 7,
-      appName: "Noble Enclave Atelier & Living",
+      appName: "Nobel Enclave Atelier & Living",
       downloadUrl: appDownloadUrl(),
       directUrl: "/api/app/download",
-      releaseNotes: "Noble Enclave official release: SMS OTP phone login/registration with automatic SMS detection, clean production launch, and refined brand aesthetic.",
+      releaseNotes: "Nobel Enclave official release: SMS OTP phone login/registration with automatic SMS detection, clean production launch, and refined brand aesthetic.",
       minSupportedVersion: "1.0.0",
       publishedAt: "2026-10-02T21:00:00.000Z",
     },

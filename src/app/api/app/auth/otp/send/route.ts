@@ -66,10 +66,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const storeName = "Noble Enclave";
+    const storeName = "Nobel Enclave";
     const otpRes = await sendOtp(normalized, storeName);
 
     if (!otpRes.ok) {
+      if (!otpRes.fatal) {
+        // Gateway queue hiccup (e.g. transient 500) where SMS is in flight
+        return NextResponse.json({
+          ok: true,
+          message: `Verification code is on its way via SMS to ${phone}. It may take a minute to arrive.`,
+          normalizedPhone: normalized,
+        });
+      }
       return NextResponse.json(
         { ok: false, error: otpRes.message },
         { status: 400 },

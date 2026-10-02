@@ -23,7 +23,7 @@ export function SplashScreen() {
     <View style={styles.container}>
       {/* Centered Brand Title with Compass Icon */}
       <View style={styles.brandBox}>
-        <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
+        <Text style={styles.brandTitle}>NOBEL ENCLAVE</Text>
         <View style={styles.leafIconContainer}>
           <Feather name="compass" size={26} color={colors.gold} />
         </View>

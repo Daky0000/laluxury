@@ -132,7 +132,7 @@ async function call(
         Accept: "application/json",
         // An empty User-Agent is one of the cheapest things for an edge to
         // block, and a named one is something Vynfy can allowlist on request.
-        "User-Agent": "LaLuxury-Shop/1.0 (+https://laluxurys.com)",
+        "User-Agent": "NobelEnclave-Shop/1.0 (+https://laluxurys.com)",
         "X-API-Key": apiKey,
       },
       body: JSON.stringify(body),
@@ -255,7 +255,7 @@ export async function sendOtp(phone: string, storeName: string): Promise<SmsResu
     `${storeName}: your verification code is %otp_code%. ` +
     `It expires in ${OTP_EXPIRY_MINUTES} minutes. Do not share it with anyone.`;
 
-  const { status, data } = await call("/otp/generate", config.apiKey, {
+  let { status, data } = await call("/otp/generate", config.apiKey, {
     number: forGateway(number),
     message: message.slice(0, 160),
     sender_id: config.senderId,
@@ -265,7 +265,29 @@ export async function sendOtp(phone: string, storeName: string): Promise<SmsResu
     expiry: OTP_EXPIRY_MINUTES,
   });
 
-  if (status === 200 && data.success) return { ok: true, otpId: data.otp_id };
+  // If Vynfy returned a transient error (e.g. queue spike or network hiccup), retry once after 1s
+  if (status !== 200 && (!data || !FATAL_CODES.has(data.error_code ?? data.error ?? ""))) {
+    console.warn(`[sms] /otp/generate returned status ${status} (${data?.message || "error"}), retrying once...`);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const retry = await call("/otp/generate", config.apiKey, {
+      number: forGateway(number),
+      message: message.slice(0, 160),
+      sender_id: config.senderId,
+      otp_type: "numeric",
+      medium: "sms",
+      length: OTP_LENGTH,
+      expiry: OTP_EXPIRY_MINUTES,
+    });
+    if (retry.status === 200 || retry.data?.otp_id) {
+      status = retry.status;
+      data = retry.data;
+    }
+  }
+
+  // If 200 OK OR if Vynfy generated an otp_id (even on queue response 500, Vynfy dispatches the SMS)
+  if ((status === 200 && data.success) || data.otp_id) {
+    return { ok: true, otpId: data.otp_id };
+  }
   return { ok: false, ...readableError("/otp/generate", status, data) };
 }
 

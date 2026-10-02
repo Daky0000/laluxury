@@ -29,7 +29,7 @@ export function TradeApplicationForm() {
               Trade Membership Approved
             </p>
             <h3 className="mt-1 font-serif text-2xl font-medium text-[var(--text-primary)]">
-              Welcome to the LaLuxury Trade Atelier
+              Welcome to the Nobel Enclave Trade Atelier
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
               {state.message} Apply your personal trade privilege code at checkout for an immediate{" "}

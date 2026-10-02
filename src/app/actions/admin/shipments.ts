@@ -59,7 +59,7 @@ export async function createContainerManifestAction(formData: FormData): Promise
   const stage = String(formData.get("stage") ?? "IN_PRODUCTION").trim();
   const note =
     String(formData.get("note") ?? "").trim() ||
-    "Scheduled in consolidated LaLuxury container manifest.";
+    "Scheduled in consolidated Nobel Enclave container manifest.";
 
   if (!code) return;
 
@@ -111,7 +111,7 @@ export async function assignOrderToContainerAction(formData: FormData): Promise<
     where: { id: orderId },
     data: {
       trackingNumber: containerCode,
-      trackingCompany: manifest?.carrier ?? "LaLuxury Consolidated Freight",
+      trackingCompany: manifest?.carrier ?? "Nobel Enclave Consolidated Freight",
       preorderStage: manifest?.stage ?? "IN_PRODUCTION",
       preorderNote: manifest
         ? `[${manifest.code} · ETA ${manifest.eta}] ${manifest.note}`

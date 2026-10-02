@@ -41,8 +41,8 @@ export function OrderConfirmationModal({
 
   const handleShareReceipt = () => {
     Share.share({
-      title: `Noble Enclave Receipt #${orderNumber}`,
-      message: `Official Noble Enclave Order Receipt #${orderNumber}:\n${invoiceUrl}`,
+      title: `Nobel Enclave Receipt #${orderNumber}`,
+      message: `Official Nobel Enclave Order Receipt #${orderNumber}:\n${invoiceUrl}`,
       url: invoiceUrl,
     }).catch(() => {});
   };
@@ -68,12 +68,12 @@ export function OrderConfirmationModal({
             <Feather name="check" size={32} color="#FFFFFF" />
           </View>
 
-          <Text style={styles.eyebrow}>NOBLE ENCLAVE ATELIER</Text>
+          <Text style={styles.eyebrow}>NOBEL ENCLAVE ATELIER</Text>
           <Text style={styles.title}>ORDER CONFIRMED</Text>
           <Text style={styles.orderNumber}>#{orderNumber}</Text>
 
           <Text style={styles.subtitle}>
-            Thank you for choosing Noble Enclave. Your piece has been reserved and
+            Thank you for choosing Nobel Enclave. Your piece has been reserved and
             synced directly with the atelier database.
           </Text>
 

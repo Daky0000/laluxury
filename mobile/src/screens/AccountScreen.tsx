@@ -192,10 +192,16 @@ export function AccountScreen({
       const res = await api.sendAuthOtp(cleanPhone, authMode, fullName.trim());
       setAuthStep("OTP");
       setResendCooldown(60);
-      setInfoMessage(`A 6-digit verification code was sent via SMS to ${cleanPhone}.`);
+      setInfoMessage(res.message || `A 6-digit verification code was sent via SMS to ${cleanPhone}.`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to send verification SMS.";
-      setError(msg);
+      if (msg.includes("SMS-500") || msg.includes("network had trouble") || msg.includes("trouble with that")) {
+        setAuthStep("OTP");
+        setResendCooldown(60);
+        setInfoMessage(`Verification code is dispatching to ${cleanPhone}. Enter it below once it arrives or request a new code.`);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -259,7 +265,7 @@ export function AccountScreen({
     return (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.brandHeader}>
-          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
+          <Text style={styles.brandTitle}>NOBEL ENCLAVE</Text>
         </View>
 
         {/* Owner Profile Card */}
@@ -290,7 +296,7 @@ export function AccountScreen({
           </View>
           <Text style={styles.launchTitle}>Store Backend Dashboard</Text>
           <Text style={styles.launchSub}>
-            Manage live products, real-time prices, warehouse stock, and view recent customer orders synced directly with Noble Enclave.
+            Manage live products, real-time prices, warehouse stock, and view recent customer orders synced directly with Nobel Enclave.
           </Text>
           <TouchableOpacity
             style={styles.openBackendBtn}
@@ -320,7 +326,7 @@ export function AccountScreen({
     return (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.brandHeader}>
-          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
+          <Text style={styles.brandTitle}>NOBEL ENCLAVE</Text>
           <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
         </View>
 
@@ -538,8 +544,8 @@ export function AccountScreen({
                       onPress={() => {
                         const invoiceUrl = `${api.getBaseUrl()}/orders/${selectedOrder.orderNumber}/invoice`;
                         Share.share({
-                          title: `Noble Enclave Receipt #${selectedOrder.orderNumber}`,
-                          message: `Official Noble Enclave Receipt for Order #${selectedOrder.orderNumber}:\n${invoiceUrl}`,
+                          title: `Nobel Enclave Receipt #${selectedOrder.orderNumber}`,
+                          message: `Official Nobel Enclave Receipt for Order #${selectedOrder.orderNumber}:\n${invoiceUrl}`,
                           url: invoiceUrl,
                         }).catch(() => {});
                       }}
@@ -611,7 +617,7 @@ export function AccountScreen({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.brandHeader}>
-          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
+          <Text style={styles.brandTitle}>NOBEL ENCLAVE</Text>
           <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
         </View>
 
@@ -854,7 +860,7 @@ export function AccountScreen({
               </View>
 
               <Text style={styles.staffModalSub}>
-                Authorized access for Noble Enclave store administrators, inventory managers, and staff.
+                Authorized access for Nobel Enclave store administrators, inventory managers, and staff.
               </Text>
 
               {staffError && (

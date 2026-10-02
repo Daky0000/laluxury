@@ -252,7 +252,7 @@ export default async function AdminFinancialAnalyticsPage() {
                           {cleanPhone ? (
                             <a
                               href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(
-                                `Hello ${clientName}, your LaLuxury commission (${o.orderNumber}) is ready for white-glove delivery. Your remaining 50% balance of ${formatMoney(balance)} can be completed at /orders/track.`,
+                                `Hello ${clientName}, your Nobel Enclave commission (${o.orderNumber}) is ready for white-glove delivery. Your remaining 50% balance of ${formatMoney(balance)} can be completed at /orders/track.`,
                               )}`}
                               target="_blank"
                               rel="noreferrer"

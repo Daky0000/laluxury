@@ -102,7 +102,7 @@ export function StorefrontShopScreen({
       const formattedPrice = formatCurrency(product.minPrice);
       await Share.share({
         title: product.title,
-        message: `Check out "${product.title}" (${formattedPrice}) from Noble Enclave Atelier & Living:\n${url}`,
+        message: `Check out "${product.title}" (${formattedPrice}) from Nobel Enclave Atelier & Living:\n${url}`,
         url,
       });
       if (onNotify) {
@@ -141,7 +141,7 @@ export function StorefrontShopScreen({
         </TouchableOpacity>
 
         <View style={styles.brandContainer}>
-          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
+          <Text style={styles.brandTitle}>NOBEL ENCLAVE</Text>
           <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
         </View>
 
