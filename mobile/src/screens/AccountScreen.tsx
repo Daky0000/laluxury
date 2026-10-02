@@ -106,12 +106,10 @@ export function AccountScreen({
   };
 
   const handleDownloadUpdate = (url?: string) => {
-    const target =
-      url || `${api.getBaseUrl()}/downloads/LaLuxury-Management.apk`;
-    Linking.openURL(target).catch(() => {
-      Linking.openURL(
-        "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/LaLuxury-Management.apk"
-      );
+    // The backend redirects to wherever the current APK is hosted.
+    const fallback = `${api.getBaseUrl()}/api/app/download`;
+    Linking.openURL(url || fallback).catch(() => {
+      Linking.openURL(fallback);
     });
   };
 

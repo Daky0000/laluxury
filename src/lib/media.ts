@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { db } from "./db";
 import { UploadError, deleteFromCdn, isCdnConfigured, uploadToCdn } from "./cdn";
+import { deleteFromR2, getR2Config, isR2Configured, uploadToR2 } from "./r2";
 import {
   ALLOWED_IMAGE_TYPES,
   EXTENSION_FOR_TYPE,
@@ -166,7 +167,10 @@ export async function storeUpload(
   const { width, height } = probeDimensions(bytes);
   const filename = (file.name || "image").slice(0, 180);
 
-  if (await isCdnConfigured()) {
+  // R2 serves with zero egress, so it wins over Cloudinary when both are set up.
+  const useR2 = await isR2Configured();
+
+  if (!useR2 && (await isCdnConfigured())) {
     const uploaded = await uploadToCdn(bytes, { mimeType: file.type, folder, width, height });
 
     return db.mediaAsset.create({
@@ -188,9 +192,9 @@ export async function storeUpload(
     });
   }
 
-  // When storing bytes in Postgres, compress and resize oversized images once
-  // upon upload with Sharp. This turns 5MB phone camera uploads into ~120KB WebP
-  // rows, slashing Railway Postgres storage, memory, and transfer overhead by ~95%.
+  // Compress and resize oversized images once upon upload with Sharp. This
+  // turns 5MB phone camera uploads into ~120KB WebP files, whether they end up
+  // in R2 or in Postgres.
   let finalBytes = bytes;
   let finalMime = file.type;
   let finalWidth = width;
@@ -217,6 +221,30 @@ export async function storeUpload(
     }
   } catch {
     // If sharp fails on an exotic format, safely fall back to the original bytes
+  }
+
+  // Recorded as CDN, the same way scripts/migrate-images-to-r2.mjs records the
+  // rows it moves, so /api/media/<id> redirects instead of streaming bytes.
+  if (useR2) {
+    const uploaded = await uploadToR2(finalBytes, { mimeType: finalMime, folder });
+
+    return db.mediaAsset.create({
+      data: {
+        source: "CDN",
+        url: uploaded.url,
+        publicId: uploaded.publicId,
+        filename,
+        mimeType: finalMime,
+        alt: options.alt || null,
+        folder,
+        size: finalBytes.length,
+        width: finalWidth,
+        height: finalHeight,
+        checksum,
+        uploadedById: options.uploadedById ?? null,
+      },
+      select: mediaSummarySelect,
+    });
   }
 
   // The URL has to name the row, so the row is created first and then told
@@ -334,12 +362,18 @@ export async function listMedia(
 export async function deleteMedia(id: string): Promise<void> {
   const asset = await db.mediaAsset.findUnique({
     where: { id },
-    select: { id: true, publicId: true, source: true },
+    select: { id: true, publicId: true, source: true, url: true },
   });
   if (!asset) return;
 
   if (asset.source === "CDN" && asset.publicId) {
-    await deleteFromCdn(asset.publicId);
+    // R2 and Cloudinary both record as CDN; the address says which one holds it.
+    const r2 = await getR2Config();
+    if (r2?.publicUrl && asset.url.startsWith(r2.publicUrl)) {
+      await deleteFromR2(asset.publicId);
+    } else {
+      await deleteFromCdn(asset.publicId);
+    }
   }
 
   await db.mediaAsset.delete({ where: { id } });
