@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 import { computeCartTotals, readCart } from "@/lib/cart";
 import { currentUser } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
-import { getIntegrations, isReady } from "@/lib/integrations";
 import { formatPhone } from "@/lib/phone";
 import { CheckoutForm, type CheckoutDefaults } from "@/components/shop/checkout-form";
 import { CartLines, DiscountForm } from "@/components/shop/cart-lines";
@@ -19,10 +18,9 @@ export default async function CheckoutPage() {
   const totals = await computeCartTotals(cart);
   if (totals.lines.length === 0) redirect("/cart");
 
-  const [user, settings, integrations] = await Promise.all([
+  const [user, settings] = await Promise.all([
     currentUser(),
     getSettings(),
-    getIntegrations(),
   ]);
 
   const savedAddresses = user
@@ -48,8 +46,6 @@ export default async function CheckoutPage() {
   };
 
   const hasPreorderItems = totals.lines.some((line) => line.isPreorder);
-  const paystackReady = isReady(integrations, "paystack");
-
   return (
     <div className="lx-container py-12 sm:py-16">
       <h1 className="mb-8 text-[clamp(2rem,5vw,3rem)]">Your bag &amp; checkout</h1>
@@ -73,7 +69,6 @@ export default async function CheckoutPage() {
         }))}
         isSignedIn={Boolean(user)}
         hasPreorderItems={hasPreorderItems}
-        paystackReady={paystackReady}
         freeShippingThreshold={settings.freeShippingThreshold}
         lines={<CartLines lines={totals.lines} />}
         discount={<DiscountForm appliedCode={totals.discountCode} />}

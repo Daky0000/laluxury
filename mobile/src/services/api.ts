@@ -559,7 +559,7 @@ class ApiService {
     shippingRateId?: string | null;
     discountCode?: string | null;
     preorderDepositOption?: "full" | "deposit_50" | null;
-    paymentMethod: string;
+    paymentMethod: "direct_debit" | "mobile_money" | "bank_card";
     momoPhone?: string | null;
     momoProvider?: "mtn" | "vod" | "atl" | null;
     customerNote?: string | null;
@@ -599,17 +599,16 @@ class ApiService {
     });
   }
 
-  async verifyOrderPayment(reference: string, simulate = false): Promise<{
+  async verifyOrderPayment(reference: string): Promise<{
     ok: boolean;
     paid: boolean;
     status?: string;
     message?: string;
     error?: string;
     channel?: string;
-    simulated?: boolean;
     order?: Order;
   }> {
-    return this.request(`/api/app/orders/verify?reference=${encodeURIComponent(reference)}${simulate ? "&simulate=true" : ""}`);
+    return this.request(`/api/app/orders/verify?reference=${encodeURIComponent(reference)}`);
   }
 
   async submitOrderOtp(reference: string, otp: string): Promise<{

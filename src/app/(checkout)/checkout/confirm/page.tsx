@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: "Order confirmation" };
 export const dynamic = "force-dynamic";
 
 /**
- * Paystack redirects here after payment.
+ * The payment provider redirects here after payment.
  *
  * The webhook is the authoritative path, but the shopper arrives here first
  * and expects an answer, so this verifies directly too. Both routes funnel
@@ -58,29 +58,16 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
   }
 
   const order = payment.order;
-  const isDirectPayment = payment.provider === "direct" || params.mode === "direct";
-  const isTestPayment = params.mode === "test";
-
-  if (isTestPayment && payment.status !== "SUCCESS") {
-    await markOrderPaid({
-      orderId: order.id,
-      reference,
-      amount: payment.amount,
-      channel: "test_simulation",
-      providerTransactionId: `TEST-${Date.now()}`,
-      cardLast4: "4242",
-      cardBrand: "Test Sandbox",
-      authCode: "TEST-SIMULATION",
-      raw: { test: true } as never,
-    });
-  }
-
-  // Verify with Paystack unless it is a direct/concierge/test order or already settled.
-  if (!isDirectPayment && !isTestPayment && payment.status !== "SUCCESS") {
+  // A callback is not proof of payment. Verify every unsettled provider payment.
+  if (payment.provider === "paystack" && payment.status !== "SUCCESS") {
     try {
       const transaction = await verifyTransaction(reference);
 
-      if (transaction.status === "success" && transaction.amount !== payment.amount) {
+      if (
+        transaction.status === "success" &&
+        (transaction.amount !== payment.amount ||
+          transaction.currency.toUpperCase() !== payment.currency.toUpperCase())
+      ) {
         const held = await db.orderEvent.findFirst({
           where: { orderId: order.id, type: "payment.mismatch" },
           select: { id: true },
@@ -89,11 +76,11 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
           await logOrderEvent({
             orderId: order.id,
             type: "payment.mismatch",
-            message: `Paystack reported ${formatMoney(transaction.amount)} but the expected amount is ${formatMoney(payment.amount)}. Held for review.`,
-            meta: { reference, reported: transaction.amount, expected: payment.amount },
+            message: `Payment provider reported ${formatMoney(transaction.amount, transaction.currency)} but the expected payment is ${formatMoney(payment.amount, payment.currency)}. Held for review.`,
+            meta: { reference, reported: transaction.amount, expected: payment.amount, reportedCurrency: transaction.currency, expectedCurrency: payment.currency },
           });
           await postAlert(
-            `:warning: Payment amount mismatch on ${order.orderNumber}. Paystack says ${formatMoney(transaction.amount)}, expected ${formatMoney(payment.amount)}.`,
+            `:warning: Payment mismatch on ${order.orderNumber}. Provider reported ${formatMoney(transaction.amount, transaction.currency)}, expected ${formatMoney(payment.amount, payment.currency)}.`,
           );
         }
       } else if (transaction.status === "success") {
@@ -134,8 +121,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
   if (!fresh) return null;
 
   const latestPayment = fresh.payments[0];
-  const isConfirmedOrder =
-    fresh.paymentStatus === "SUCCESS" || latestPayment?.provider === "direct" || isDirectPayment;
+  const isConfirmedOrder = fresh.paymentStatus === "SUCCESS";
 
   if (isConfirmedOrder) {
     // Four more pieces for the room, none of them already in the order.
@@ -156,16 +142,9 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
         ? `${fresh.shippingRate.estimatedDaysMin}–${fresh.shippingRate.estimatedDaysMax} days`
         : (fresh.shippingRate?.name ?? "2–4 days");
 
-    const paymentLabel =
-      fresh.paymentStatus === "SUCCESS"
-        ? latestPayment?.channel
-          ? describeChannel(latestPayment.channel)
-          : "Paid"
-        : fresh.paymentMethod === "pay_on_delivery"
-          ? "Pay on Delivery"
-          : fresh.paymentMethod === "direct_momo"
-            ? "Direct MoMo / Bank"
-            : "Concierge Settlement";
+    const paymentLabel = latestPayment?.channel
+      ? describeChannel(latestPayment.channel)
+      : "Paid";
 
     const meta = [
       { label: "Order", value: fresh.orderNumber },

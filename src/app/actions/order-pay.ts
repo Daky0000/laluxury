@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getIntegrations, isReady, activePaystack } from "@/lib/integrations";
-import { getSettings } from "@/lib/settings";
 import {
   initializeTransaction,
   chargeMobileMoney,
@@ -26,7 +25,6 @@ export type CustomerMomoPushResult = {
   phone?: string;
   amountFormatted?: string;
   displayText?: string;
-  simulated?: boolean;
   error?: string;
 };
 
@@ -35,6 +33,10 @@ export type CustomerMomoPushResult = {
  */
 export async function customerPayOnlineAction(formData: FormData): Promise<void> {
   const orderId = String(formData.get("orderId") ?? "");
+  const paymentMethod = String(formData.get("paymentMethod") ?? "mobile_money");
+  if (!(["mobile_money", "bank_card"] as const).includes(paymentMethod as "mobile_money" | "bank_card")) {
+    throw new Error("Choose a valid payment method.");
+  }
   if (!orderId) throw new Error("Order ID is required.");
 
   const order = await db.order.findUnique({
@@ -61,9 +63,8 @@ export async function customerPayOnlineAction(formData: FormData): Promise<void>
     throw new Error("No outstanding balance on this order.");
   }
 
-  const [integrations, settings] = await Promise.all([getIntegrations(), getSettings()]);
+  const integrations = await getIntegrations();
   const paystackConfigured = isReady(integrations, "paystack");
-  const isTestMode = settings.paymentMode === "test" || integrations.paystack.mode === "test";
 
   const reference = `${order.orderNumber}-${isBalancePayment ? "BAL" : "PAY"}-${Date.now().toString(36).toUpperCase()}`;
 
@@ -71,8 +72,8 @@ export async function customerPayOnlineAction(formData: FormData): Promise<void>
     data: {
       orderId: order.id,
       reference,
-      provider: paystackConfigured ? "paystack" : "test_simulation",
-      channel: isBalancePayment ? "balance_payment" : "paystack_online",
+      provider: "paystack",
+      channel: paymentMethod,
       amount: amountToPay,
       currency: order.currency,
       status: "PENDING",
@@ -85,6 +86,7 @@ export async function customerPayOnlineAction(formData: FormData): Promise<void>
       amount: amountToPay,
       reference,
       callbackUrl: `${env.siteUrl()}/checkout/confirm`,
+      channels: paymentMethod === "mobile_money" ? ["mobile_money"] : ["card"],
       metadata: {
         orderId: order.id,
         orderNumber: order.orderNumber,
@@ -94,8 +96,6 @@ export async function customerPayOnlineAction(formData: FormData): Promise<void>
     });
 
     redirect(init.authorization_url);
-  } else if (isTestMode) {
-    redirect(`/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=test`);
   } else {
     throw new Error("Online payment gateway is currently unavailable. Please contact concierge support.");
   }
@@ -176,11 +176,10 @@ export async function customerInitiateMomoPushAction(args: {
     }),
   ]);
 
-  const [integrations, settings] = await Promise.all([getIntegrations(), getSettings()]);
+  const integrations = await getIntegrations();
   const paystackConfig = activePaystack(integrations);
-  const isTestMode = settings.paymentMode === "test" || integrations.paystack.mode === "test";
 
-  if (paystackConfig.secretKey && !isTestMode) {
+  if (paystackConfig.secretKey) {
     try {
       const charge = await chargeMobileMoney({
         email: order.email,
@@ -196,17 +195,6 @@ export async function customerInitiateMomoPushAction(args: {
         },
       });
 
-      if (charge.status === "success") {
-        await finalizeCustomerMomoPayment({
-          orderId: order.id,
-          reference,
-          amountToPay,
-          cleanPhone,
-          providerLabel,
-          isBalancePayment,
-        });
-      }
-
       revalidatePath(`/orders/track`);
       return {
         ok: true,
@@ -218,7 +206,6 @@ export async function customerInitiateMomoPushAction(args: {
         displayText:
           charge.display_text ??
           `Live ${providerLabel} prompt sent to ${cleanPhone}. Please check your phone screen (or dial *170# > 6 > 3 for MTN) and enter your 4-digit MoMo PIN to authorize.`,
-        simulated: false,
       };
     } catch (err) {
       return {
@@ -228,18 +215,7 @@ export async function customerInitiateMomoPushAction(args: {
     }
   }
 
-  // Simulation mode
-  revalidatePath(`/orders/track`);
-  return {
-    ok: true,
-    reference,
-    status: "pay_offline",
-    providerLabel,
-    phone: cleanPhone,
-    amountFormatted: formatMoney(amountToPay),
-    displayText: `[Demo / Simulation Mode] MoMo PIN Prompt (${formatMoney(amountToPay)}) dispatched to ${cleanPhone} (${providerLabel}). Waiting for 4-digit PIN authorization...`,
-    simulated: true,
-  };
+  return { ok: false, error: "Online payment is temporarily unavailable. Please try again shortly." };
 }
 
 /**
@@ -278,7 +254,6 @@ export async function customerSubmitMomoOtpAction(args: {
 export async function customerCheckMomoPinAction(args: {
   orderId: string;
   reference: string;
-  simulatePinEntered?: boolean;
 }): Promise<{ ok: boolean; paid: boolean; message: string }> {
   const payment = await db.payment.findUnique({
     where: { reference: args.reference },
@@ -293,16 +268,21 @@ export async function customerCheckMomoPinAction(args: {
     return { ok: true, paid: true, message: "Payment confirmed! Your order is now PAID." };
   }
 
-  const [integrations, settings] = await Promise.all([getIntegrations(), getSettings()]);
+  const integrations = await getIntegrations();
   const paystackConfig = activePaystack(integrations);
-  const isTestMode = settings.paymentMode === "test" || integrations.paystack.mode === "test";
 
   const isBalancePayment = Boolean(payment.order.depositAmount && payment.order.paidAt && !payment.order.balancePaidAt);
 
-  if (!args.simulatePinEntered && paystackConfig.secretKey && !isTestMode) {
+  if (paystackConfig.secretKey) {
     try {
       const verified = await verifyTransaction(args.reference);
       if (verified.status === "success") {
+        if (
+          verified.amount !== payment.amount ||
+          verified.currency.toUpperCase() !== payment.currency.toUpperCase()
+        ) {
+          return { ok: false, paid: false, message: "Payment details did not match this order." };
+        }
         const provider = detectGhanaMomoProvider(payment.mobileMoneyNumber ?? "");
         await finalizeCustomerMomoPayment({
           orderId: payment.orderId,
@@ -340,24 +320,6 @@ export async function customerCheckMomoPinAction(args: {
         message: "Waiting for your 4-digit MoMo PIN authorization...",
       };
     }
-  }
-
-  if (args.simulatePinEntered) {
-    const provider = detectGhanaMomoProvider(payment.mobileMoneyNumber ?? "");
-    await finalizeCustomerMomoPayment({
-      orderId: payment.orderId,
-      reference: args.reference,
-      amountToPay: payment.amount,
-      cleanPhone: payment.mobileMoneyNumber ?? "",
-      providerLabel: MOMO_PROVIDER_LABELS[provider],
-      isBalancePayment,
-    });
-
-    return {
-      ok: true,
-      paid: true,
-      message: `Demo MoMo PIN Confirmed! ${formatMoney(payment.amount)} received and your order is marked PAID.`,
-    };
   }
 
   return {

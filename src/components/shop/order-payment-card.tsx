@@ -9,7 +9,6 @@ import {
   Loader2,
   RefreshCw,
   Send,
-  ShieldCheck,
   Lock,
 } from "lucide-react";
 import {
@@ -38,7 +37,7 @@ export function OrderPaymentCard({
   isRemainingBalance?: boolean;
 }) {
   const router = useRouter();
-  const [method, setMethod] = useState<"momo" | "card">("momo");
+  const [method, setMethod] = useState<"direct_debit" | "mobile_money" | "bank_card">("direct_debit");
   const [phone, setPhone] = useState(defaultPhone);
   const [provider, setProvider] = useState<"auto" | MomoProvider>("auto");
 
@@ -68,7 +67,6 @@ export function OrderPaymentCard({
       const check = await customerCheckMomoPinAction({
         orderId,
         reference: pushState.reference!,
-        simulatePinEntered: false,
       });
 
       if (check.paid) {
@@ -93,10 +91,6 @@ export function OrderPaymentCard({
         provider,
       });
       setPushState(res);
-      if (res.status === "success") {
-        setConfirmedPaid(true);
-        router.refresh();
-      }
     });
   }
 
@@ -115,14 +109,13 @@ export function OrderPaymentCard({
     });
   }
 
-  function handleCheckOrSimulate(simulate: boolean) {
+  function handleCheckOrSimulate() {
     if (!pushState?.reference) return;
 
     startTransition(async () => {
       const check = await customerCheckMomoPinAction({
         orderId,
         reference: pushState.reference!,
-        simulatePinEntered: simulate,
       });
       setStatusMessage(check.message);
       if (check.paid) {
@@ -179,35 +172,47 @@ export function OrderPaymentCard({
       ) : (
         <div className="mt-5 space-y-4">
           {/* Method Selector Tabs */}
-          <div className="grid grid-cols-2 gap-2 rounded-lg bg-[var(--surface-sunken)] p-1">
+          <div className="grid grid-cols-3 gap-2 rounded-lg bg-[var(--surface-sunken)] p-1">
             <button
               type="button"
-              onClick={() => setMethod("momo")}
+              onClick={() => setMethod("direct_debit")}
               className={`flex items-center justify-center gap-2 rounded-md py-2.5 text-xs font-semibold uppercase tracking-wider transition-all ${
-                method === "momo"
+                method === "direct_debit"
                   ? "bg-white text-[var(--text-primary)] shadow-xs"
                   : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               }`}
             >
               <Smartphone className="h-4 w-4 text-[var(--accent)]" />
-              <span>Mobile Money (Handset PIN)</span>
+              <span>Direct Debit</span>
             </button>
             <button
               type="button"
-              onClick={() => setMethod("card")}
+              onClick={() => setMethod("mobile_money")}
               className={`flex items-center justify-center gap-2 rounded-md py-2.5 text-xs font-semibold uppercase tracking-wider transition-all ${
-                method === "card"
+                method === "mobile_money"
+                  ? "bg-white text-[var(--text-primary)] shadow-xs"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              <Smartphone className="h-4 w-4 text-[var(--accent)]" />
+              <span>Mobile Money</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMethod("bank_card")}
+              className={`flex items-center justify-center gap-2 rounded-md py-2.5 text-xs font-semibold uppercase tracking-wider transition-all ${
+                method === "bank_card"
                   ? "bg-white text-[var(--text-primary)] shadow-xs"
                   : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               }`}
             >
               <CreditCard className="h-4 w-4 text-[var(--accent)]" />
-              <span>Card / Online Checkout</span>
+              <span>Bank Card</span>
             </button>
           </div>
 
           {/* Tab 1: Instant Mobile Money Handset Prompt */}
-          {method === "momo" ? (
+          {method === "direct_debit" ? (
             <div className="space-y-4">
               <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
                 Enter your Mobile Money number below. Clicking <strong>“Send MoMo Prompt”</strong>{" "}
@@ -320,24 +325,13 @@ export function OrderPaymentCard({
                         <button
                           type="button"
                           disabled={isPending}
-                          onClick={() => handleCheckOrSimulate(false)}
+                          onClick={handleCheckOrSimulate}
                           className="inline-flex items-center gap-1.5 rounded border border-[var(--border-subtle)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)]"
                         >
                           <RefreshCw className="h-3 w-3" />
                           Check PIN Status
                         </button>
 
-                        {pushState.simulated ? (
-                          <button
-                            type="button"
-                            disabled={isPending}
-                            onClick={() => handleCheckOrSimulate(true)}
-                            className="inline-flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-                          >
-                            <ShieldCheck className="h-3.5 w-3.5" />
-                            Simulate PIN Entered (Test Mode) ✓
-                          </button>
-                        ) : null}
                       </div>
                     </>
                   )}
@@ -345,15 +339,16 @@ export function OrderPaymentCard({
               ) : null}
             </div>
           ) : (
-            /* Tab 2: Pay Online with Card / MoMo via Paystack */
+            /* Tab 2: Pay Online with Card / Mobile Money */
             <div className="space-y-4">
               <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
                 Pay instantly and securely using <strong>Visa, Mastercard, or Mobile Money</strong>{" "}
-                via our verified Paystack gateway.
+                through our secure payment page.
               </p>
 
               <form action={customerPayOnlineAction}>
                 <input type="hidden" name="orderId" value={orderId} />
+                <input type="hidden" name="paymentMethod" value={method} />
                 <button
                   type="submit"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition hover:opacity-95"

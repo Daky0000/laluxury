@@ -5,20 +5,20 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getIntegrations, isReady } from "@/lib/integrations";
-import { getSettings } from "@/lib/settings";
-import { clearCart, getOrCreateCart } from "@/lib/cart";
-import { createOrderFromCart, logOrderEvent } from "@/lib/orders";
+import { getOrCreateCart } from "@/lib/cart";
+import { createOrderFromCart } from "@/lib/orders";
 import { notifyOrder } from "@/lib/notify";
 import { createSessionCookie, getSession } from "@/lib/auth/session";
 import { hashPassword, passwordProblems } from "@/lib/auth/password";
-import { initializeTransaction } from "@/lib/paystack";
+import {
+  chargeMobileMoney,
+  detectGhanaMomoProvider,
+  initializeTransaction,
+  normaliseGhanaMomoPhone,
+} from "@/lib/paystack";
 import { InsufficientStockError } from "@/lib/inventory";
 import { GHANA_REGIONS } from "@/lib/constants";
 import { normalisePhone } from "@/lib/phone";
-import { formatMoney } from "@/lib/money";
-
-/** Everything Paystack supports for GHS; see lib/paystack. */
-const PAYSTACK_CHANNELS = ["card", "mobile_money", "bank_transfer", "ussd", "bank", "qr"];
 
 export type CheckoutState = {
   ok: boolean;
@@ -45,10 +45,8 @@ const schema = z.object({
   }),
   postalCode: z.string().optional(),
   shippingRateId: z.string().optional(),
-  paymentMethod: z.string().optional(),
+  paymentMethod: z.enum(["direct_debit", "mobile_money", "bank_card"]).optional(),
   preorderDepositOption: z.enum(["full", "deposit_50"]).optional(),
-  /** Paystack channels, comma separated. Whitelisted below before it is sent. */
-  channels: z.string().optional(),
   customerNote: z.string().optional(),
   createAccount: z.boolean().optional(),
   password: z.string().optional(),
@@ -71,7 +69,6 @@ export async function placeOrderAction(
     shippingRateId: formData.get("shippingRateId") || undefined,
     paymentMethod: formData.get("paymentMethod") || undefined,
     preorderDepositOption: formData.get("preorderDepositOption") || undefined,
-    channels: formData.get("channels") || undefined,
     customerNote: formData.get("customerNote") || undefined,
     createAccount: formData.get("createAccount") === "on",
     password: formData.get("password") || undefined,
@@ -86,21 +83,16 @@ export async function placeOrderAction(
     return { ok: false, fieldErrors };
   }
 
-  const [integrations, settings] = await Promise.all([
-    getIntegrations(),
-    getSettings(),
-  ]);
-  const isTestMode = settings.paymentMode === "test" || integrations.paystack.mode === "test";
+  const integrations = await getIntegrations();
   const paystackConfigured = isReady(integrations, "paystack");
+
+  if (!paystackConfigured) {
+    return { ok: false, message: "Online payment is temporarily unavailable. Please try again shortly." };
+  }
 
   const data = parsed.data;
   const email = data.email.toLowerCase().trim();
   const phone = normalisePhone(data.phone)!;
-
-  const channels = (data.channels ?? "")
-    .split(",")
-    .map((channel) => channel.trim())
-    .filter((channel) => PAYSTACK_CHANNELS.includes(channel));
 
   const session = await getSession();
   let userId = session?.userId ?? null;
@@ -169,11 +161,8 @@ export async function placeOrderAction(
     return { ok: false, message: "Your bag is empty." };
   }
 
-  const paymentMethod = data.paymentMethod ?? "momo";
-  const isDirectMethod =
-    !paystackConfigured ||
-    paymentMethod === "direct_momo" ||
-    paymentMethod === "pay_on_delivery";
+  const paymentMethod = data.paymentMethod ?? "mobile_money";
+  const isDirectDebit = paymentMethod === "direct_debit";
   const depositPercent = data.preorderDepositOption === "deposit_50" ? 50 : null;
 
   let redirectUrl = "";
@@ -207,7 +196,7 @@ export async function placeOrderAction(
       data: {
         orderId: order.id,
         reference,
-        provider: isDirectMethod ? "direct" : "paystack",
+        provider: "paystack",
         channel: paymentMethod,
         amount: chargeAmount,
         currency: order.currency,
@@ -215,53 +204,36 @@ export async function placeOrderAction(
       },
     });
 
-    if (isDirectMethod) {
-      await clearCart(cart.id);
-
-      const methodLabel =
-        paymentMethod === "pay_on_delivery"
-          ? "Pay on delivery / concierge verification"
-          : paymentMethod === "direct_momo"
-            ? "Direct MoMo / Bank transfer"
-            : "Concierge checkout (direct settlement)";
-
-      await logOrderEvent({
-        orderId: order.id,
-        type: "order.confirmed_direct",
-        message: `Order confirmed via ${methodLabel}. Amount due: ${formatMoney(chargeAmount, order.currency)}${order.depositAmount ? ` (50% pre-order deposit; total ${formatMoney(order.total, order.currency)})` : ""}.`,
-        actorId: userId,
+    if (isDirectDebit) {
+      const momoPhone = normaliseGhanaMomoPhone(phone);
+      await db.payment.update({
+        where: { reference },
+        data: { channel: "mobile_money", mobileMoneyNumber: momoPhone },
       });
-
-      if (userId) {
-        await db.customerInteraction.create({
-          data: {
-            userId,
-            type: "ORDER_PLACED",
-            subject: `Order ${order.orderNumber}`,
-            body: `Placed order (${formatMoney(order.total, order.currency)}) via ${methodLabel}.`,
-            meta: { orderId: order.id, orderNumber: order.orderNumber },
-          },
-        });
-      }
-
-      // Send Order Placed notification via SMS & Email
+      await chargeMobileMoney({
+        email,
+        amount: chargeAmount,
+        phone: momoPhone,
+        provider: detectGhanaMomoProvider(momoPhone),
+        reference,
+        metadata: {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          source: "web_storefront",
+          channel: "direct_debit",
+        },
+      });
       await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
-        console.error("[notify] web direct order.placed error:", err),
+        console.error("[notify] web direct debit order.placed error:", err),
       );
-
-      redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=direct`;
+      redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}`;
     } else {
-      let init = null;
-      try {
-        if (!paystackConfigured && isTestMode) {
-          redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=test`;
-        } else {
-          init = await initializeTransaction({
+      const init = await initializeTransaction({
             email,
             amount: chargeAmount,
             reference,
             callbackUrl: `${env.siteUrl()}/checkout/confirm`,
-            channels: channels.length ? channels : undefined,
+            channels: paymentMethod === "mobile_money" ? ["mobile_money"] : ["card"],
             metadata: {
               orderId: order.id,
               orderNumber: order.orderNumber,
@@ -275,23 +247,11 @@ export async function placeOrderAction(
               ],
             },
           });
-        }
-      } catch (err) {
-        if (isTestMode) {
-          redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=test`;
-        } else {
-          throw err;
-        }
-      }
 
       if (init?.authorization_url) {
         redirectUrl = init.authorization_url;
-      } else if (!redirectUrl) {
-        if (isTestMode) {
-          redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}&mode=test`;
-        } else {
-          throw new Error("Unable to obtain payment authorization URL from Paystack.");
-        }
+      } else {
+        throw new Error("Unable to obtain a payment authorization link.");
       }
     }
   } catch (error) {
@@ -300,8 +260,8 @@ export async function placeOrderAction(
     }
     const rawMsg = error instanceof Error ? error.message : "We could not start that payment.";
     const friendlyMsg = rawMsg.toLowerCase().includes("invalid key")
-      ? "Payment gateway error: Paystack rejected the API key (Invalid key). Please select 'Pay on Delivery' or 'Direct MoMo', or check your API keys in Settings."
-      : rawMsg;
+      ? "Online payment is temporarily unavailable. Please try again shortly."
+      : rawMsg.replace(/Paystack/gi, "payment provider");
     return {
       ok: false,
       message: friendlyMsg,

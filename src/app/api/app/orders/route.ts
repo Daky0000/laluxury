@@ -10,7 +10,7 @@ import { normalisePhone } from "@/lib/phone";
 import { quoteShipping } from "@/lib/shipping";
 import { validateDiscount, type DiscountLine } from "@/lib/discounts";
 import { getSettings } from "@/lib/settings";
-import { getIntegrations, isReady, activePaystack } from "@/lib/integrations";
+import { getIntegrations, activePaystack } from "@/lib/integrations";
 import { notifyOrder } from "@/lib/notify";
 import {
   chargeMobileMoney,
@@ -58,7 +58,10 @@ const checkoutSchema = z.object({
   shippingRateId: z.string().optional().nullable(),
   discountCode: z.string().trim().optional().nullable(),
   preorderDepositOption: z.enum(["full", "deposit_50"]).optional().nullable(),
-  paymentMethod: z.string().optional().default("momo_push"),
+  paymentMethod: z
+    .enum(["direct_debit", "mobile_money", "bank_card"])
+    .optional()
+    .default("mobile_money"),
   momoPhone: z.string().trim().optional().nullable(),
   momoProvider: z.enum(["mtn", "vod", "atl"]).optional().nullable(),
   customerNote: z.string().trim().optional().nullable(),
@@ -385,6 +388,18 @@ export const POST = withApiAuth(async (request: Request) => {
     getIntegrations().catch(() => null),
   ]);
 
+  const activeMode = settings?.paymentMode || integrations?.paystack?.mode || "live";
+  const paystackConfig = integrations ? activePaystack(integrations) : null;
+  const hasValidKey = Boolean(
+    paystackConfig?.secretKey?.trim().startsWith(activeMode === "test" ? "sk_test_" : "sk_live_"),
+  );
+  if (!hasValidKey) {
+    return NextResponse.json(
+      { error: "Online payment is temporarily unavailable. Please try again shortly." },
+      { status: 503 },
+    );
+  }
+
   const storeFreeThreshold = settings?.freeShippingThreshold;
   const storeFreeApplies =
     storeFreeThreshold !== null &&
@@ -577,19 +592,6 @@ export const POST = withApiAuth(async (request: Request) => {
   }
 
 
-  // Clear or convert user's active server cart on successful order
-  if (userId) {
-    const activeCart = await db.cart.findFirst({
-      where: { userId, convertedOrderId: null },
-    });
-    if (activeCart) {
-      await db.cart.update({
-        where: { id: activeCart.id },
-        data: { convertedOrderId: order.id },
-      }).catch(() => {});
-    }
-  }
-
   const reference = `${order.orderNumber}-${Date.now().toString(36).toUpperCase()}`;
 
   // Check Paystack integration & Payment Mode
@@ -605,68 +607,20 @@ export const POST = withApiAuth(async (request: Request) => {
     displayText: string;
   } | null = null;
 
-  const isDirectMethod =
-    data.paymentMethod === "pay_on_delivery" || data.paymentMethod === "direct_momo";
-  const isMomoPush = data.paymentMethod === "momo_push";
-
-  const activeMode = settings?.paymentMode || integrations?.paystack?.mode || "live";
-  const paystackReady = integrations ? isReady(integrations, "paystack") : false;
-  const paystackConfig = integrations ? activePaystack(integrations) : null;
+  const isDirectDebit = data.paymentMethod === "direct_debit";
 
   if (activeMode === "test") {
     isTestOrder = true;
   }
 
-  if (isMomoPush) {
+  if (isDirectDebit) {
     const rawMomoPhone = data.momoPhone || cleanPhone || "";
     const momoPhone = normaliseGhanaMomoPhone(rawMomoPhone);
     const provider: MomoProvider =
       data.momoProvider || detectGhanaMomoProvider(momoPhone);
     const providerLabel = MOMO_PROVIDER_LABELS[provider] || "Mobile Money";
 
-    const hasValidKey = Boolean(paystackConfig?.secretKey && paystackConfig.secretKey.startsWith("sk_"));
-
-    if (isTestOrder || (!hasValidKey && !paystackReady)) {
-      if (!isTestOrder && !hasValidKey) {
-        return NextResponse.json(
-          {
-            error:
-              "Mobile Money online payment is currently not configured with live Paystack credentials. Please select 'Direct MoMo / Bank Transfer' or 'Pay on Delivery' to place your order immediately, or switch to Test Mode in Settings.",
-          },
-          { status: 400 },
-        );
-      }
-      // Test simulation or sandbox mode without live keys
-      await db.payment.create({
-        data: {
-          orderId: order.id,
-          reference,
-          provider: "test_simulation",
-          channel: "mobile_money",
-          mobileMoneyNumber: momoPhone,
-          amount: chargeAmount,
-          currency: order.currency,
-          status: "PENDING",
-        },
-      });
-
-      // Send Order Placed notification via SMS & Email
-      await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
-        console.error("[notify] order.placed SMS error:", err),
-      );
-
-      momoPushData = {
-        status: "pay_offline",
-        reference,
-        phone: momoPhone,
-        provider,
-        providerLabel,
-        amountFormatted: formatMoney(chargeAmount, order.currency),
-        displayText: `[Test Simulation] MoMo PIN prompt (${formatMoney(chargeAmount, order.currency)}) sent to ${momoPhone} (${providerLabel}). Enter any 4-digit PIN on your phone to authorize.`,
-      };
-    } else {
-      // Live / Test Paystack Charge API
-      try {
+    try {
         const chargeRes = await chargeMobileMoney({
           email: data.customer.email.toLowerCase().trim(),
           amount: chargeAmount,
@@ -677,55 +631,14 @@ export const POST = withApiAuth(async (request: Request) => {
             orderId: order.id,
             orderNumber: order.orderNumber,
             source: "mobile_app",
-            channel: "momo_push",
+            channel: "direct_debit",
             chargeScope: depositAmount ? "DEPOSIT_50" : "FULL",
           },
         });
 
-        if (chargeRes.status === "success") {
-          // Immediately authorized
-          await db.payment.create({
-            data: {
-              orderId: order.id,
-              reference,
-              provider: "paystack",
-              channel: "mobile_money",
-              mobileMoneyNumber: momoPhone,
-              amount: chargeAmount,
-              currency: order.currency,
-              status: "SUCCESS",
-              paidAt: new Date(),
-            },
-          });
-
-          await db.order.update({
-            where: { id: order.id },
-            data: {
-              status: "PAID",
-              paymentStatus: "SUCCESS",
-              paidAt: new Date(),
-            },
-          });
-
-          // Send payment confirmed SMS + Email receipt
-          await notifyOrder(order.id, {
-            kind: "payment.received",
-            reference,
-            channel: providerLabel,
-          }).catch((err) => console.error("[notify] payment.received error:", err));
-
-          momoPushData = {
-            status: "success",
-            reference,
-            phone: momoPhone,
-            provider,
-            providerLabel,
-            amountFormatted: formatMoney(chargeAmount, order.currency),
-            displayText: `Payment of ${formatMoney(chargeAmount, order.currency)} approved!`,
-          };
-        } else {
-          // Handset prompt pushed (pay_offline or send_otp)
-          await db.payment.create({
+        // A charge response is not proof of settlement. Store it as pending;
+        // the webhook or verification endpoint is the only path to SUCCESS.
+        await db.payment.create({
             data: {
               orderId: order.id,
               reference,
@@ -738,12 +651,11 @@ export const POST = withApiAuth(async (request: Request) => {
             },
           });
 
-          // Send order placed notice with tracking and receipt links
-          await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
-            console.error("[notify] order.placed SMS error:", err),
-          );
+        await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
+          console.error("[notify] order.placed SMS error:", err),
+        );
 
-          momoPushData = {
+        momoPushData = {
             status: chargeRes.status,
             reference,
             phone: momoPhone,
@@ -753,54 +665,24 @@ export const POST = withApiAuth(async (request: Request) => {
             displayText:
               chargeRes.display_text ||
               `A prompt has been sent to ${momoPhone}. Please enter your 4-digit MoMo PIN on your phone screen to authorize. (For MTN, you can also dial *170# > 6 > 3).`,
-          };
-        }
-      } catch (chargeErr) {
+        };
+    } catch (chargeErr) {
         const rawErr =
           chargeErr instanceof Error
             ? chargeErr.message
             : "Unable to initiate Mobile Money prompt. Please check your phone number or select another payment option.";
         const friendlyErr = rawErr.toLowerCase().includes("invalid key")
-          ? "Payment gateway error: Paystack rejected the API key (Invalid key). Please choose 'Direct MoMo / Bank Transfer' or 'Pay on Delivery' to place your order now, or check your Paystack API keys in Admin Settings."
-          : rawErr;
+          ? "Online payment is temporarily unavailable. Please try again shortly."
+          : rawErr.replace(/Paystack/gi, "payment provider");
         return NextResponse.json(
           {
             error: friendlyErr,
           },
           { status: 400 },
         );
-      }
     }
-  } else if (isDirectMethod) {
-    // Direct settlement or pay on delivery
-    await db.payment.create({
-      data: {
-        orderId: order.id,
-        reference,
-        provider: "direct",
-        channel: data.paymentMethod,
-        amount: chargeAmount,
-        currency: order.currency,
-        status: "PENDING",
-      },
-    });
-
-    // Send order placed SMS + Email
-    await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
-      console.error("[notify] order.placed direct SMS error:", err),
-    );
   } else {
     // Hosted Paystack card/momo checkout
-    if (!paystackReady && !isTestOrder) {
-      return NextResponse.json(
-        {
-          error:
-            "Paystack is not yet configured for live payments. Please select Direct MoMo or Pay on Delivery, or switch to Test Mode in Settings.",
-        },
-        { status: 400 },
-      );
-    }
-
     try {
       const { initializeTransaction } = await import("@/lib/paystack");
       const { env } = await import("@/lib/env");
@@ -808,8 +690,9 @@ export const POST = withApiAuth(async (request: Request) => {
         email: data.customer.email.toLowerCase().trim(),
         amount: chargeAmount,
         reference,
-        callbackUrl: `${env.siteUrl()}/checkout/confirm?reference=${encodeURIComponent(reference)}${isTestOrder ? "&mode=test" : ""}`,
+        callbackUrl: `${env.siteUrl()}/checkout/confirm?reference=${encodeURIComponent(reference)}`,
         currency: order.currency,
+        channels: data.paymentMethod === "mobile_money" ? ["mobile_money"] : ["card"],
         metadata: {
           orderId: order.id,
           orderNumber: order.orderNumber,
@@ -824,7 +707,7 @@ export const POST = withApiAuth(async (request: Request) => {
           orderId: order.id,
           reference,
           provider: "paystack",
-          channel: "paystack_hosted",
+          channel: data.paymentMethod,
           amount: chargeAmount,
           currency: order.currency,
           status: "PENDING",
@@ -839,10 +722,10 @@ export const POST = withApiAuth(async (request: Request) => {
       const rawErr =
         paystackErr instanceof Error
           ? paystackErr.message
-          : "Unable to initialize Paystack transaction.";
+          : "Unable to initialize payment.";
       const friendlyErr = rawErr.toLowerCase().includes("invalid key")
-        ? "Payment gateway error: Paystack rejected the API key (Invalid key). Please choose 'Direct MoMo / Bank Transfer' or 'Pay on Delivery' to place your order now, or check your Paystack API keys in Admin Settings."
-        : rawErr;
+        ? "Online payment is temporarily unavailable. Please try again shortly."
+        : rawErr.replace(/Paystack/gi, "payment provider");
       return NextResponse.json(
         {
           error: friendlyErr,

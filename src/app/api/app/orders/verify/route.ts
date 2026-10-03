@@ -7,7 +7,7 @@ import {
   detectGhanaMomoProvider,
   MOMO_PROVIDER_LABELS,
 } from "@/lib/paystack";
-import { markOrderPaid } from "@/lib/orders";
+import { markOrderPaid, markPaymentFailed } from "@/lib/orders";
 import { getIntegrations, activePaystack } from "@/lib/integrations";
 
 export const runtime = "nodejs";
@@ -25,7 +25,6 @@ export const OPTIONS = apiOptionsResponse;
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const reference = searchParams.get("reference")?.trim();
-  const simulate = searchParams.get("simulate") === "true";
 
   if (!reference) {
     return NextResponse.json({ ok: false, error: "Payment reference is required." }, { status: 400 });
@@ -57,30 +56,9 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Test simulation path
-  if (simulate || payment.provider === "test_simulation") {
-    await markOrderPaid({
-      orderId: payment.orderId,
-      reference,
-      amount: payment.amount,
-      channel: "test_simulation",
-      providerTransactionId: `SIM-${Date.now()}`,
-    });
-
-    return NextResponse.json({
-      ok: true,
-      paid: true,
-      simulated: true,
-      order: {
-        id: payment.order.id,
-        orderNumber: payment.order.orderNumber,
-        status: "PAID",
-        paymentStatus: "SUCCESS",
-        total: payment.order.total,
-        depositAmount: payment.order.depositAmount,
-        currency: payment.order.currency,
-      },
-    });
+  // Legacy simulated records must never become paid without a real transaction.
+  if (payment.provider === "test_simulation") {
+    return NextResponse.json({ ok: true, paid: false, status: "pending" });
   }
 
   // Live / Test Paystack verification
@@ -98,6 +76,21 @@ export async function GET(request: NextRequest) {
     const verified = await verifyTransaction(reference);
 
     if (verified.status === "success") {
+      const expectedCurrency = payment.currency.toUpperCase();
+      const actualCurrency = verified.currency.toUpperCase();
+      if (verified.amount !== payment.amount || actualCurrency !== expectedCurrency) {
+        console.error("[payment.verify] amount or currency mismatch", {
+          reference,
+          expectedAmount: payment.amount,
+          actualAmount: verified.amount,
+          expectedCurrency,
+          actualCurrency,
+        });
+        return NextResponse.json(
+          { ok: false, paid: false, error: "Payment details did not match this order." },
+          { status: 409 },
+        );
+      }
       const provider = detectGhanaMomoProvider(payment.mobileMoneyNumber || "");
       const channelLabel = MOMO_PROVIDER_LABELS[provider] || "Mobile Money";
 
@@ -128,6 +121,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (verified.status === "failed" || verified.status === "abandoned") {
+      await markPaymentFailed({
+        orderId: payment.orderId,
+        reference,
+        reason: verified.gateway_response || `Payment ${verified.status}.`,
+      });
       return NextResponse.json({
         ok: true,
         paid: false,

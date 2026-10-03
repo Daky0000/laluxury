@@ -40,31 +40,33 @@ type Props = {
   onAuthSuccess?: (user: User, token: string) => void;
 };
 
-const PAYMENT_METHODS = [
+type PaymentMethod = "direct_debit" | "mobile_money" | "bank_card";
+
+const PAYMENT_METHODS: readonly {
+  id: PaymentMethod;
+  label: string;
+  subtitle: string;
+  icon: "smartphone" | "credit-card";
+  badge?: string;
+}[] = [
   {
-    id: "momo_push",
-    label: "Mobile Money (Instant Phone Prompt)",
-    subtitle: "Prompt sent to phone — enter 4-digit PIN to pay instantly",
+    id: "direct_debit",
+    label: "Direct Debit",
+    subtitle: "Receive an instant payment prompt on your phone",
     icon: "smartphone" as const,
     badge: "POPULAR IN GHANA",
   },
   {
-    id: "paystack",
-    label: "Paystack (Debit/Credit Card)",
-    subtitle: "Instant settlement via Visa, Mastercard & web gateway",
+    id: "mobile_money",
+    label: "Mobile Money",
+    subtitle: "Pay securely with MTN, Telecel or AT Money",
+    icon: "smartphone" as const,
+  },
+  {
+    id: "bank_card",
+    label: "Bank Card",
+    subtitle: "Pay securely with Visa or Mastercard",
     icon: "credit-card" as const,
-  },
-  {
-    id: "direct_momo",
-    label: "Direct MoMo / Bank Transfer",
-    subtitle: "Manual transfer to official merchant account with verification",
-    icon: "send" as const,
-  },
-  {
-    id: "pay_on_delivery",
-    label: "Pay on Delivery / Concierge",
-    subtitle: "Inspect furniture upon delivery and pay concierge",
-    icon: "truck" as const,
   },
 ];
 
@@ -113,7 +115,7 @@ export function StorefrontCartScreen({
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [showPickupContactModal, setShowPickupContactModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState(PAYMENT_METHODS[0].id);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>(PAYMENT_METHODS[0].id);
   const [isTestMode, setIsTestMode] = useState(false);
   const [deliveryType, setDeliveryType] = useState<"delivery" | "pickup">("delivery");
   const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
@@ -302,13 +304,13 @@ export function StorefrontCartScreen({
     }, 3000);
   };
 
-  const handleManualVerifyMoMo = async (simulate = false) => {
+  const handleManualVerifyMoMo = async () => {
     if (!momoPushData?.reference || !pendingOrderNumber) return;
     setVerifyingManual(true);
     setMomoErrorMessage(null);
 
     try {
-      const verifyRes = await api.verifyOrderPayment(momoPushData.reference, simulate);
+      const verifyRes = await api.verifyOrderPayment(momoPushData.reference);
       if (verifyRes.ok && verifyRes.paid) {
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
@@ -477,7 +479,7 @@ export function StorefrontCartScreen({
       }
     }
 
-    if (selectedPayment === "momo_push") {
+    if (selectedPayment === "direct_debit") {
       const cleanMomo = (momoPhone || shippingAddress.phone || "").replace(/[^0-9]/g, "");
       if (cleanMomo.length < 9) {
         if (onNotify) {
@@ -542,8 +544,8 @@ export function StorefrontCartScreen({
         discountCode: null,
         preorderDepositOption: hasPreorderItems ? preorderDepositOption : null,
         paymentMethod: selectedPayment,
-        momoPhone: selectedPayment === "momo_push" ? (momoPhone || safePhone) : undefined,
-        momoProvider: selectedPayment === "momo_push" ? momoProvider : undefined,
+        momoPhone: selectedPayment === "direct_debit" ? (momoPhone || safePhone) : undefined,
+        momoProvider: selectedPayment === "direct_debit" ? momoProvider : undefined,
         idempotencyKey: `mob-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
       };
 
@@ -560,7 +562,7 @@ export function StorefrontCartScreen({
         }
 
         // Direct Mobile Money USSD prompt path
-        if (res.momoPush && res.momoPush.status === "pay_offline") {
+        if (res.momoPush) {
           setMomoPushData(res.momoPush);
           setPendingOrderNumber(res.order.orderNumber);
           setMomoVerified(false);
@@ -576,8 +578,6 @@ export function StorefrontCartScreen({
           return;
         }
 
-        onClearCart();
-
         if (res.isTestOrder) {
           if (onNotify) {
             onNotify({
@@ -587,37 +587,36 @@ export function StorefrontCartScreen({
               icon: "check-circle",
             });
           }
-        } else if (res.paymentUrl) {
+        }
+
+        if (res.paymentUrl) {
           if (onNotify) {
             onNotify({
-              title: "Redirecting to Paystack",
-              message: `Opening Paystack secure checkout for Order #${res.order.orderNumber}...`,
+              title: "Complete Your Payment",
+              message: `Opening secure checkout for Order #${res.order.orderNumber}...`,
               type: "info",
               icon: "credit-card",
             });
           }
+          setPendingOrderNumber(res.order.orderNumber);
+          startMoMoPolling(
+            res.order.reference,
+            res.order.orderNumber,
+            shippingAddress.phone,
+            res.token,
+            res.user,
+          );
           Linking.openURL(res.paymentUrl).catch(() => {
             Alert.alert(
               "Payment Initialized",
-              `Order #${res.order.orderNumber} created. Paystack gateway link: ${res.paymentUrl}`,
+              `Order #${res.order.orderNumber} is awaiting payment. Open this secure link to continue: ${res.paymentUrl}`,
             );
           });
         } else {
-          if (onNotify) {
-            onNotify({
-              title: "Order Placed Successfully",
-              message: `Order #${res.order.orderNumber} received. Receipt sent via SMS & Email.`,
-              type: "success",
-              icon: "shopping-bag",
-            });
-          }
+          throw new Error("Payment could not be started. No charge was completed.");
         }
 
-        onOrderSuccess(
-          res.order.orderNumber,
-          shippingAddress.phone,
-          customerEmail.trim() || user?.email || undefined
-        );
+        // Confirmation is shown only after startMoMoPolling verifies payment.
       } else {
         throw new Error("Unable to complete order.");
       }
@@ -668,21 +667,21 @@ export function StorefrontCartScreen({
       if (
         msg.toLowerCase().includes("invalid key") ||
         msg.toLowerCase().includes("payment gateway") ||
-        msg.toLowerCase().includes("paystack")
+        msg.toLowerCase().includes("payment provider")
       ) {
         Alert.alert(
           "Payment Gateway Unavailable",
-          "Automated online payment is currently undergoing maintenance. Would you like to complete your order using Direct MoMo or Pay on Delivery?",
+          "Online payment is temporarily unavailable. You can retry using Direct Debit, Mobile Money, or Bank Card.",
           [
             { text: "Cancel", style: "cancel" },
             {
-              text: "Use Direct MoMo",
+              text: "Use Direct Debit",
               onPress: () => {
-                setSelectedPayment("direct_momo");
+                setSelectedPayment("direct_debit");
                 if (onNotify) {
                   onNotify({
                     title: "Payment Method Updated",
-                    message: "Switched to Direct MoMo / Bank Transfer. Tap PLACE ORDER to finish.",
+                    message: "Switched to Direct Debit. Tap the payment button to retry.",
                     type: "info",
                     icon: "check-circle",
                   });
@@ -690,13 +689,13 @@ export function StorefrontCartScreen({
               },
             },
             {
-              text: "Pay on Delivery",
+              text: "Use Bank Card",
               onPress: () => {
-                setSelectedPayment("pay_on_delivery");
+                setSelectedPayment("bank_card");
                 if (onNotify) {
                   onNotify({
                     title: "Payment Method Updated",
-                    message: "Switched to Pay on Delivery. Tap PLACE ORDER to finish.",
+                    message: "Switched to Bank Card. Tap the payment button to retry.",
                     type: "info",
                     icon: "check-circle",
                   });
@@ -785,7 +784,7 @@ export function StorefrontCartScreen({
             <View style={{ flex: 1, marginLeft: 8 }}>
               <Text style={styles.testModeBannerTitle}>🧪 TEST MODE ACTIVE</Text>
               <Text style={styles.testModeBannerSub}>
-                Purchases are simulated for testing. No real money will be charged.
+                Sandbox payments require verification. No real money will be charged.
               </Text>
             </View>
           </View>
@@ -1240,7 +1239,7 @@ export function StorefrontCartScreen({
         </View>
 
         {/* Mobile Money Inline Configuration */}
-        {selectedPayment === "momo_push" && (
+        {selectedPayment === "direct_debit" && (
           <View style={styles.momoCard}>
             <View style={styles.momoCardHeader}>
               <Feather name="smartphone" size={16} color={colors.primary} />
@@ -1338,11 +1337,9 @@ export function StorefrontCartScreen({
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <Text style={styles.placeOrderText}>
-              {selectedPayment === "momo_push"
-                ? "SEND MOMO PROMPT · "
-                : selectedPayment === "paystack"
-                ? "PROCEED TO PAYSTACK · "
-                : "PLACE ORDER · "}
+              {selectedPayment === "direct_debit"
+                ? "SEND PAYMENT PROMPT · "
+                : "CONTINUE TO PAYMENT · "}
               {formatCurrency(amountDueNow)}
             </Text>
           )}
@@ -1353,7 +1350,7 @@ export function StorefrontCartScreen({
         <View style={styles.secureFooter}>
           <Feather name="shield" size={13} color={colors.primary} />
           <Text style={styles.secureText}>
-            SECURE CHECKOUT · PAYSTACK & 256-BIT ENCRYPTION
+            SECURE CHECKOUT · 256-BIT ENCRYPTION
           </Text>
         </View>
 
@@ -1774,7 +1771,7 @@ export function StorefrontCartScreen({
               {/* Manual Check Status CTA */}
               <TouchableOpacity
                 style={[styles.modalActionBtn, (verifyingManual || momoVerified) && { opacity: 0.7 }]}
-                onPress={() => handleManualVerifyMoMo(false)}
+                  onPress={handleManualVerifyMoMo}
                 disabled={verifyingManual || momoVerified}
                 activeOpacity={0.85}
               >
@@ -1817,18 +1814,6 @@ export function StorefrontCartScreen({
                 </View>
               </View>
 
-              {/* Test Mode / Simulation CTA */}
-              <TouchableOpacity
-                style={styles.simulateApprovalBtn}
-                onPress={() => handleManualVerifyMoMo(true)}
-                disabled={verifyingManual || momoVerified}
-                activeOpacity={0.8}
-              >
-                <Feather name="check-circle" size={13} color="#92400E" />
-                <Text style={styles.simulateApprovalBtnText}>
-                  SIMULATE APPROVAL (TEST / DEMO MODE)
-                </Text>
-              </TouchableOpacity>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>

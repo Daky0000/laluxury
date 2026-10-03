@@ -31,32 +31,11 @@ export type SavedAddressOption = {
   postalCode: string;
 };
 
-/** Which Paystack / Direct channels each choice maps to. */
+/** Customer-facing payment choices; the provider remains an implementation detail. */
 const PAYMENT_METHODS = [
-  {
-    id: "momo",
-    label: "Mobile Money",
-    note: "MTN · Telecel · AirtelTigo",
-    channels: ["mobile_money"],
-  },
-  {
-    id: "card",
-    label: "Card",
-    note: "Visa · Mastercard",
-    channels: ["card"],
-  },
-  {
-    id: "direct_momo",
-    label: "Direct MoMo / Bank Transfer",
-    note: "Instant reference · Pay via MoMo or bank",
-    channels: ["bank_transfer", "ussd"],
-  },
-  {
-    id: "pay_on_delivery",
-    label: "Pay on Delivery / Concierge Verification",
-    note: "Confirm order now · Settle with dispatch team",
-    channels: [],
-  },
+  { id: "direct_debit", label: "Direct Debit", note: "Instant prompt on your phone" },
+  { id: "mobile_money", label: "Mobile Money", note: "MTN · Telecel · AT Money" },
+  { id: "bank_card", label: "Bank Card", note: "Visa · Mastercard" },
 ];
 
 const field =
@@ -85,7 +64,6 @@ export function CheckoutForm({
   savedAddresses = [],
   isSignedIn,
   hasPreorderItems = false,
-  paystackReady = false,
   freeShippingThreshold,
   lines,
   discount,
@@ -97,7 +75,6 @@ export function CheckoutForm({
   savedAddresses?: SavedAddressOption[];
   isSignedIn: boolean;
   hasPreorderItems?: boolean;
-  paystackReady?: boolean;
   freeShippingThreshold: number | null;
   lines: ReactNode;
   discount: ReactNode;
@@ -123,9 +100,7 @@ export function CheckoutForm({
   const [rates, setRates] = useState<Rate[]>([]);
   const [rateId, setRateId] = useState<string>("");
   const [loadingRates, setLoadingRates] = useState(false);
-  const [method, setMethod] = useState(
-    paystackReady ? PAYMENT_METHODS[0].id : "direct_momo",
-  );
+  const [method, setMethod] = useState(PAYMENT_METHODS[0].id);
   const [preorderDepositOption, setPreorderDepositOption] = useState<"deposit_50" | "full">(
     hasPreorderItems ? "deposit_50" : "full",
   );
@@ -185,7 +160,6 @@ export function CheckoutForm({
       : 0;
 
   const errors = state?.fieldErrors ?? {};
-  const selectedMethod = PAYMENT_METHODS.find((m) => m.id === method) ?? PAYMENT_METHODS[0];
 
   function choiceClass(active: boolean): string {
     return cn(
@@ -613,7 +587,6 @@ export function CheckoutForm({
             );
           })}
         </div>
-        <input type="hidden" name="channels" value={selectedMethod.channels.join(",")} />
 
         {/* Order note + account */}
         <div className="mt-10 flex flex-col gap-4">
