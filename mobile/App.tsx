@@ -1,11 +1,37 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, View, SafeAreaView, StatusBar, Alert, BackHandler, ToastAndroid, Platform } from "react-native";
+import { StyleSheet, View, SafeAreaView, StatusBar, BackHandler, ToastAndroid, Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "./src/theme/colors";
 import { api } from "./src/services/api";
 import { User, Product, Variant, CartItem, ServerCartItem } from "./src/types";
+
+// Storefront Screens
+
+import { StorefrontHomeScreen } from "./src/screens/StorefrontHomeScreen";
+import { StorefrontShopScreen } from "./src/screens/StorefrontShopScreen";
+import { StorefrontCartScreen } from "./src/screens/StorefrontCartScreen";
+import { StorefrontProductDetailScreen } from "./src/screens/StorefrontProductDetailScreen";
+import { AccountScreen } from "./src/screens/AccountScreen";
+
+// Store Backend (Owner/Staff) Screens
+import { BackendDashboardScreen } from "./src/screens/BackendDashboardScreen";
+import { ProductsListScreen } from "./src/screens/ProductsListScreen";
+import { ProductDetailScreen } from "./src/screens/ProductDetailScreen";
+import { CreateProductScreen } from "./src/screens/CreateProductScreen";
+import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { StoreDesignScreen } from "./src/screens/StoreDesignScreen";
+
+// Components
+import { BottomNav, StorefrontTab, BackendTab } from "./src/components/BottomNav";
+import { SplashScreen } from "./src/components/SplashScreen";
+import { OrderConfirmationModal } from "./src/components/OrderConfirmationModal";
+import { PopNotification, PopNotificationData } from "./src/components/PopNotification";
+import { AppUpdateModal, AppUpdateInfo } from "./src/components/AppUpdateModal";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import appJson from "./app.json";
 
 // Helper to convert server cart line items into mobile CartItem format
 function serverCartToLocalCart(items: ServerCartItem[]): CartItem[] {
@@ -47,30 +73,6 @@ function serverCartToLocalCart(items: ServerCartItem[]): CartItem[] {
   }));
 }
 
-// Storefront Screens
-
-import { StorefrontHomeScreen } from "./src/screens/StorefrontHomeScreen";
-import { StorefrontShopScreen } from "./src/screens/StorefrontShopScreen";
-import { StorefrontCartScreen } from "./src/screens/StorefrontCartScreen";
-import { StorefrontProductDetailScreen } from "./src/screens/StorefrontProductDetailScreen";
-import { AccountScreen } from "./src/screens/AccountScreen";
-
-// Store Backend (Owner/Staff) Screens
-import { BackendDashboardScreen } from "./src/screens/BackendDashboardScreen";
-import { ProductsListScreen } from "./src/screens/ProductsListScreen";
-import { ProductDetailScreen } from "./src/screens/ProductDetailScreen";
-import { CreateProductScreen } from "./src/screens/CreateProductScreen";
-import { SettingsScreen } from "./src/screens/SettingsScreen";
-import { StoreDesignScreen } from "./src/screens/StoreDesignScreen";
-
-// Components
-import { BottomNav, StorefrontTab, BackendTab } from "./src/components/BottomNav";
-import { SplashScreen } from "./src/components/SplashScreen";
-import { OrderConfirmationModal } from "./src/components/OrderConfirmationModal";
-import { PopNotification, PopNotificationData } from "./src/components/PopNotification";
-import { AppUpdateModal, AppUpdateInfo } from "./src/components/AppUpdateModal";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
 // Configure phone notification handler for system tray
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -81,8 +83,6 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
-
-import appJson from "./app.json";
 
 const CURRENT_APP_VERSION = appJson.expo.version;
 
@@ -239,32 +239,19 @@ function MainApp() {
               // Retain cached session
             });
 
-          // Server-side cart synchronization for authenticated user
-          if (savedCart && savedCart.length > 0) {
-            api
-              .mergeGuestCartWithServer(
-                savedCart.map((i) => ({ variantId: i.variant.id, quantity: i.quantity })),
-              )
-              .then((res) => {
-                if (res.ok && res.cart?.items) {
-                  const synced = serverCartToLocalCart(res.cart.items);
-                  setCart(synced);
-                  api.saveCart(synced);
-                }
-              })
-              .catch(() => null);
-          } else {
-            api
-              .getServerCart()
-              .then((res) => {
-                if (res.ok && res.cart?.items && res.cart.items.length > 0) {
-                  const synced = serverCartToLocalCart(res.cart.items);
-                  setCart(synced);
-                  api.saveCart(synced);
-                }
-              })
-              .catch(() => null);
-          }
+          // Token means this is an existing signed-in session. Pull the
+          // authoritative server cart. Re-merging the cached copy on every
+          // launch used to duplicate quantities repeatedly.
+          api
+            .getServerCart()
+            .then((res) => {
+              if (res.ok && res.cart?.items) {
+                const synced = serverCartToLocalCart(res.cart.items);
+                setCart(synced);
+                api.saveCart(synced);
+              }
+            })
+            .catch(() => null);
         }
       } catch {
         setUser(null);
@@ -348,12 +335,18 @@ function MainApp() {
     );
 
     return () => subscription.remove();
-  }, [selectedProductId, confirmedOrderNumber, mode, storefrontTab, backendTab]);
+  }, [selectedProductId, showStoreDesign, confirmedOrderNumber, mode, storefrontTab, backendTab]);
 
   // Sync Cart with Storage
   const updateCartState = (newCart: CartItem[]) => {
     setCart(newCart);
     api.saveCart(newCart);
+  };
+
+  const applyServerCart = (items: ServerCartItem[]) => {
+    const synced = serverCartToLocalCart(items);
+    setCart(synced);
+    api.saveCart(synced);
   };
 
   // Cart operations
@@ -389,7 +382,10 @@ function MainApp() {
     updateCartState(nextCart);
 
     if (user && !activeVariant.id.endsWith("-default")) {
-      api.addToServerCart(activeVariant.id, qty).catch(() => null);
+      api
+        .addToServerCart(activeVariant.id, qty)
+        .then((res) => applyServerCart(res.cart.items))
+        .catch(() => api.getServerCart().then((res) => applyServerCart(res.cart.items)).catch(() => null));
     }
 
     // If product had no variants in memory, resolve real variant from API to avoid -default IDs
@@ -423,7 +419,7 @@ function MainApp() {
   };
 
   const handleBulkAddToCart = (
-    items: Array<{ product: Product; variant: Variant; quantity: number }>,
+    items: { product: Product; variant: Variant; quantity: number }[],
   ) => {
     if (!items || items.length === 0) return;
     let nextCart = [...cart];
@@ -440,12 +436,20 @@ function MainApp() {
         nextCart.push({ product, variant, quantity });
       }
 
-      if (user && !variant.id.endsWith("-default")) {
-        api.addToServerCart(variant.id, quantity).catch(() => null);
-      }
     }
 
     updateCartState(nextCart);
+
+    if (user) {
+      Promise.all(
+        items
+          .filter(({ variant, quantity }) => quantity > 0 && !variant.id.endsWith("-default"))
+          .map(({ variant, quantity }) => api.addToServerCart(variant.id, quantity)),
+      )
+        .then(() => api.getServerCart())
+        .then((res) => applyServerCart(res.cart.items))
+        .catch(() => api.getServerCart().then((res) => applyServerCart(res.cart.items)).catch(() => null));
+    }
 
     const totalAdded = items.reduce((sum, i) => sum + i.quantity, 0);
     notify({
@@ -470,7 +474,10 @@ function MainApp() {
     updateCartState(nextCart);
 
     if (user) {
-      api.updateServerCartItem(variantId, nextQty).catch(() => null);
+      api
+        .updateServerCartItem(variantId, nextQty)
+        .then((res) => applyServerCart(res.cart.items))
+        .catch(() => api.getServerCart().then((res) => applyServerCart(res.cart.items)).catch(() => null));
     }
   };
 
@@ -480,7 +487,10 @@ function MainApp() {
     updateCartState(nextCart);
 
     if (user) {
-      api.removeServerCartItem(variantId).catch(() => null);
+      api
+        .removeServerCartItem(variantId)
+        .then((res) => applyServerCart(res.cart.items))
+        .catch(() => api.getServerCart().then((res) => applyServerCart(res.cart.items)).catch(() => null));
     }
 
     notify({
@@ -495,7 +505,10 @@ function MainApp() {
     updateCartState([]);
 
     if (user) {
-      api.removeServerCartItem().catch(() => null);
+      api
+        .removeServerCartItem()
+        .then((res) => applyServerCart(res.cart.items))
+        .catch(() => api.getServerCart().then((res) => applyServerCart(res.cart.items)).catch(() => null));
     }
 
     notify({

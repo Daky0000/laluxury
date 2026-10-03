@@ -127,6 +127,25 @@ function GroupCard({ group }: { group: IntegrationGroup }) {
           ),
         )}
       </div>
+
+      {group.setupUrls?.length ? (
+        <div className="grid gap-3 border-t border-[var(--border-subtle)] pt-4 sm:grid-cols-2">
+          {group.setupUrls.map((item) => (
+            <div key={item.label} className="min-w-0">
+              <p className="text-xs text-[var(--text-muted)]">{item.label}</p>
+              <code className="mt-1 block overflow-x-auto rounded-lg bg-[var(--surface-sunken)] px-3 py-2 text-xs">
+                {item.value}
+              </code>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">{item.hint}</p>
+            </div>
+          ))}
+          {!group.setupUrls.every((item) => item.value.startsWith("https://")) ? (
+            <Alert tone="danger">
+              Set NEXT_PUBLIC_SITE_URL to your public HTTPS domain. Paystack cannot call localhost or an HTTP webhook.
+            </Alert>
+          ) : null}
+        </div>
+      ) : null}
     </Card>
   );
 }

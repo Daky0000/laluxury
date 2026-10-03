@@ -60,7 +60,7 @@ const checkoutSchema = z.object({
   preorderDepositOption: z.enum(["full", "deposit_50"]).optional().nullable(),
   paymentMethod: z.string().optional().default("momo_push"),
   momoPhone: z.string().trim().optional().nullable(),
-  momoProvider: z.enum(["mtn", "vod", "tgo"]).optional().nullable(),
+  momoProvider: z.enum(["mtn", "vod", "atl"]).optional().nullable(),
   customerNote: z.string().trim().optional().nullable(),
   idempotencyKey: z.string().trim().optional().nullable(),
 });
@@ -143,9 +143,13 @@ export const POST = withApiAuth(async (request: Request) => {
 
   // Auto-harmonize customer and shipping address names so partial names don't fail checkout
   if (json && typeof json === "object") {
-    const raw = json as Record<string, any>;
-    const cust = (raw.customer && typeof raw.customer === "object") ? { ...raw.customer } : {};
-    const ship = (raw.shippingAddress && typeof raw.shippingAddress === "object") ? { ...raw.shippingAddress } : {};
+    const raw = json as Record<string, unknown>;
+    const cust = raw.customer && typeof raw.customer === "object"
+      ? { ...(raw.customer as Record<string, unknown>) }
+      : {};
+    const ship = raw.shippingAddress && typeof raw.shippingAddress === "object"
+      ? { ...(raw.shippingAddress as Record<string, unknown>) }
+      : {};
 
     const resolvedFirst = (cust.firstName || ship.firstName || user?.firstName || "").toString().trim();
     const resolvedLast = (cust.lastName || ship.lastName || user?.lastName || resolvedFirst || "Customer").toString().trim();
@@ -153,6 +157,10 @@ export const POST = withApiAuth(async (request: Request) => {
     if (resolvedFirst) {
       if (!cust.firstName || !cust.firstName.toString().trim()) cust.firstName = resolvedFirst;
       if (!ship.firstName || !ship.firstName.toString().trim()) ship.firstName = resolvedFirst;
+    }
+    if (resolvedLast) {
+      if (!cust.lastName || !cust.lastName.toString().trim()) cust.lastName = resolvedLast;
+      if (!ship.lastName || !ship.lastName.toString().trim()) ship.lastName = resolvedLast;
     }
     const isPickup =
       raw.deliveryType === "pickup" ||
@@ -875,4 +883,3 @@ export const POST = withApiAuth(async (request: Request) => {
     user: newAuthUser,
   });
 });
-

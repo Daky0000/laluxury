@@ -240,7 +240,7 @@ export function QuickMomoPromptButton({
                         <option value="auto">Auto-Detect from Number</option>
                         <option value="mtn">MTN MoMo (024/054/055/059)</option>
                         <option value="vod">Telecel Cash (020/050)</option>
-                        <option value="tgo">AT Money (027/057/026)</option>
+                        <option value="atl">AT Money (027/057/026)</option>
                       </select>
                     </div>
 

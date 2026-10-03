@@ -68,18 +68,18 @@ const PAYMENT_METHODS = [
   },
 ];
 
-const NETWORKS: Array<{
-  id: "mtn" | "vod" | "tgo";
+const NETWORKS: {
+  id: "mtn" | "vod" | "atl";
   name: string;
   badgeColor: string;
   badgeTextColor: string;
-}> = [
+}[] = [
   { id: "mtn", name: "MTN Mobile Money", badgeColor: "#FFCC00", badgeTextColor: "#000000" },
   { id: "vod", name: "Telecel (Vodafone)", badgeColor: "#E60000", badgeTextColor: "#FFFFFF" },
-  { id: "tgo", name: "AT Money (AirtelTigo)", badgeColor: "#003399", badgeTextColor: "#FFFFFF" },
+  { id: "atl", name: "AT Money (AirtelTigo)", badgeColor: "#003399", badgeTextColor: "#FFFFFF" },
 ];
 
-function detectMoMoProvider(phone: string): "mtn" | "vod" | "tgo" {
+function detectMoMoProvider(phone: string): "mtn" | "vod" | "atl" {
   const clean = phone.replace(/[^0-9]/g, "");
   let prefix = "";
   if (clean.startsWith("233")) {
@@ -92,7 +92,7 @@ function detectMoMoProvider(phone: string): "mtn" | "vod" | "tgo" {
 
   if (["24", "54", "55", "59", "53"].includes(prefix)) return "mtn";
   if (["20", "50"].includes(prefix)) return "vod";
-  if (["27", "57", "26", "56"].includes(prefix)) return "tgo";
+  if (["27", "57", "26", "56"].includes(prefix)) return "atl";
   return "mtn";
 }
 
@@ -120,13 +120,12 @@ export function StorefrontCartScreen({
   const [selectedRateId, setSelectedRateId] = useState<string | null>(null);
   const [loadingRates, setLoadingRates] = useState(false);
   const [freeShippingThreshold, setFreeShippingThreshold] = useState<number | null>(null);
-  const [promoCodeInput, setPromoCodeInput] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
+  const [availableRegions, setAvailableRegions] = useState<readonly string[]>(GHANA_REGIONS);
   const [preorderDepositOption, setPreorderDepositOption] = useState<"full" | "deposit_50">("full");
 
   // Customer contact states for instant MoMo and receipt delivery (no prefill, placeholders show)
   const [momoPhone, setMomoPhone] = useState(user?.phone || "");
-  const [momoProvider, setMomoProvider] = useState<"mtn" | "vod" | "tgo">("mtn");
+  const [momoProvider, setMomoProvider] = useState<"mtn" | "vod" | "atl">("mtn");
   const [customerEmail, setCustomerEmail] = useState(user?.email || "");
 
   // MoMo Authorization Prompt Modal states
@@ -166,6 +165,7 @@ export function StorefrontCartScreen({
         if (cfg.freeShippingThreshold !== undefined) {
           setFreeShippingThreshold(cfg.freeShippingThreshold);
         }
+        if (cfg.regions?.length) setAvailableRegions(cfg.regions);
       })
       .catch(() => {});
   }, []);
@@ -198,7 +198,7 @@ export function StorefrontCartScreen({
         setMomoPhone(user.phone);
       }
     }
-  }, [user]);
+  }, [customerEmail, momoPhone, user]);
 
   // Calculate Subtotal & Totals in pesewas (minor units)
   const subtotal = cart.reduce((acc, item) => {
@@ -539,7 +539,7 @@ export function StorefrontCartScreen({
               country: shippingAddress.country || "Ghana",
             },
         shippingRateId: isPickup ? null : (selectedRate?.id || null),
-        discountCode: appliedPromo || null,
+        discountCode: null,
         preorderDepositOption: hasPreorderItems ? preorderDepositOption : null,
         paymentMethod: selectedPayment,
         momoPhone: selectedPayment === "momo_push" ? (momoPhone || safePhone) : undefined,
@@ -1470,7 +1470,7 @@ export function StorefrontCartScreen({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 8, paddingVertical: 6 }}
               >
-                {GHANA_REGIONS.map((reg) => {
+                {availableRegions.map((reg) => {
                   const isSelected = shippingAddress.region === reg;
                   return (
                     <TouchableOpacity

@@ -150,7 +150,7 @@ export type Order = {
   total: number;
   placedAt: string;
   shippingAddress?: ShippingAddress | null;
-  items: Array<{
+  items: {
     id: string;
     variantId: string;
     productId: string;
@@ -161,7 +161,7 @@ export type Order = {
     quantity: number;
     unitPrice: number;
     total: number;
-  }>;
+  }[];
 };
 
 export type DashboardData = {
@@ -173,7 +173,7 @@ export type DashboardData = {
     activeProducts: number;
     lowStockCount: number;
   };
-  recentOrders: Array<{
+  recentOrders: {
     id: string;
     orderNumber: string;
     total: number;
@@ -187,15 +187,15 @@ export type DashboardData = {
     customerEmail?: string | null;
     city: string | null;
     line1?: string | null;
-    items?: Array<{
+    items?: {
       id: string;
       productTitle: string;
       variantTitle: string;
       quantity: number;
       unitPrice: number;
-    }>;
-  }>;
-  lowStockItems: Array<{
+    }[];
+  }[];
+  lowStockItems: {
     id: string;
     productId: string;
     productTitle: string;
@@ -204,7 +204,7 @@ export type DashboardData = {
     price: number;
     stock: number;
     imageUrl?: string | null;
-  }>;
+  }[];
 };
 
 export type ShippingRate = {
@@ -238,6 +238,7 @@ export type AppConfig = {
   addressLine?: string;
   instagramUrl?: string;
   freeShippingThreshold: number | null;
+  regions?: readonly string[];
   lowStockThreshold?: number;
   announcementBar?: string;
   announcements?: string[];
@@ -248,10 +249,31 @@ export type AppConfig = {
     body: string;
     imageUrl: string;
   };
+  bundle?: {
+    title: string;
+    eyebrow: string;
+    body: string;
+    price: number;
+    compareAtPrice: number | null;
+    imageUrl: string;
+    href: string;
+  } | null;
   policies?: {
     returnsPolicy: string;
     shippingPolicy: string;
   };
+  navigation?: {
+    hideStorefrontNav: boolean;
+    hiddenStorefrontNavItems: string[];
+  };
+  management?: {
+    role: string;
+    canManageProducts: boolean;
+    canReadOrders: boolean;
+    canManageOrders: boolean;
+    canManageInventory: boolean;
+    canManageSettings: boolean;
+  } | null;
 };
 
 export type ServerCartItem = {

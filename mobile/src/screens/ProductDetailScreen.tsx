@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -41,7 +41,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
   const [material, setMaterial] = useState("");
   const [shortDesc, setShortDesc] = useState("");
   const [variantRows, setVariantRows] = useState<
-    Array<{ id: string; title: string; sku: string; priceGHS: string; stock: string }>
+    { id: string; title: string; sku: string; priceGHS: string; stock: string }[]
   >([]);
 
   const updateVariantRow = (id: string, field: "priceGHS" | "stock", val: string) => {
@@ -50,7 +50,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
     );
   };
 
-  const loadProduct = async () => {
+  const loadProduct = useCallback(async () => {
     try {
       const res = await api.getProduct(productId);
       const p = res.product;
@@ -88,11 +88,11 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [onBack, productId]);
 
   useEffect(() => {
     loadProduct();
-  }, [productId]);
+  }, [loadProduct]);
 
   const handlePickImage = async () => {
     Alert.alert("Upload Photo", "Choose photo source:", [

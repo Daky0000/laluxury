@@ -107,9 +107,6 @@ export function StorefrontHomeScreen({
   };
 
   const greetingName = user?.firstName || "Guest";
-  // Backend hero eyebrow config reference: config?.hero?.eyebrow
-  const _heroEyebrow = config?.hero?.eyebrow;
-
   // Categories list to display
   const displayCategories = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
 
@@ -238,11 +235,14 @@ export function StorefrontHomeScreen({
       >
         {/* Personalized Greeting */}
         <View style={styles.greetingSection}>
+          {config?.hero?.eyebrow ? (
+            <Text style={styles.heroEyebrow}>{config.hero.eyebrow}</Text>
+          ) : null}
           <Text style={styles.greetingTitle}>
-            Welcome, {greetingName}.
+            {config?.hero?.title || `Welcome, ${greetingName}.`} {config?.hero?.titleAccent || ""}
           </Text>
           <Text style={styles.greetingSub}>
-            {config?.tagline || "Curated elegance for mindful spaces."}
+            {config?.hero?.body || config?.tagline || "Curated elegance for mindful spaces."}
           </Text>
         </View>
 
@@ -555,6 +555,14 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "600",
     color: colors.text,
+  },
+  heroEyebrow: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    marginBottom: 5,
+    textTransform: "uppercase",
   },
   greetingSub: {
     fontSize: 13,

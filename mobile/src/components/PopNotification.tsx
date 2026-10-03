@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
   Animated,
   StyleSheet,
@@ -30,6 +30,21 @@ export function PopNotification({ notification, onDismiss }: Props) {
   const translateY = useRef(new Animated.Value(-120)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
+  const dismiss = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: -120,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start(onDismiss);
+  }, [onDismiss, opacity, translateY]);
+
   useEffect(() => {
     if (notification) {
       // Animate in
@@ -56,24 +71,7 @@ export function PopNotification({ notification, onDismiss }: Props) {
       translateY.setValue(-120);
       opacity.setValue(0);
     }
-  }, [notification]);
-
-  const dismiss = () => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: -120,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onDismiss();
-    });
-  };
+  }, [dismiss, notification, opacity, translateY]);
 
   if (!notification) return null;
 

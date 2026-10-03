@@ -225,7 +225,7 @@ export function MomoPinPushCard({
                 <option value="auto">Auto-Detect from Number (024/054/020/027)</option>
                 <option value="mtn">MTN Mobile Money (024 / 054 / 055 / 059)</option>
                 <option value="vod">Telecel / Vodafone Cash (020 / 050)</option>
-                <option value="tgo">AT / AirtelTigo Money (027 / 057 / 026)</option>
+                <option value="atl">AT / AirtelTigo Money (027 / 057 / 026)</option>
               </select>
             </div>
 

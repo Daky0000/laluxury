@@ -139,13 +139,6 @@ export function AccountScreen({
     }
   };
 
-  const handleDownloadUpdate = (url?: string) => {
-    const fallback = "https://nobleenclave.com/app";
-    Linking.openURL(url || fallback).catch(() => {
-      Linking.openURL(fallback);
-    });
-  };
-
   const renderAppUpdateSection = () => (
     <View style={styles.updateCard}>
       <View style={styles.updateCardHeader}>
@@ -1786,4 +1779,3 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 });
-

@@ -30,7 +30,7 @@ type Props = {
   onBack: () => void;
   onNavigateToBag: () => void;
   onAddToCart: (product: Product, variant: Variant, quantity: number) => void;
-  onBulkAddToCart?: (items: Array<{ product: Product; variant: Variant; quantity: number }>) => void;
+  onBulkAddToCart?: (items: { product: Product; variant: Variant; quantity: number }[]) => void;
   onSelectProduct?: (productId: string) => void;
   onNotify?: (notif: {
     title: string;
@@ -477,7 +477,7 @@ export function StorefrontProductDetailScreen({
       {addedToast && (
         <View style={styles.toast}>
           <Feather name="check" size={14} color="#FFFFFF" />
-          <Text style={styles.toastText}>Added {quantity} to your bag</Text>
+          <Text style={styles.toastText}>{toastMessage || `Added ${quantity} to your bag`}</Text>
         </View>
       )}
 

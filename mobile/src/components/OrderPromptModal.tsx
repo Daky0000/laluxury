@@ -31,13 +31,13 @@ export type OrderPromptData = {
   customerEmail?: string | null;
   city?: string | null;
   line1?: string | null;
-  items?: Array<{
+  items?: {
     id: string;
     productTitle: string;
     variantTitle: string;
     quantity: number;
     unitPrice: number;
-  }>;
+  }[];
 };
 
 type Props = {

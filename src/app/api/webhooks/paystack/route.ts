@@ -12,8 +12,8 @@ export const dynamic = "force-dynamic";
  * Paystack webhook.
  *
  * Paystack retries on any non-2xx, so this must be idempotent and must answer
- * quickly. Every branch returns 200 once the signature checks out - a 500 here
- * would have Paystack redeliver a message we have already handled.
+ * quickly. Processing is idempotent. A transient processing failure returns
+ * 500 so Paystack retries instead of silently losing a successful payment.
  */
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -34,8 +34,8 @@ export async function POST(request: Request) {
   try {
     await handleEvent(event);
   } catch (error) {
-    // Log and still acknowledge: a retry would hit the same bug.
     console.error("[paystack webhook]", event.event, error);
+    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
@@ -68,6 +68,16 @@ async function handleEvent(event: PaystackWebhookEvent): Promise<void> {
         await postAlert(
           `:warning: Payment amount mismatch on ${payment.order.orderNumber}. Paystack says ${formatMoney(event.data.amount)}, expected payment is ${formatMoney(payment.amount)}.`,
         );
+        return;
+      }
+
+      if (event.data.currency !== payment.currency) {
+        await logOrderEvent({
+          orderId: payment.orderId,
+          type: "payment.mismatch",
+          message: `Paystack reported currency ${event.data.currency} but expected ${payment.currency}. Held for review.`,
+          meta: { reference, reportedCurrency: event.data.currency, expectedCurrency: payment.currency },
+        });
         return;
       }
 

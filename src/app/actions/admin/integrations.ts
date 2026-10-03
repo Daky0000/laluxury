@@ -85,7 +85,7 @@ export async function saveIntegrationsAction(
     const p = patch.paystack;
     if (typeof p.secretKey === "string" && p.secretKey.trim() !== "") {
       const trimmed = p.secretKey.trim().replace(/^["']|["']$/g, "");
-      if (!trimmed.startsWith("sk_live_") && !trimmed.startsWith("sk_test_")) {
+      if (!trimmed.startsWith("sk_live_")) {
         return {
           ok: false,
           message:
@@ -96,7 +96,7 @@ export async function saveIntegrationsAction(
     }
     if (typeof p.publicKey === "string" && p.publicKey.trim() !== "") {
       const trimmed = p.publicKey.trim().replace(/^["']|["']$/g, "");
-      if (!trimmed.startsWith("pk_live_") && !trimmed.startsWith("pk_test_")) {
+      if (!trimmed.startsWith("pk_live_")) {
         return {
           ok: false,
           message: "Invalid Paystack public key: live public keys must start with 'pk_live_'.",
@@ -127,6 +127,14 @@ export async function saveIntegrationsAction(
   }
 
   await updateIntegrations(patch as Parameters<typeof updateIntegrations>[0]);
+
+  // Keep the store-wide web/mobile mode and active Paystack key pair aligned.
+  // Two disagreeing mode controls previously caused live keys to run as a
+  // simulated checkout.
+  if (mode === "live" || mode === "test") {
+    const { updateSettings } = await import("@/lib/settings");
+    await updateSettings({ paymentMode: mode });
+  }
 
   await recordAudit({
     actorId: user.id,

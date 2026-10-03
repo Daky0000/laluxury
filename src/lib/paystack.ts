@@ -183,12 +183,12 @@ export function describeChannel(channel: string | null): string {
 
 // --- Direct Mobile Money Push-to-Phone (Ghana USSD / STK PIN Prompt) --------
 
-export type MomoProvider = "mtn" | "vod" | "tgo";
+export type MomoProvider = "mtn" | "vod" | "atl";
 
 export const MOMO_PROVIDER_LABELS: Record<MomoProvider, string> = {
   mtn: "MTN Mobile Money (MoMo)",
   vod: "Telecel Cash (Vodafone)",
-  tgo: "AT Money (AirtelTigo)",
+  atl: "AT Money (AirtelTigo)",
 };
 
 /**
@@ -206,7 +206,7 @@ export function detectGhanaMomoProvider(rawPhone: string): MomoProvider {
 
   const prefix = local.slice(0, 3);
   if (["020", "050"].includes(prefix)) return "vod";
-  if (["027", "057", "026", "056"].includes(prefix)) return "tgo";
+  if (["027", "057", "026", "056"].includes(prefix)) return "atl";
   return "mtn";
 }
 
@@ -287,4 +287,3 @@ export async function submitMobileMoneyOtp(args: {
     },
   });
 }
-

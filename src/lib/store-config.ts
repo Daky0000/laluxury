@@ -1,6 +1,7 @@
 import { getSettings, announcementItems } from "./settings";
 import { getIntegrations, activePaystack, isReady } from "./integrations";
 import { publicAssetUrl } from "./media-url";
+import { GHANA_REGIONS } from "./constants";
 
 /** Public store configuration. No session, cookies, secrets, or staff capabilities. */
 export async function getPublicStoreConfig() {
@@ -12,8 +13,8 @@ export async function getPublicStoreConfig() {
   const announcements = announcementItems(settings);
   return {
       ok: true,
-      apiVersion: "1.2.2",
-      revision: 1,
+      apiVersion: "1.3.2",
+      revision: 2,
       storeName: settings?.storeName || "Noble Enclave",
       tagline: settings?.tagline || "Living & Decor",
       currency: "GHS",
@@ -30,6 +31,7 @@ export async function getPublicStoreConfig() {
       addressLine: settings?.addressLine || "Accra, Ghana",
       instagramUrl: settings?.instagramUrl || "",
       freeShippingThreshold: settings?.freeShippingThreshold ?? null,
+      regions: GHANA_REGIONS,
       lowStockThreshold: settings?.lowStockThreshold ?? 5,
       announcementBar: settings?.announcementBar || "",
       announcements,

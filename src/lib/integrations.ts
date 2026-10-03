@@ -238,6 +238,7 @@ export type IntegrationGroup = {
   description: string;
   ready: boolean;
   fields: IntegrationField[];
+  setupUrls?: { label: string; value: string; hint: string }[];
 };
 
 /**
@@ -272,9 +273,10 @@ export function isReady(config: Integrations, group: keyof Integrations): boolea
   switch (group) {
     case "paystack": {
       const active = activePaystack(config);
-      const hasValidSecret = Boolean(active.secretKey && active.secretKey.startsWith("sk_"));
-      const hasValidPublic = Boolean(active.publicKey && active.publicKey.startsWith("pk_"));
-      return hasValidSecret && hasValidPublic;
+      const expectedPrefix = active.mode === "test" ? "sk_test_" : "sk_live_";
+      // Hosted Checkout is initialized on the server and only needs a secret
+      // key. The public key remains optional for future inline checkout use.
+      return Boolean(active.secretKey && active.secretKey.startsWith(expectedPrefix));
     }
     case "ai":
       return config.ai.provider === "anthropic"
@@ -330,9 +332,21 @@ export async function integrationsView(): Promise<IntegrationGroup[]> {
       fields: [
         field("paystack", "mode", "Mode", "live or test"),
         field("paystack", "secretKey", "Live secret key", "Starts sk_live_"),
-        field("paystack", "publicKey", "Live public key", "Starts pk_live_"),
+        field("paystack", "publicKey", "Live public key (optional)", "Starts pk_live_; hosted checkout only needs secret key"),
         field("paystack", "testSecretKey", "Test secret key", "Starts sk_test_"),
-        field("paystack", "testPublicKey", "Test public key", "Starts pk_test_"),
+        field("paystack", "testPublicKey", "Test public key (optional)", "Starts pk_test_; hosted checkout only needs secret key"),
+      ],
+      setupUrls: [
+        {
+          label: "Callback URL",
+          value: `${env.siteUrl()}/checkout/confirm`,
+          hint: "Add this under Paystack Dashboard > Settings > API Keys & Webhooks.",
+        },
+        {
+          label: "Webhook URL",
+          value: `${env.siteUrl()}/api/webhooks/paystack`,
+          hint: "Required for reliable payment confirmation, including Mobile Money.",
+        },
       ],
     },
     {

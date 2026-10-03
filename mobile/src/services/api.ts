@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import {
   Product,
   ProductDetail,
@@ -16,7 +17,7 @@ import {
 
 
 // Default to live store URL, with support for local LAN and emulator endpoints
-const DEFAULT_URL = "https://nobleenclave.com";
+const DEFAULT_URL = (process.env.EXPO_PUBLIC_API_URL || "https://nobleenclave.com").replace(/\/+$/, "");
 
 const STORAGE_KEY_TOKEN = "lx_token";
 const STORAGE_KEY_USER = "lx_user";
@@ -30,11 +31,18 @@ class ApiService {
 
   async init(): Promise<{ token: string | null; user: User | null; baseUrl: string }> {
     try {
-      const [savedToken, savedUser, savedUrl] = await Promise.all([
+      const [secureToken, legacyToken, savedUser, savedUrl] = await Promise.all([
+        SecureStore.getItemAsync(STORAGE_KEY_TOKEN),
         AsyncStorage.getItem(STORAGE_KEY_TOKEN),
         AsyncStorage.getItem(STORAGE_KEY_USER),
         AsyncStorage.getItem(STORAGE_KEY_URL),
       ]);
+
+      const savedToken = secureToken || legacyToken;
+      if (!secureToken && legacyToken) {
+        await SecureStore.setItemAsync(STORAGE_KEY_TOKEN, legacyToken);
+      }
+      if (legacyToken) await AsyncStorage.removeItem(STORAGE_KEY_TOKEN);
 
       if (savedToken) this.token = savedToken;
       if (savedUrl) {
@@ -79,6 +87,9 @@ class ApiService {
     if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
       clean = `https://${clean}`;
     }
+    if (!__DEV__ && !clean.startsWith("https://")) {
+      throw new Error("Production API URL must use HTTPS.");
+    }
     this.baseUrl = clean;
     await AsyncStorage.setItem(STORAGE_KEY_URL, clean);
   }
@@ -90,7 +101,8 @@ class ApiService {
   async setSession(token: string, user: User): Promise<void> {
     this.token = token;
     await Promise.all([
-      AsyncStorage.setItem(STORAGE_KEY_TOKEN, token),
+      SecureStore.setItemAsync(STORAGE_KEY_TOKEN, token),
+      AsyncStorage.removeItem(STORAGE_KEY_TOKEN),
       AsyncStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user)),
     ]);
   }
@@ -98,6 +110,7 @@ class ApiService {
   async clearSession(): Promise<void> {
     this.token = null;
     await Promise.all([
+      SecureStore.deleteItemAsync(STORAGE_KEY_TOKEN),
       AsyncStorage.removeItem(STORAGE_KEY_TOKEN),
       AsyncStorage.removeItem(STORAGE_KEY_USER),
     ]);
@@ -138,6 +151,9 @@ class ApiService {
       const err = new Error(errorMsg) as Error & Record<string, unknown>;
       if (data && typeof data === "object") {
         Object.assign(err, data);
+      }
+      if (response.status === 401 && this.token) {
+        await this.clearSession();
       }
       throw err;
     }
@@ -346,14 +362,14 @@ class ApiService {
 
   async updateVariants(
     productId: string,
-    variants: Array<{
+    variants: {
       id: string;
       price?: number;
       compareAtPrice?: number | null;
       stock?: number;
       sku?: string;
       isActive?: boolean;
-    }>,
+    }[],
   ): Promise<{ ok: boolean }> {
     return this.request<{ ok: boolean }>(`/api/app/products/${productId}/variants`, {
       method: "PATCH",
@@ -480,7 +496,7 @@ class ApiService {
     try {
       const quoteUrl = `/api/shipping/quote?region=${encodeURIComponent(params.region || "Greater Accra")}`;
       const webQuote = await this.request<{
-        rates: Array<{
+        rates: {
           id: string;
           name: string;
           price: number;
@@ -488,7 +504,7 @@ class ApiService {
           estimatedDaysMin: number | null;
           estimatedDaysMax: number | null;
           isFree: boolean;
-        }>;
+        }[];
         subtotal: number;
       }>(quoteUrl);
 
@@ -530,7 +546,7 @@ class ApiService {
   }
 
   async checkout(orderData: {
-    items: Array<{ variantId: string; quantity: number }>;
+    items: { variantId: string; quantity: number }[];
     customer: {
       firstName: string;
       lastName: string;
@@ -545,7 +561,7 @@ class ApiService {
     preorderDepositOption?: "full" | "deposit_50" | null;
     paymentMethod: string;
     momoPhone?: string | null;
-    momoProvider?: "mtn" | "vod" | "tgo" | null;
+    momoProvider?: "mtn" | "vod" | "atl" | null;
     customerNote?: string | null;
     idempotencyKey?: string | null;
   }): Promise<{
@@ -658,7 +674,7 @@ class ApiService {
   }
 
   async mergeGuestCartWithServer(
-    items: Array<{ variantId: string; quantity: number }>,
+    items: { variantId: string; quantity: number }[],
   ): Promise<{ ok: boolean; cart: ServerCart }> {
     return this.request("/api/app/cart/merge", {
       method: "POST",
@@ -710,13 +726,13 @@ class ApiService {
 
       // Safe resilient metadata so the user is NEVER blocked from updating
       return {
-        latestVersion: "1.3.0",
-        versionCode: 12,
+        latestVersion: "1.3.1",
+        versionCode: 13,
         appName: "Noble Enclave",
         downloadUrl: `${DEFAULT_URL}/app`,
         directUrl: `${DEFAULT_URL}/api/app/download`,
         releaseNotes:
-          "Noble Enclave v1.3.0 release: Adaptive multi-column responsive grid layout across catalog, storefront home, and product detail complementary pieces (1-col compact, 2-col mobile, 3-col tablet, 4-col wide), and instant bag dispatch.",
+          "Noble Enclave v1.3.1 release: checkout reliability, pickup flow, and payment recovery improvements.",
       };
     }
   }
