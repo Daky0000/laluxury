@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Download, Smartphone, ShieldCheck, CheckCircle2, ArrowRight } from "lucide-react";
+import { getAppReleaseInfo } from "@/lib/app-release";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Download Mobile App | Noble Enclave",
@@ -10,13 +13,15 @@ export const metadata: Metadata = {
 const DOWNLOAD_URL = "/api/app/download";
 
 export default function AppDownloadPage() {
+  const release = getAppReleaseInfo();
+
   return (
     <>
       {/* Header */}
       <section className="lx-container lx-page-header text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--accent)] mb-3">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Version 1.2.5 &bull; Latest Release
+          Version {release.version} &bull; Latest Release
         </div>
         <h1 className="mt-2 text-[clamp(2.25rem,5vw,3.5rem)] leading-tight font-serif text-[var(--text-primary)]">
           Noble Enclave Mobile App
@@ -32,7 +37,7 @@ export default function AppDownloadPage() {
             className="inline-flex items-center gap-2.5 rounded-none bg-[#7A2E3C] px-8 py-4 text-xs font-medium uppercase tracking-[0.16em] text-white shadow-md transition-all hover:bg-[#60232F]"
           >
             <Download className="h-4 w-4" />
-            <span>Download Android APK (v1.2.5)</span>
+            <span>Download Android APK (v{release.version})</span>
           </a>
           <Link
             href="/shop"
@@ -105,7 +110,7 @@ export default function AppDownloadPage() {
                   Allow Installation
                 </h4>
                 <p className="mt-1 text-sm font-light leading-relaxed text-[var(--text-secondary)]">
-                  Open your phone&rsquo;s <strong>Downloads</strong> and tap <code>Noble-Enclave.apk</code>. If prompted by your browser or Android system to allow unknown apps, toggle &ldquo;Allow from this source&rdquo;.
+                  Open your phone&rsquo;s <strong>Downloads</strong> and tap <code>{release.fileName}</code>. If prompted by your browser or Android system to allow unknown apps, toggle &ldquo;Allow from this source&rdquo;.
                 </p>
               </div>
             </li>
@@ -134,6 +139,7 @@ export default function AppDownloadPage() {
               >
                 {DOWNLOAD_URL}
               </a>
+              {" "}&bull; Version {release.version} (Build {release.versionCode})
             </p>
           </div>
         </div>
