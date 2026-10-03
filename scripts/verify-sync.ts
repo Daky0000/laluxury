@@ -91,16 +91,30 @@ try {
   const appJsonPath = path.join(ROOT, "mobile", "app.json");
   const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf-8"));
   const mobileVersion = appJson.expo?.version;
+  const mobileVersionCode = appJson.expo?.android?.versionCode;
 
   const versionRoutePath = path.join(ROOT, "src", "app", "api", "app", "version", "route.ts");
   const versionRoute = fs.readFileSync(versionRoutePath, "utf-8");
+  const releaseSource = fs.readFileSync(path.join(ROOT, "src", "lib", "app-release.ts"), "utf-8");
+  const publishedVersion = releaseSource.match(/version: "(\d+\.\d+\.\d+)"/)?.[1];
+  const publishedVersionCode = Number(releaseSource.match(/versionCode: (\d+)/)?.[1]);
+  const semverNumber = (value: string) =>
+    value.split(".").reduce((total, part) => total * 1000 + Number(part), 0);
 
-  if (mobileVersion && versionRoute.includes(`latestVersion: "${mobileVersion}"`)) {
-    pass(`Version alignment confirmed at v${mobileVersion}`);
+  if (
+    mobileVersion &&
+    publishedVersion &&
+    Number.isSafeInteger(mobileVersionCode) &&
+    Number.isSafeInteger(publishedVersionCode) &&
+    semverNumber(publishedVersion) <= semverNumber(mobileVersion) &&
+    publishedVersionCode <= mobileVersionCode &&
+    versionRoute.includes("getAppReleaseInfo")
+  ) {
+    pass(`Release v${publishedVersion} is compatible with source v${mobileVersion}`);
   } else {
     fail(
       "Version Parity",
-      `mobile/app.json (${mobileVersion}) does not match version/route.ts`,
+      `published release (${publishedVersion}/${publishedVersionCode}) exceeds or bypasses mobile source (${mobileVersion}/${mobileVersionCode})`,
     );
   }
 

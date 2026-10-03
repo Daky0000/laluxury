@@ -1,15 +1,15 @@
 export const APP_BASE_RELEASE = {
-  version: "1.3.2",
-  versionCode: 14,
+  version: "1.3.1",
+  versionCode: 13,
   appName: "Noble Enclave",
-  publishedAt: "2026-10-03T22:56:04.544Z",
+  publishedAt: "2026-10-03T21:25:00.000Z",
   minSupportedVersion: "1.0.0",
   releaseNotes:
-    "Noble Enclave v1.3.2 release: Synchronize store-wide free shipping across web and mobile, reject region-inapplicable delivery rates, and enforce shared stock validation during cart updates and guest-cart merges.",
+    "Noble Enclave v1.3.1 release: Fix showroom pickup flow, improve gateway error recovery, and prevent unwanted autofill.",
 };
 
 export const FALLBACK_APK_URL =
-  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.3.2.apk";
+  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.3.1.apk";
 
 /** Release metadata is compile-time data so server tracing stays bounded. */
 export function resolveAppVersion(): { version: string; versionCode: number } {
