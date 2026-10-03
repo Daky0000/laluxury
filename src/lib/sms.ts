@@ -86,7 +86,7 @@ async function credentials(): Promise<{ apiKey: string; senderId: string } | nul
   const { sms } = await getIntegrations();
   if (!sms.apiKey) return null;
   // Vynfy registered & approved sender ID (max 11 chars approved by telecom authorities, e.g. 'NobleEnclav' or from settings/env)
-  let senderId = sms.senderId?.trim() || "NobleEnclav";
+  const senderId = sms.senderId?.trim() || "NobleEnclav";
   return { apiKey: sms.apiKey, senderId: senderId.slice(0, 11) };
 }
 

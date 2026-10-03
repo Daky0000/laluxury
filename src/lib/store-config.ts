@@ -6,7 +6,7 @@ import { GHANA_REGIONS } from "./constants";
 /** Public store configuration. No session, cookies, secrets, or staff capabilities. */
 export async function getPublicStoreConfig() {
   const [settings, integrations] = await Promise.all([getSettings(), getIntegrations()]);
-  const activeMode = settings?.paymentMode || integrations?.paystack?.mode || "live";
+  const activeMode = integrations?.paystack?.mode || settings?.paymentMode || "live";
   const paystack = integrations ? activePaystack(integrations) : null;
   const paystackConfigured = integrations ? isReady(integrations, "paystack") : false;
 

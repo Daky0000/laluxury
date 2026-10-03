@@ -12,7 +12,7 @@
       "bundleIdentifier": "com.nobleenclave.management"
     },
     "android": {
-      "package": "com.nobleenclave.management",
+      "package": "com.laluxury.management",
       "versionCode": 14,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {

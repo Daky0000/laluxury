@@ -388,7 +388,7 @@ export const POST = withApiAuth(async (request: Request) => {
     getIntegrations().catch(() => null),
   ]);
 
-  const activeMode = settings?.paymentMode || integrations?.paystack?.mode || "live";
+  const activeMode = integrations?.paystack?.mode || settings?.paymentMode || "live";
   const paystackConfig = integrations ? activePaystack(integrations) : null;
   const hasValidKey = Boolean(
     paystackConfig?.secretKey?.trim().startsWith(activeMode === "test" ? "sk_test_" : "sk_live_"),

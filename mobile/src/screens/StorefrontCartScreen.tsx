@@ -627,7 +627,7 @@ export function StorefrontCartScreen({
       if (
         unavailableIds.length > 0 ||
         msg.toLowerCase().includes("no longer available") ||
-        msg.toLowerCase().includes("unavailable")
+        msg.toLowerCase().includes("items are no longer available")
       ) {
         Alert.alert(
           "Items Unavailable in Bag",
@@ -667,7 +667,8 @@ export function StorefrontCartScreen({
       if (
         msg.toLowerCase().includes("invalid key") ||
         msg.toLowerCase().includes("payment gateway") ||
-        msg.toLowerCase().includes("payment provider")
+        msg.toLowerCase().includes("payment provider") ||
+        msg.toLowerCase().includes("online payment is temporarily unavailable")
       ) {
         Alert.alert(
           "Payment Gateway Unavailable",

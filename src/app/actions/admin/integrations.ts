@@ -80,49 +80,33 @@ export async function saveIntegrationsAction(
     return { ok: false, message: "Paystack mode must be live or test." };
   }
 
-  // Validate Paystack key prefixes to block autofilled passwords or corrupted strings
+  // Validate Paystack key prefixes to block autofilled passwords or corrupted
+  // strings. Only keys that actually changed are checked, and a bad key is
+  // dropped with a warning rather than rejecting the whole form. Previously a
+  // stale pre-filled public key failed validation on every save, which made it
+  // impossible to switch the mode back to live.
+  const warnings: string[] = [];
   if (patch.paystack) {
     const p = patch.paystack;
-    if (typeof p.secretKey === "string" && p.secretKey.trim() !== "") {
-      const trimmed = p.secretKey.trim().replace(/^["']|["']$/g, "");
-      if (!trimmed.startsWith("sk_live_")) {
-        return {
-          ok: false,
-          message:
-            "Invalid Paystack secret key: live secret keys must start with 'sk_live_'. Please check that your browser did not autofill an account password.",
-        };
+    const stored = (await getIntegrations()).paystack as unknown as Record<string, unknown>;
+    const rules: [string, string, string][] = [
+      ["secretKey", "sk_live_", "Live secret key"],
+      ["publicKey", "pk_live_", "Live public key"],
+      ["testSecretKey", "sk_test_", "Test secret key"],
+      ["testPublicKey", "pk_test_", "Test public key"],
+    ];
+    for (const [field, prefix, label] of rules) {
+      if (typeof p[field] !== "string") continue;
+      const trimmed = String(p[field]).trim().replace(/^["']|["']$/g, "").trim();
+      const unchanged = trimmed === String(stored[field] ?? "").trim();
+      if (unchanged || !trimmed.startsWith(prefix)) {
+        delete p[field];
+        const i = touched.indexOf(`paystack.${field}`);
+        if (i >= 0) touched.splice(i, 1);
+        if (!unchanged) warnings.push(`${label} not saved: it must start with '${prefix}'.`);
+        continue;
       }
-      p.secretKey = trimmed;
-    }
-    if (typeof p.publicKey === "string" && p.publicKey.trim() !== "") {
-      const trimmed = p.publicKey.trim().replace(/^["']|["']$/g, "");
-      if (!trimmed.startsWith("pk_live_")) {
-        return {
-          ok: false,
-          message: "Invalid Paystack public key: live public keys must start with 'pk_live_'.",
-        };
-      }
-      p.publicKey = trimmed;
-    }
-    if (typeof p.testSecretKey === "string" && p.testSecretKey.trim() !== "") {
-      const trimmed = p.testSecretKey.trim().replace(/^["']|["']$/g, "");
-      if (!trimmed.startsWith("sk_test_")) {
-        return {
-          ok: false,
-          message: "Invalid Paystack test secret key: test secret keys must start with 'sk_test_'.",
-        };
-      }
-      p.testSecretKey = trimmed;
-    }
-    if (typeof p.testPublicKey === "string" && p.testPublicKey.trim() !== "") {
-      const trimmed = p.testPublicKey.trim().replace(/^["']|["']$/g, "");
-      if (!trimmed.startsWith("pk_test_")) {
-        return {
-          ok: false,
-          message: "Invalid Paystack test public key: test public keys must start with 'pk_test_'.",
-        };
-      }
-      p.testPublicKey = trimmed;
+      p[field] = trimmed;
     }
   }
 

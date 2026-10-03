@@ -74,7 +74,7 @@ function GroupCard({ group }: { group: IntegrationGroup }) {
           <h3 className="flex items-center gap-2.5 text-sm font-semibold">
             {group.label}
             <Badge tone={group.ready ? "success" : "neutral"}>
-              {group.ready ? "live" : "not set"}
+              {group.ready ? "connected" : "not set"}
             </Badge>
           </h3>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">{group.description}</p>
