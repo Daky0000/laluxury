@@ -151,6 +151,26 @@ try {
   } else {
     fail("Shipping Route", "Missing /api/app/shipping/rates route");
   }
+
+  const shippingService = fs.readFileSync(path.join(ROOT, "src", "lib", "shipping.ts"), "utf-8");
+  if (shippingService.includes("getSettings") && shippingService.includes("freeShippingThreshold")) {
+    pass("Shared shipping engine applies store-wide free-shipping threshold");
+  } else {
+    fail("Shared Shipping", "Store-wide free-shipping threshold is not enforced by src/lib/shipping.ts");
+  }
+
+  if (!ordersRoute.includes("db.shippingRate.findUnique")) {
+    pass("Mobile checkout rejects shipping rates outside the authoritative regional quote");
+  } else {
+    fail("Mobile Checkout API", "Can bypass regional quotes with a direct shipping-rate lookup");
+  }
+
+  const mobileApi = fs.readFileSync(path.join(ROOT, "mobile", "src", "services", "api.ts"), "utf-8");
+  if (!mobileApi.includes("/api/shipping/quote")) {
+    pass("Mobile shipping uses only the mobile quotation contract");
+  } else {
+    fail("Mobile Shipping", "Falls back to the cookie-based web cart quotation endpoint");
+  }
 } catch (err) {
   fail("Commerce check", (err as Error).message);
 }
@@ -171,6 +191,20 @@ try {
     pass("Guest-to-account cart merge endpoint /api/app/cart/merge is present");
   } else {
     fail("Cart Merge API", "Missing /api/app/cart/merge route");
+  }
+
+
+  const cartService = fs.readFileSync(path.join(ROOT, "src", "lib", "cart.ts"), "utf-8");
+  const cartApi = fs.readFileSync(cartRoute, "utf-8");
+  const cartMergeApi = fs.readFileSync(cartMergeRoute, "utf-8");
+  if (
+    cartService.includes("validateCartVariantQuantity") &&
+    cartApi.includes("validateCartVariantQuantity") &&
+    cartMergeApi.includes("validateCartVariantQuantity")
+  ) {
+    pass("Web, mobile, and guest-cart merge share sellability and stock validation");
+  } else {
+    fail("Cart Validation", "A cart mutation bypasses the shared stock and sellability guard");
   }
 
   const mobileAppTsx = fs.readFileSync(path.join(ROOT, "mobile", "App.tsx"), "utf-8");

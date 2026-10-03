@@ -383,7 +383,7 @@ export const POST = withApiAuth(async (request: Request) => {
   // Authoritative shipping calculation via unified shipping engine
   const region = data.shippingAddress.region || "Greater Accra";
   const [shippingQuotes, settings, integrations] = await Promise.all([
-    quoteShipping({ region, subtotal, totalWeightGrams: 0 }).catch(() => []),
+    quoteShipping({ region, subtotal, totalWeightGrams: 0 }),
     getSettings().catch(() => null),
     getIntegrations().catch(() => null),
   ]);
@@ -424,17 +424,10 @@ export const POST = withApiAuth(async (request: Request) => {
       shippingTotal = matched.price;
       appliedShippingRateId = matched.id;
     } else {
-      const rate = await db.shippingRate.findUnique({
-        where: { id: data.shippingRateId },
-      }).catch(() => null);
-      if (rate && rate.isActive) {
-        shippingTotal =
-          rate.freeAboveSubtotal && subtotal >= rate.freeAboveSubtotal ? 0 : rate.price;
-        appliedShippingRateId = rate.id;
-      } else {
-        shippingTotal = shippingQuotes[0]?.price ?? 0;
-        appliedShippingRateId = shippingQuotes[0]?.id ?? null;
-      }
+      return NextResponse.json(
+        { error: "That delivery option is not available for this address." },
+        { status: 400 },
+      );
     }
   } else if (shippingQuotes.length > 0) {
     shippingTotal = shippingQuotes[0].price;

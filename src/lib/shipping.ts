@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { GHANA_REGIONS } from "./constants";
+import { getSettings } from "./settings";
 
 export { GHANA_REGIONS };
 
@@ -24,18 +25,24 @@ export async function quoteShipping(args: {
   subtotal: number;
   totalWeightGrams?: number;
 }): Promise<QuotedRate[]> {
-  const zones = await db.shippingZone.findMany({
-    where: { isActive: true },
-    include: {
-      rates: { where: { isActive: true }, orderBy: { position: "asc" } },
-    },
-  });
+  const [zones, settings] = await Promise.all([
+    db.shippingZone.findMany({
+      where: { isActive: true },
+      include: {
+        rates: { where: { isActive: true }, orderBy: { position: "asc" } },
+      },
+    }),
+    getSettings(),
+  ]);
 
   const region = args.region?.trim();
   const specific = region ? zones.filter((z) => z.regions.includes(region)) : [];
   const applicable = specific.length > 0 ? specific : zones.filter((z) => z.regions.length === 0);
 
   const weight = args.totalWeightGrams ?? 0;
+  const storeFreeShipping =
+    settings.freeShippingThreshold !== null &&
+    args.subtotal >= settings.freeShippingThreshold;
   const quotes: QuotedRate[] = [];
 
   for (const zone of applicable) {
@@ -44,7 +51,8 @@ export async function quoteShipping(args: {
       if (rate.maxWeightGrams !== null && weight > rate.maxWeightGrams) continue;
 
       const isFree =
-        rate.freeAboveSubtotal !== null && args.subtotal >= rate.freeAboveSubtotal;
+        storeFreeShipping ||
+        (rate.freeAboveSubtotal !== null && args.subtotal >= rate.freeAboveSubtotal);
 
       quotes.push({
         id: rate.id,

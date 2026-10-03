@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireBearerUser, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { randomUUID } from "node:crypto";
+import { validateCartVariantQuantity } from "@/lib/cart";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,14 +72,19 @@ export const POST = withApiAuth(async (request: Request) => {
     });
   }
 
-  // Merge items into database
-  for (const item of items) {
-    const variant = await db.variant.findUnique({
-      where: { id: item.variantId },
-      select: { id: true, price: true, isActive: true },
-    });
+  const rejectedItems: { variantId: string; reason: string }[] = [];
 
-    if (!variant || !variant.isActive) continue;
+  // Merge only currently sellable quantities. Invalid cached lines stay off the account cart.
+  for (const item of items) {
+    const existing = cart.items.find((line) => line.variantId === item.variantId);
+    const desired = (existing?.quantity ?? 0) + item.quantity;
+    let variant;
+    try {
+      variant = await validateCartVariantQuantity(item.variantId, desired);
+    } catch (error) {
+      rejectedItems.push({ variantId: item.variantId, reason: (error as Error).message });
+      continue;
+    }
 
     await db.cartItem.upsert({
       where: {
@@ -91,7 +97,7 @@ export const POST = withApiAuth(async (request: Request) => {
         unitPrice: variant.price,
       },
       update: {
-        quantity: { increment: item.quantity },
+        quantity: desired,
         unitPrice: variant.price,
       },
     });
@@ -109,7 +115,7 @@ export const POST = withApiAuth(async (request: Request) => {
 
   let subtotal = 0;
   let itemCount = 0;
-  const formattedItems = (updatedCart?.items || []).map((line: any) => {
+  const formattedItems = (updatedCart?.items || []).map((line) => {
     const lineTotal = line.unitPrice * line.quantity;
     subtotal += lineTotal;
     itemCount += line.quantity;
@@ -144,5 +150,6 @@ export const POST = withApiAuth(async (request: Request) => {
       subtotal,
       itemCount,
     },
+    rejectedItems,
   });
 });

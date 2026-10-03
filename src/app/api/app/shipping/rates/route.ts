@@ -14,13 +14,13 @@ export async function GET(request: NextRequest) {
   const subtotal = parseInt(searchParams.get("subtotal") || "0", 10);
   const weightGrams = parseInt(searchParams.get("weight") || "0", 10);
 
+  if (!Number.isSafeInteger(subtotal) || subtotal < 0 || !Number.isSafeInteger(weightGrams) || weightGrams < 0) {
+    return NextResponse.json({ ok: false, error: "Subtotal and weight must be non-negative integers." }, { status: 400 });
+  }
+
   const [rates, settings] = await Promise.all([
-    quoteShipping({
-      region,
-      subtotal,
-      totalWeightGrams: weightGrams,
-    }).catch(() => []),
-    getSettings().catch(() => null),
+    quoteShipping({ region, subtotal, totalWeightGrams: weightGrams }),
+    getSettings(),
   ]);
 
   // If store-wide free shipping applies
@@ -30,18 +30,12 @@ export async function GET(request: NextRequest) {
     storeFreeThreshold !== undefined &&
     subtotal >= storeFreeThreshold;
 
-  let resolvedRates = rates.map((r) => ({
-    ...r,
-    price: storeFreeApplies ? 0 : r.price,
-    isFree: storeFreeApplies ? true : r.isFree,
-  }));
-
   return NextResponse.json(
     {
       ok: true,
       region: region || "Greater Accra",
       subtotal,
-      rates: resolvedRates,
+      rates,
       freeShippingThreshold: storeFreeThreshold,
       freeShippingQualified: storeFreeApplies,
     },
@@ -60,16 +54,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const region = body.region || undefined;
-    const subtotal = Number(body.subtotal || 0);
-    const weightGrams = Number(body.weight || 0);
+    const subtotal = Number(body.subtotal ?? 0);
+    const weightGrams = Number(body.weight ?? 0);
+
+    if (!Number.isSafeInteger(subtotal) || subtotal < 0 || !Number.isSafeInteger(weightGrams) || weightGrams < 0) {
+      return NextResponse.json({ ok: false, error: "Subtotal and weight must be non-negative integers." }, { status: 400 });
+    }
 
     const [rates, settings] = await Promise.all([
-      quoteShipping({
-        region,
-        subtotal,
-        totalWeightGrams: weightGrams,
-      }).catch(() => []),
-      getSettings().catch(() => null),
+      quoteShipping({ region, subtotal, totalWeightGrams: weightGrams }),
+      getSettings(),
     ]);
 
     const storeFreeThreshold = settings?.freeShippingThreshold;
@@ -78,16 +72,10 @@ export async function POST(request: NextRequest) {
       storeFreeThreshold !== undefined &&
       subtotal >= storeFreeThreshold;
 
-    let resolvedRates = rates.map((r) => ({
-      ...r,
-      price: storeFreeApplies ? 0 : r.price,
-      isFree: storeFreeApplies ? true : r.isFree,
-    }));
-
     return NextResponse.json(
       {
         ok: true,
-        rates: resolvedRates,
+        rates,
         freeShippingThreshold: storeFreeThreshold,
         freeShippingQualified: storeFreeApplies,
       },

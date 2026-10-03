@@ -68,6 +68,30 @@ export type CartTotals = {
   problems: string[];
 };
 
+/** Shared sellability and stock guard for every web and mobile cart mutation. */
+export async function validateCartVariantQuantity(variantId: string, quantity: number) {
+  if (!Number.isSafeInteger(quantity) || quantity < 1) {
+    throw new Error("Quantity must be at least 1.");
+  }
+
+  const variant = await db.variant.findUnique({
+    where: { id: variantId },
+    include: { inventory: true, product: { select: { status: true, isPreorder: true } } },
+  });
+
+  if (!variant || !variant.isActive) throw new Error("That item is unavailable.");
+  if (variant.product.status !== "ACTIVE") throw new Error("That product is not on sale.");
+
+  const inv = variant.inventory;
+  if (inv && inv.trackInventory && !inv.allowBackorder && !variant.product.isPreorder) {
+    const available = availableOf(inv);
+    if (available <= 0) throw new Error("That item is out of stock.");
+    if (quantity > available) throw new Error(`Only ${available} left in stock.`);
+  }
+
+  return variant;
+}
+
 /**
  * Read-only cart lookup for Server Components.
  *
@@ -188,26 +212,9 @@ export async function addToCart(variantId: string, quantity = 1): Promise<CartWi
   if (quantity < 1) throw new Error("Quantity must be at least 1.");
 
   const cart = await getOrCreateCart();
-  const variant = await db.variant.findUnique({
-    where: { id: variantId },
-    include: { inventory: true, product: { select: { status: true, isPreorder: true } } },
-  });
-
-  if (!variant || !variant.isActive) throw new Error("That item is unavailable.");
-  if (variant.product.status !== "ACTIVE") throw new Error("That product is not on sale.");
-
   const existing = cart.items.find((i) => i.variantId === variantId);
   const desired = (existing?.quantity ?? 0) + quantity;
-
-  // Cap at what is actually sellable rather than failing the whole add.
-  const inv = variant.inventory;
-  if (inv && inv.trackInventory && !inv.allowBackorder && !variant.product.isPreorder) {
-    const available = availableOf(inv);
-    if (available <= 0) throw new Error("That item is out of stock.");
-    if (desired > available) {
-      throw new Error(`Only ${available} left in stock.`);
-    }
-  }
+  const variant = await validateCartVariantQuantity(variantId, desired);
 
   await db.cartItem.upsert({
     where: { cartId_variantId: { cartId: cart.id, variantId } },

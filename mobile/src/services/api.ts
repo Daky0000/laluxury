@@ -477,66 +477,14 @@ class ApiService {
     searchParams.set("subtotal", String(params.subtotal));
     if (params.weight) searchParams.set("weight", String(params.weight));
 
-    try {
-      const res = await this.request<{
-        ok: boolean;
-        region?: string;
-        subtotal: number;
-        rates: ShippingRate[];
-        freeShippingThreshold: number | null;
-        freeShippingQualified: boolean;
-      }>(`/api/app/shipping/rates?${searchParams.toString()}`);
-      if (res && Array.isArray(res.rates)) {
-        return res;
-      }
-    } catch {
-      // Endpoint may not be deployed yet on live server; fall back to web quote endpoint
-    }
-
-    try {
-      const quoteUrl = `/api/shipping/quote?region=${encodeURIComponent(params.region || "Greater Accra")}`;
-      const webQuote = await this.request<{
-        rates: {
-          id: string;
-          name: string;
-          price: number;
-          zoneName: string;
-          estimatedDaysMin: number | null;
-          estimatedDaysMax: number | null;
-          isFree: boolean;
-        }[];
-        subtotal: number;
-      }>(quoteUrl);
-
-      const rates: ShippingRate[] = (webQuote.rates || []).map((r) => ({
-        id: r.id,
-        name: r.name,
-        price: r.price,
-        zoneName: r.zoneName,
-        estimatedDaysMin: r.estimatedDaysMin,
-        estimatedDaysMax: r.estimatedDaysMax,
-        isFree: Boolean(r.isFree || r.price === 0),
-      }));
-
-      return {
-        ok: true,
-        region: params.region || "Greater Accra",
-        subtotal: params.subtotal,
-        rates,
-        freeShippingThreshold: null,
-        freeShippingQualified: rates.some((r) => r.isFree || r.price === 0),
-      };
-    } catch (fallbackErr) {
-      console.warn("Failed to fetch shipping rates:", fallbackErr);
-      return {
-        ok: false,
-        region: params.region,
-        subtotal: params.subtotal,
-        rates: [],
-        freeShippingThreshold: null,
-        freeShippingQualified: false,
-      };
-    }
+    return this.request<{
+      ok: boolean;
+      region?: string;
+      subtotal: number;
+      rates: ShippingRate[];
+      freeShippingThreshold: number | null;
+      freeShippingQualified: boolean;
+    }>(`/api/app/shipping/rates?${searchParams.toString()}`);
   }
 
   // --- Orders & Checkout ----------------------------------------------------
@@ -725,13 +673,13 @@ class ApiService {
 
       // Safe resilient metadata so the user is NEVER blocked from updating
       return {
-        latestVersion: "1.3.1",
-        versionCode: 13,
+        latestVersion: "1.3.2",
+        versionCode: 14,
         appName: "Noble Enclave",
         downloadUrl: `${DEFAULT_URL}/app`,
         directUrl: `${DEFAULT_URL}/api/app/download`,
         releaseNotes:
-          "Noble Enclave v1.3.1 release: checkout reliability, pickup flow, and payment recovery improvements.",
+          "Noble Enclave v1.3.2 release: synchronized shipping rules, regional rate validation, and safer cross-platform cart merging.",
       };
     }
   }

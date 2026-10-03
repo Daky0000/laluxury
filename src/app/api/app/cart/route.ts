@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireBearerUser, getOptionalBearerUser, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { availableOf } from "@/lib/inventory";
+import { validateCartVariantQuantity } from "@/lib/cart";
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@/generated/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,9 +31,11 @@ const cartInclude = {
     orderBy: { createdAt: "asc" as const },
     include: cartItemInclude,
   },
-};
+} satisfies Prisma.CartInclude;
 
-function formatCartResponse(cart: any) {
+type AppCart = Prisma.CartGetPayload<{ include: typeof cartInclude }>;
+
+function formatCartResponse(cart: AppCart | null) {
   if (!cart) {
     return {
       items: [],
@@ -44,7 +48,7 @@ function formatCartResponse(cart: any) {
   let subtotal = 0;
   let itemCount = 0;
 
-  const items = (cart.items || []).map((item: any) => {
+  const items = cart.items.map((item) => {
     const lineTotal = item.unitPrice * item.quantity;
     subtotal += lineTotal;
     itemCount += item.quantity;
@@ -137,20 +141,6 @@ export const POST = withApiAuth(async (request: Request) => {
 
   const { variantId, quantity } = parsed.data;
 
-  // Validate variant & inventory
-  const variant = await db.variant.findUnique({
-    where: { id: variantId },
-    include: { inventory: true, product: true },
-  });
-
-  if (!variant || !variant.isActive) {
-    return NextResponse.json({ error: "Item is unavailable" }, { status: 400 });
-  }
-
-  if (variant.product.status !== "ACTIVE") {
-    return NextResponse.json({ error: "Product is not on sale" }, { status: 400 });
-  }
-
   // Find or create user cart
   let cart = await db.cart.findFirst({
     where: { userId: user.id, convertedOrderId: null },
@@ -168,21 +158,13 @@ export const POST = withApiAuth(async (request: Request) => {
     });
   }
 
-  const existing = cart.items.find((i: any) => i.variantId === variantId);
+  const existing = cart.items.find((item) => item.variantId === variantId);
   const desired = (existing?.quantity ?? 0) + quantity;
-
-  const inv = variant.inventory;
-  if (inv && inv.trackInventory && !inv.allowBackorder && !variant.product.isPreorder) {
-    const available = availableOf(inv);
-    if (available <= 0) {
-      return NextResponse.json({ error: "That item is out of stock" }, { status: 400 });
-    }
-    if (desired > available) {
-      return NextResponse.json(
-        { error: `Only ${available} available in stock` },
-        { status: 400 },
-      );
-    }
+  let variant;
+  try {
+    variant = await validateCartVariantQuantity(variantId, desired);
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
   }
 
   await db.cartItem.upsert({
@@ -252,19 +234,10 @@ export const PATCH = withApiAuth(async (request: Request) => {
       where: { cartId: cart.id, variantId },
     });
   } else {
-    const variant = await db.variant.findUnique({
-      where: { id: variantId },
-      include: { inventory: true, product: true },
-    });
-
-    if (variant?.inventory && variant.inventory.trackInventory && !variant.inventory.allowBackorder && !variant.product.isPreorder) {
-      const available = availableOf(variant.inventory);
-      if (quantity > available) {
-        return NextResponse.json(
-          { error: `Only ${Math.max(0, available)} available in stock` },
-          { status: 400 },
-        );
-      }
+    try {
+      await validateCartVariantQuantity(variantId, quantity);
+    } catch (error) {
+      return NextResponse.json({ error: (error as Error).message }, { status: 400 });
     }
 
     await db.cartItem.updateMany({

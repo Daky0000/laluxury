@@ -1,5 +1,27 @@
 # Noble Enclave Cross-Platform Module & Settings Registry
 
+## Final synchronization audit — 2026-10-03
+
+Static contract audit covered every shared mobile module: authentication, public storefront,
+catalog, taxonomy, inventory, cart continuity, shipping, discounts, checkout, payments,
+orders, account history, dashboard metrics, product management, category design, custom
+notifications, settings, and app releases.
+
+Confirmed corrections:
+
+- Store-wide `freeShippingThreshold` now runs inside `src/lib/shipping.ts`, so web quotes,
+  web checkout, mobile quotes, and mobile checkout use one rule.
+- Mobile checkout now rejects a shipping rate not returned for the submitted region. It no
+  longer accepts a globally valid but region-inapplicable rate ID.
+- Mobile shipping no longer falls back to the cookie-based web cart quote, which cannot
+  represent a bearer-authenticated or guest app cart.
+- Web cart changes, mobile cart changes, and guest-cart merges now invoke the same stock,
+  active-product, and active-variant validation guard.
+- `verify:sync` now protects these invariants against regression.
+
+Verification scope is repository code and contracts. Production database contents, deployed
+environment variables, payment-provider state, and CDN objects require deployment smoke tests.
+
 ## Public catalog delivery and caching
 
 Public mobile storefront reads now use `/api/store/config`, `/api/store/categories`, `/api/store/collections`, `/api/store/products`, and `/api/store/products/[id]`. These contracts use the same PostgreSQL data and shared settings service as the web and legacy `/api/app/*` endpoints. Public reads ignore bearer/session state and expose only active products and taxonomy; product detail accepts an ID or slug. Raw inventory, cost prices, and management sales statistics remain private.
@@ -125,7 +147,7 @@ after upload verification. See `RAILWAY_COST_REDUCTION.md` for rollout checks.
 
 | Module / Feature | Authoritative Source | Web Status | App Status | Refresh Trigger | Classification | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| App Release Version | `mobile/app.json` (1.3.1) | Web direct download | `/api/app/version` | In-app update check | **Shared (Parity Achieved)** | Aligned at version `1.3.1` (code 13) |
+| App Release Version | `mobile/app.json` (1.3.2) | Web direct download | `/api/app/version` | In-app update check | **Shared (Parity Achieved)** | Aligned at version `1.3.2` (code 14) |
 | APK Distribution | Cloudflare R2 | `/api/app/download` | In-app download link | User action | **Shared (Parity Achieved)** | Hosted on R2 bucket |
 | In-App Update Prompt System | `/api/app/version` / `/api/app/download` | Direct download link | `AppUpdateModal` auto-prompt & account check | App launch / Focus | **Shared (Parity Achieved)** | Prompts user on new release and downloads APK in-app |
 | Drift Prevention Checks | `scripts/verify-sync.ts` | CI pipeline | `npm run verify:sync` | Pre-commit / CI | **Shared (Parity Achieved)** | Fails build if hardcoded commerce rules drift |

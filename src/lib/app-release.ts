@@ -2,17 +2,17 @@ import fs from "node:fs";
 import path from "node:path";
 
 export const APP_BASE_RELEASE = {
-  version: "1.3.1",
-  versionCode: 13,
+  version: "1.3.2",
+  versionCode: 14,
   appName: "Noble Enclave",
-  publishedAt: "2026-10-03T21:25:00.000Z",
+  publishedAt: "2026-10-03T22:56:04.544Z",
   minSupportedVersion: "1.0.0",
   releaseNotes:
-    "Noble Enclave v1.3.1 release: Fix showroom pickup flow (dedicated recipient contact details, no delivery address popups), eliminate 'Invalid key' errors with enhanced gateway error recovery, and autofill protection.",
+    "Noble Enclave v1.3.2 release: Synchronize store-wide free shipping across web and mobile, reject region-inapplicable delivery rates, and enforce shared stock validation during cart updates and guest-cart merges.",
 };
 
 export const FALLBACK_APK_URL =
-  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.3.1.apk";
+  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.3.2.apk";
 
 /**
  * Resolves the latest version and build number directly from mobile/app.json,
