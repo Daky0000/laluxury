@@ -85,11 +85,8 @@ const FATAL_CODES = new Set([
 async function credentials(): Promise<{ apiKey: string; senderId: string } | null> {
   const { sms } = await getIntegrations();
   if (!sms.apiKey) return null;
-  // Vynfy registered & approved sender ID is 'Laluxurys'
-  let senderId = sms.senderId?.trim() || "Laluxurys";
-  if (!senderId || senderId.toLowerCase() === "laluxury") {
-    senderId = "Laluxurys";
-  }
+  // Vynfy registered & approved sender ID (max 11 chars approved by telecom authorities, e.g. 'NobleEnclav' or from settings/env)
+  let senderId = sms.senderId?.trim() || "NobleEnclav";
   return { apiKey: sms.apiKey, senderId: senderId.slice(0, 11) };
 }
 
@@ -137,7 +134,7 @@ async function call(
         Accept: "application/json",
         // An empty User-Agent is one of the cheapest things for an edge to
         // block, and a named one is something Vynfy can allowlist on request.
-        "User-Agent": "NobelEnclave-Shop/1.0 (+https://nobleenclave.com)",
+        "User-Agent": "NobleEnclave-Shop/1.0 (+https://nobleenclave.com)",
         "X-API-Key": apiKey,
       },
       body: JSON.stringify(body),

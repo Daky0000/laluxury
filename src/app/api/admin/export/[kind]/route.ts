@@ -73,7 +73,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/admin/export
   return new NextResponse(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="nobel-enclave-${kind}-${stamp}.csv"`,
+      "Content-Disposition": `attachment; filename="noble-enclave-${kind}-${stamp}.csv"`,
       "Cache-Control": "no-store",
     },
   });

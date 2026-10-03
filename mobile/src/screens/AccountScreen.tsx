@@ -259,7 +259,7 @@ export function AccountScreen({
     return (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.brandHeader}>
-          <Text style={styles.brandTitle}>NOBEL ENCLAVE</Text>
+          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
         </View>
 
         {/* Owner Profile Card */}
@@ -290,7 +290,7 @@ export function AccountScreen({
           </View>
           <Text style={styles.launchTitle}>Store Backend Dashboard</Text>
           <Text style={styles.launchSub}>
-            Manage live products, real-time prices, warehouse stock, and view recent customer orders synced directly with Nobel Enclave.
+            Manage live products, real-time prices, warehouse stock, and view recent customer orders synced directly with Noble Enclave.
           </Text>
           <TouchableOpacity
             style={styles.openBackendBtn}
@@ -320,7 +320,7 @@ export function AccountScreen({
     return (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.brandHeader}>
-          <Text style={styles.brandTitle}>NOBEL ENCLAVE</Text>
+          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
           <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
         </View>
 
@@ -538,8 +538,8 @@ export function AccountScreen({
                       onPress={() => {
                         const invoiceUrl = `${api.getBaseUrl()}/orders/${selectedOrder.orderNumber}/invoice`;
                         Share.share({
-                          title: `Nobel Enclave Receipt #${selectedOrder.orderNumber}`,
-                          message: `Official Nobel Enclave Receipt for Order #${selectedOrder.orderNumber}:\n${invoiceUrl}`,
+                          title: `Noble Enclave Receipt #${selectedOrder.orderNumber}`,
+                          message: `Official Noble Enclave Receipt for Order #${selectedOrder.orderNumber}:\n${invoiceUrl}`,
                           url: invoiceUrl,
                         }).catch(() => {});
                       }}
@@ -611,7 +611,7 @@ export function AccountScreen({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.brandHeader}>
-          <Text style={styles.brandTitle}>NOBEL ENCLAVE</Text>
+          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
           <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
         </View>
 
@@ -863,7 +863,7 @@ export function AccountScreen({
               </View>
 
               <Text style={styles.staffModalSub}>
-                Authorized access for Nobel Enclave store administrators, inventory managers, and staff.
+                Authorized access for Noble Enclave store administrators, inventory managers, and staff.
               </Text>
 
               {staffError && (

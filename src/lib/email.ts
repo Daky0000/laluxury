@@ -56,7 +56,7 @@ export async function sendEmail(args: {
 export async function sendTestEmail(to: string): Promise<SendResult> {
   return sendEmail({
     to,
-    subject: "Nobel Enclave — email is working",
-    text: "This is a test from your Nobel Enclave console. If you are reading it, transactional email is configured correctly.",
+    subject: "Noble Enclave — email is working",
+    text: "This is a test from your Noble Enclave console. If you are reading it, transactional email is configured correctly.",
   });
 }

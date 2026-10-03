@@ -91,7 +91,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   // piece straight away than the built home page. Switch it back under
   // /admin/settings → Front page.
   landingPage: "shop",
-  storeName: "Nobel Enclave",
+  storeName: "Noble Enclave",
   tagline: "Considered pieces for the modern Ghanaian home",
   supportEmail: "hello@nobleenclave.com",
   supportPhone: "",
@@ -125,7 +125,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   bundleCompareAtPrice: null,
   bundleImageUrl: "/catalog/bundle-bed-set.webp",
   bundleHref: "",
-  newsletterTitle: "Join the NOBEL ENCLAVE list",
+  newsletterTitle: "Join the NOBLE ENCLAVE list",
   newsletterBody:
     "Private access to restocks and a ₵20 welcome credit on your first order.",
   homeSections: DEFAULT_HOME_SECTIONS,

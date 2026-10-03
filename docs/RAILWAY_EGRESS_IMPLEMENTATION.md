@@ -18,7 +18,7 @@ Web catalog queries, home products/rooms, and product detail data use a five-min
 
 - The application uses the private Railway PostgreSQL hostname.
 - `MediaAsset` contains 15 CDN records, 62 EXTERNAL records, zero binary bytes, and no DATABASE records. No binary migration is needed for this snapshot.
-- R2 contains `downloads/NobelEnclave-v1.2.6.apk`, size 72,937,018 bytes.
+- R2 contains `downloads/NobleEnclave-v1.2.6.apk`, size 72,937,018 bytes.
 - Configured catalog/media origins use `r2.dev`. The versioned `APK_DOWNLOAD_URL`, matching `NEXT_PUBLIC_MEDIA_BASE_URL`, and `DATABASE_POOL_MAX=3` have now been set for the next deployment.
 - `media.laluxurys.com` was unreachable.
 - A seven-day HTTP query capped at 5,000 requests returned only **8 minutes 16 seconds** of traffic: 0.0430 GiB. `/shop` accounts for 3,494 requests and 0.0422 GiB, mostly bulk crawlers. This is not a seven-day total.
@@ -58,7 +58,7 @@ npx tsc --noEmit
 node scripts/audit-railway-storage.mjs
 railway logs --http --json --since 7d --lines 5000 > railway-http.ndjson
 node scripts/analyze-railway-egress.mjs railway-http.ndjson
-node scripts/upload-apk-to-r2.mjs public/downloads/NobelEnclave-v1.2.6.apk
+node scripts/upload-apk-to-r2.mjs public/downloads/NobleEnclave-v1.2.6.apk
 ```
 
 The audit and analyzer are read-only. The upload command changes R2 and should run only for a new release object. Keep raw HTTP logs outside Git because they can contain customer IPs and query strings.

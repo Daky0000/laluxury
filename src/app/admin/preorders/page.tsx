@@ -379,7 +379,7 @@ export default async function AdminPreordersPage() {
 
                     <a
                       href={`https://wa.me/${req.phone}?text=${encodeURIComponent(
-                        `Hello ${req.name}, this is Nobel Enclave Concierge regarding your pre-order inquiry for "${req.productTitle}".${req.convertedOrderId ? ` Your official Pro-Forma Invoice & 50% deposit reservation is ready under reference ${req.convertedOrderId}.` : ""}`,
+                        `Hello ${req.name}, this is Noble Enclave Concierge regarding your pre-order inquiry for "${req.productTitle}".${req.convertedOrderId ? ` Your official Pro-Forma Invoice & 50% deposit reservation is ready under reference ${req.convertedOrderId}.` : ""}`,
                       )}`}
                       target="_blank"
                       rel="noreferrer"

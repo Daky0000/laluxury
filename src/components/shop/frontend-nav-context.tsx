@@ -10,8 +10,8 @@ import {
 } from "react";
 import { usePathname } from "next/navigation";
 
-const STORAGE_KEY = "laluxury_frontend_hide_nav";
-const NAV_CHANGE_EVENT = "laluxury:frontend-nav-change";
+const STORAGE_KEY = "nobleenclave_frontend_hide_nav";
+const NAV_CHANGE_EVENT = "nobleenclave:frontend-nav-change";
 
 interface FrontendNavContextValue {
   navHidden: boolean;

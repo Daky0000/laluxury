@@ -136,7 +136,7 @@ function catalogRevision(): string {
 }
 
 async function main() {
-  console.log("Seeding Nobel Enclave...");
+  console.log("Seeding Noble Enclave...");
 
   // --- Staff ---------------------------------------------------------------
   const ownerEmail = (process.env.SEED_OWNER_EMAIL || "owner@nobleenclave.com").toLowerCase();
@@ -236,7 +236,7 @@ async function main() {
 
   // --- Settings ------------------------------------------------------------
   const storeDefaults = {
-    storeName: "Nobel Enclave",
+    storeName: "Noble Enclave",
     tagline: "Considered textiles and furnishings for Ghanaian homes.",
     supportEmail: ownerEmail,
     announcementBar: ANNOUNCEMENT,

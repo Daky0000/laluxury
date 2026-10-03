@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const storeName = "Nobel Enclave";
+    const storeName = "Noble Enclave";
     const otpRes = await sendOtp(normalized, storeName);
 
     if (!otpRes.ok) {

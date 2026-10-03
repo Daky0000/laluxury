@@ -120,7 +120,7 @@ async function exportResponse(request: Request) {
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="nobel-enclave-customers-trade-${today}.csv"`,
+        "Content-Disposition": `attachment; filename="noble-enclave-customers-trade-${today}.csv"`,
       },
     });
   }
@@ -169,7 +169,7 @@ async function exportResponse(request: Request) {
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="nobel-enclave-preorder-inquiries-${today}.csv"`,
+        "Content-Disposition": `attachment; filename="noble-enclave-preorder-inquiries-${today}.csv"`,
       },
     });
   }
@@ -245,7 +245,7 @@ async function exportResponse(request: Request) {
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="nobel-enclave-orders-accounting-${today}.csv"`,
+      "Content-Disposition": `attachment; filename="noble-enclave-orders-accounting-${today}.csv"`,
     },
   });
 }

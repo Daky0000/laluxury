@@ -756,7 +756,7 @@ export function CheckoutForm({
 
         <a
           href={`https://wa.me/233240000000?text=${encodeURIComponent(
-            `Hello Nobel Enclave Concierge, I am ready to place my order (${formatPrice(total)}${hasPreorderItems && preorderDepositOption === "deposit_50" ? `, 50% deposit due today: ${formatPrice(depositDueNow)}` : ""}) for delivery to ${city || "Accra"}, ${region || "Greater Accra"}.`,
+            `Hello Noble Enclave Concierge, I am ready to place my order (${formatPrice(total)}${hasPreorderItems && preorderDepositOption === "deposit_50" ? `, 50% deposit due today: ${formatPrice(depositDueNow)}` : ""}) for delivery to ${city || "Accra"}, ${region || "Greater Accra"}.`,
           )}`}
           target="_blank"
           rel="noreferrer"

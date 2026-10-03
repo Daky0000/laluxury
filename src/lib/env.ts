@@ -64,13 +64,13 @@ export const env = {
     port: () => Number(optional("SMTP_PORT", "587")),
     user: () => optional("SMTP_USER"),
     password: () => optional("SMTP_PASSWORD"),
-    from: () => optional("EMAIL_FROM", "Nobel Enclave <no-reply@nobleenclave.com>"),
+    from: () => optional("EMAIL_FROM", "Noble Enclave <no-reply@nobleenclave.com>"),
     isConfigured: () => Boolean(process.env.SMTP_HOST && process.env.SMTP_USER),
   },
 
   vynfy: {
     apiKey: () => optional("VYNFY_API_KEY"),
-    senderId: () => optional("VYNFY_SENDER_ID", "Laluxurys"),
+    senderId: () => optional("VYNFY_SENDER_ID", "NobleEnclav"),
     isConfigured: () => Boolean(process.env.VYNFY_API_KEY),
   },
 
@@ -86,14 +86,14 @@ export const env = {
     accountId: () => optional("R2_ACCOUNT_ID"),
     accessKeyId: () => optional("R2_ACCESS_KEY_ID"),
     secretAccessKey: () => optional("R2_SECRET_ACCESS_KEY"),
-    bucketName: () => optional("R2_BUCKET_NAME", "laluxurys-media"),
+    bucketName: () => optional("R2_BUCKET_NAME", "nobleenclave-media"),
     publicUrl: () => optional("R2_PUBLIC_URL"),
     isConfigured: () =>
       Boolean(
         process.env.R2_ACCOUNT_ID &&
           process.env.R2_ACCESS_KEY_ID &&
           process.env.R2_SECRET_ACCESS_KEY &&
-          (process.env.R2_BUCKET_NAME || "laluxurys-media") &&
+          (process.env.R2_BUCKET_NAME || "nobleenclave-media") &&
           process.env.R2_PUBLIC_URL,
       ),
   },

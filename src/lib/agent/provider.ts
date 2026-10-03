@@ -257,7 +257,7 @@ async function completeWithOpenRouter(
       Authorization: `Bearer ${ai.openrouterApiKey}`,
       "Content-Type": "application/json",
       "HTTP-Referer": env.siteUrl(),
-      "X-Title": "Nobel Enclave Store Agent",
+      "X-Title": "Noble Enclave Store Agent",
     },
     body: JSON.stringify({
       model: primary,

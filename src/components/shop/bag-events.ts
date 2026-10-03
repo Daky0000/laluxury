@@ -4,9 +4,9 @@
  * context through server components, they talk over one window event.
  */
 
-export const BAG_OPEN_EVENT = "laluxury:bag-open";
-export const CART_CHANGED_EVENT = "laluxury:cart-changed";
-export const CART_COUNT_EVENT = "laluxury:cart-count";
+export const BAG_OPEN_EVENT = "nobleenclave:bag-open";
+export const CART_CHANGED_EVENT = "nobleenclave:cart-changed";
+export const CART_COUNT_EVENT = "nobleenclave:cart-count";
 
 export function notifyCartChanged(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(CART_CHANGED_EVENT));

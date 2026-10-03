@@ -69,7 +69,7 @@ export function BackendDashboardScreen({
         <View>
           <View style={styles.badgeRow}>
             <View style={styles.liveIndicator} />
-            <Text style={styles.portalTitle}>NOBEL ENCLAVE BACKEND</Text>
+            <Text style={styles.portalTitle}>NOBLE ENCLAVE BACKEND</Text>
           </View>
           <Text style={styles.ownerTitle}>
             {user.firstName || user.email?.split("@")[0] || "Owner"} · {user.role}

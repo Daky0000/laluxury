@@ -1,4 +1,4 @@
-# LaLuxury Cross-Platform Module & Settings Registry
+# Noble Enclave Cross-Platform Module & Settings Registry
 
 ## Public catalog delivery and caching
 
@@ -121,7 +121,7 @@ after upload verification. See `RAILWAY_COST_REDUCTION.md` for rollout checks.
 
 | Module / Feature | Authoritative Source | Web Status | App Status | Refresh Trigger | Classification | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| App Release Version | `mobile/app.json` (1.2.6) | Web direct download | `/api/app/version` | In-app update check | **Shared (Parity Achieved)** | Aligned at version `1.2.6` (code 8) |
+| App Release Version | `mobile/app.json` (1.2.7) | Web direct download | `/api/app/version` | In-app update check | **Shared (Parity Achieved)** | Aligned at version `1.2.7` (code 9) |
 | APK Distribution | Cloudflare R2 | `/api/app/download` | In-app download link | User action | **Shared (Parity Achieved)** | Hosted on R2 bucket |
 | In-App Update Prompt System | `/api/app/version` / `/api/app/download` | Direct download link | `AppUpdateModal` auto-prompt & account check | App launch / Focus | **Shared (Parity Achieved)** | Prompts user on new release and downloads APK in-app |
 | Drift Prevention Checks | `scripts/verify-sync.ts` | CI pipeline | `npm run verify:sync` | Pre-commit / CI | **Shared (Parity Achieved)** | Fails build if hardcoded commerce rules drift |

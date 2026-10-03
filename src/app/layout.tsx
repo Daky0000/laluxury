@@ -23,14 +23,24 @@ export const metadata: Metadata = {
   // shop's traffic arrives — previews with no picture.
   metadataBase: new URL(env.siteUrl()),
   title: {
-    default: "Nobel Enclave — Quiet luxury for the modern home",
-    template: "%s · Nobel Enclave",
+    default: "Noble Enclave — Quiet luxury for the modern home",
+    template: "%s · Noble Enclave",
   },
   description:
     "Bedding, carpets, curtains and furnishings for Ghanaian homes. Delivered nationwide, paid by Mobile Money (MTN, Telecel, AirtelTigo), card or bank transfer.",
   openGraph: {
     type: "website",
-    siteName: "Nobel Enclave",
+    siteName: "Noble Enclave",
+  },
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon.png", sizes: "512x512", type: "image/png" },
+      { url: "/favicon.ico", sizes: "48x48" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
   },
 };
 

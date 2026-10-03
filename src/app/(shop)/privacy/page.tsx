@@ -7,7 +7,7 @@ import { CookieSettingsLink } from "@/components/shop/cookie-consent";
 export const metadata: Metadata = {
   title: "Privacy notice",
   description:
-    "What personal data Nobel Enclave collects, why we hold it, who processes it, how long we keep it, and the rights you have over it under the GDPR and Ghana's Data Protection Act.",
+    "What personal data Noble Enclave collects, why we hold it, who processes it, how long we keep it, and the rights you have over it under the GDPR and Ghana's Data Protection Act.",
 };
 
 /**

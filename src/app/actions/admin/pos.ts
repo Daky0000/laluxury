@@ -22,7 +22,7 @@ export async function createPosShowroomOrderAction(formData: FormData): Promise<
       .trim()
       .toLowerCase() || `showroom.${Date.now()}@nobleenclave.com`;
   const phone = String(formData.get("phone") ?? "").trim() || "+233000000000";
-  const addressLine1 = String(formData.get("addressLine1") ?? "").trim() || "Nobel Enclave Showroom Pickup / Accra Delivery";
+  const addressLine1 = String(formData.get("addressLine1") ?? "").trim() || "Noble Enclave Showroom Pickup / Accra Delivery";
   const city = String(formData.get("city") ?? "").trim() || "Accra";
   const region = String(formData.get("region") ?? "").trim() || "Greater Accra";
   const customerNote = String(formData.get("customerNote") ?? "").trim() || null;

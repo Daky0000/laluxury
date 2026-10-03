@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback, useSyncExternalStore } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -72,14 +73,14 @@ export type NavItem = {
   description?: string;
 };
 
-const COLLAPSED_GROUPS_STORAGE_KEY = "laluxury_admin_collapsed_groups";
+const COLLAPSED_GROUPS_STORAGE_KEY = "nobleenclave_admin_collapsed_groups";
 
 function subscribeCollapsedGroups(callback: () => void) {
   window.addEventListener("storage", callback);
-  window.addEventListener("laluxury:collapsed-groups-change", callback);
+  window.addEventListener("nobleenclave:collapsed-groups-change", callback);
   return () => {
     window.removeEventListener("storage", callback);
-    window.removeEventListener("laluxury:collapsed-groups-change", callback);
+    window.removeEventListener("nobleenclave:collapsed-groups-change", callback);
   };
 }
 
@@ -151,7 +152,7 @@ export function AdminNav({
       const current = getCollapsedGroupsSnapshot();
       const next = { ...current, [groupName]: !current[groupName] };
       localStorage.setItem(COLLAPSED_GROUPS_STORAGE_KEY, JSON.stringify(next));
-      window.dispatchEvent(new Event("laluxury:collapsed-groups-change"));
+      window.dispatchEvent(new Event("nobleenclave:collapsed-groups-change"));
     } catch {}
   }, []);
 
@@ -277,12 +278,12 @@ export function AdminNav({
       {/* Brand Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <Link href="/admin" className="group flex items-center gap-2.5">
-          <div className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-tr from-[var(--accent)] to-[#a84b55] text-white shadow-xs">
-            <Sparkles className="h-4 w-4" />
+          <div className="grid h-8 w-8 place-items-center rounded-xl bg-[#7A2E3C] p-1 shadow-xs">
+            <Image src="/emblem.png" alt="Noble Enclave" width={24} height={24} className="h-5 w-auto object-contain" />
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-bold tracking-tight text-stone-900">
-              Nobel Enclave
+              Noble Enclave
             </span>
             <span className="text-[10px] font-semibold tracking-wider uppercase text-stone-400">
               Admin Console
@@ -414,7 +415,7 @@ export function AdminNav({
             </div>
             <div className="min-w-0 flex-1">
               <span className="block text-[11px] font-semibold text-stone-900 leading-tight">
-                Nobel Enclave Accra
+                Noble Enclave Accra
               </span>
               <span className="block text-[10px] text-stone-500 mt-0.5 truncate">
                 Store Online · Live Orders
@@ -492,9 +493,9 @@ export function AdminNav({
       {/* Top section: Logo + Search + Icons */}
       <div className="flex flex-col items-center w-full">
         {/* Brand Icon */}
-        <Link href="/admin" title="Nobel Enclave Admin Console" className="mb-4">
-          <div className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-tr from-[var(--accent)] to-[#a84b55] text-white shadow-xs hover:opacity-90 transition-opacity">
-            <Sparkles className="h-4 w-4" />
+        <Link href="/admin" title="Noble Enclave Admin Console" className="mb-4">
+          <div className="grid h-8 w-8 place-items-center rounded-xl bg-[#7A2E3C] p-1 shadow-xs hover:opacity-90 transition-opacity">
+            <Image src="/emblem.png" alt="Noble Enclave" width={24} height={24} className="h-5 w-auto object-contain" />
           </div>
         </Link>
 

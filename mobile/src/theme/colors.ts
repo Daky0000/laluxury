@@ -1,5 +1,5 @@
 export const colors = {
-  // Nobel Enclave Signature Wine Palette (From globals.css / Efie Home Storefront)
+  // Noble Enclave Signature Wine Palette (From globals.css / Efie Home Storefront)
   primary: "#7A2E3C",         // Signature deep wine / bordeaux
   primaryDark: "#63252F",     // Deep shadow wine
   primaryLight: "#96525E",    // Mid soft wine
@@ -28,11 +28,11 @@ export const colors = {
   textLight: "#FFFFFF",       // White text on dark buttons/badges
 
   // Accents
-  brass: "#C9A227",           // Nobel Enclave warm brass
+  brass: "#C9A227",           // Noble Enclave warm brass
   gold: "#C9A227",            // Brass / gold accent
   goldLight: "#F5ECC8",
   goldDark: "#9E7B15",
-  sage: "#3F5348",            // Nobel Enclave sage green accent
+  sage: "#3F5348",            // Noble Enclave sage green accent
 
   // Statuses
   success: "#3F7D58",

@@ -11,9 +11,9 @@ import {
 } from "react";
 import { usePathname } from "next/navigation";
 
-const STORAGE_KEY = "laluxury_admin_hide_nav";
-const BEGINNER_MODE_KEY = "laluxury_admin_beginner_mode";
-const NAV_CHANGE_EVENT = "laluxury:admin-nav-change";
+const STORAGE_KEY = "nobleenclave_admin_hide_nav";
+const BEGINNER_MODE_KEY = "nobleenclave_admin_beginner_mode";
+const NAV_CHANGE_EVENT = "nobleenclave:admin-nav-change";
 
 interface AdminNavContextValue {
   navHidden: boolean;

@@ -23,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "All products",
     description:
-      "Every Nobel Enclave piece — bedding, living, windows and student essentials — in one place.",
+      "Every Noble Enclave piece — bedding, living, windows and student essentials — in one place.",
   };
 }
 

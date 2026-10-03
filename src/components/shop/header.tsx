@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { connection } from "next/server";
 import { Search } from "lucide-react";
 import { announcementItems, getSettings } from "@/lib/settings";
@@ -44,7 +45,15 @@ export async function Header() {
 
       <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-md">
         <div className="lx-container flex items-center gap-3 py-3.5 sm:py-4 md:gap-8">
-          <Link href="/" className="mr-auto min-w-0 leading-none">
+          <Link href="/" className="mr-auto min-w-0 flex items-center gap-2.5 sm:gap-3 leading-none group">
+            <Image
+              src="/emblem.png"
+              alt="Noble Enclave"
+              width={36}
+              height={36}
+              className="h-7 w-auto object-contain sm:h-8 transition-transform group-hover:scale-105"
+              priority
+            />
             <span className="font-display text-[clamp(1.125rem,4.5vw,1.375rem)] font-light uppercase tracking-[0.18em] sm:text-[1.5rem] sm:tracking-[0.22em] md:text-[1.625rem]">
               {settings.storeName}
             </span>

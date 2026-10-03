@@ -1,5 +1,5 @@
-# LaLuxury — One-Click Localhost Environment Starter
-Write-Host "Starting LaLuxury Local Environment..." -ForegroundColor Cyan
+# Noble Enclave — One-Click Localhost Environment Starter
+Write-Host "Starting Noble Enclave Local Environment..." -ForegroundColor Cyan
 
 # 1. Ensure Docker Desktop and local PostgreSQL container are running
 $dockerRunning = $false
@@ -47,7 +47,7 @@ npm run db:migrate
 node scripts/seed-once.mjs
 
 # 3. Start Next.js local server on http://localhost:3005
-Write-Host "Nobel Enclave Storefront: http://localhost:3005" -ForegroundColor Green
-Write-Host "Nobel Enclave Pre-Orders: http://localhost:3005/pre-order" -ForegroundColor Green
+Write-Host "Noble Enclave Storefront: http://localhost:3005" -ForegroundColor Green
+Write-Host "Noble Enclave Pre-Orders: http://localhost:3005/pre-order" -ForegroundColor Green
 Write-Host "Admin Console: http://localhost:3005/admin (owner@nobleenclave.com / ChangeMe!2026)" -ForegroundColor Yellow
 npm run dev

@@ -37,7 +37,7 @@ export default function AdminError({
           {process.env.NODE_ENV !== "production" ? (
             <div className="mt-4 rounded-lg bg-[var(--surface-sunken)] p-3 text-left font-mono text-xs text-[var(--text-muted)]">
               <span className="block text-[10px] text-[var(--text-muted)] mb-1">Local dev command:</span>
-              <code>docker start laluxury-pg</code>
+              <code>docker start nobleenclave-pg</code>
             </div>
           ) : null}
         </div>

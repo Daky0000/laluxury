@@ -373,7 +373,7 @@ export async function integrationsView(): Promise<IntegrationGroup[]> {
         field("smtp", "port", "Port", "587 for TLS, 465 for SSL"),
         field("smtp", "user", "Username"),
         field("smtp", "password", "Password"),
-        field("smtp", "from", "From address", 'e.g. Nobel Enclave <no-reply@nobleenclave.com>'),
+        field("smtp", "from", "From address", 'e.g. Noble Enclave <no-reply@nobleenclave.com>'),
       ],
     },
     {

@@ -14,7 +14,7 @@ export async function getPublicStoreConfig() {
       ok: true,
       apiVersion: "1.2.2",
       revision: 1,
-      storeName: settings?.storeName || "Nobel Enclave",
+      storeName: settings?.storeName || "Noble Enclave",
       tagline: settings?.tagline || "Atelier & Living",
       currency: "GHS",
       paymentMode: activeMode,

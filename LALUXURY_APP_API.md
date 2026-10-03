@@ -1,6 +1,6 @@
-# Nobel Enclave Custom App REST API Reference
+# Noble Enclave Custom App REST API Reference
 
-This API allows a custom mobile application (iOS, Android, React Native, Flutter, etc.) to manage products, variants, images, categories, and inventory for **Nobel Enclave**, communicating directly and in real-time with the website.
+This API allows a custom mobile application (iOS, Android, React Native, Flutter, etc.) to manage products, variants, images, categories, and inventory for **Noble Enclave**, communicating directly and in real-time with the website.
 
 ---
 

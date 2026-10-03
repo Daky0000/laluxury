@@ -469,7 +469,7 @@ export function StorefrontCartScreen({
               firstName: safeFirst,
               lastName: safeLast,
               phone: safePhone,
-              line1: "Nobel Enclave Showroom (Self-Pickup)",
+              line1: "Noble Enclave Showroom (Self-Pickup)",
               line2: "Spintex Road / Airport Residential",
               city: "Accra",
               region: "Greater Accra",
@@ -638,7 +638,7 @@ export function StorefrontCartScreen({
             <Feather name="arrow-left" size={22} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.brandContainer}>
-            <Text style={styles.brandTitle}>NOBEL ENCLAVE</Text>
+            <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
             <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
           </View>
           <View style={{ width: 40 }} />
@@ -669,7 +669,7 @@ export function StorefrontCartScreen({
         </TouchableOpacity>
 
         <View style={styles.brandContainer}>
-          <Text style={styles.brandTitle}>NOBEL ENCLAVE</Text>
+          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
           <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
         </View>
 
@@ -1017,7 +1017,7 @@ export function StorefrontCartScreen({
               <View style={styles.cardContentLeft}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
                   <Text style={[styles.paymentMethodText, { color: colors.primary }]}>
-                    Nobel Enclave Atelier & Living Showroom
+                    Noble Enclave Atelier & Living Showroom
                   </Text>
                   <View style={{ backgroundColor: "#E6F4EA", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
                     <Text style={{ color: "#137333", fontSize: 11, fontWeight: "700" }}>FREE</Text>

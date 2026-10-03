@@ -133,7 +133,7 @@ export default async function ContactPage() {
             {/* The showroom shot; swap the file to change it. */}
             <Photo
               src="/catalog/room-living.webp"
-              alt="Inside the Nobel Enclave showroom"
+              alt="Inside the Noble Enclave showroom"
               sizes="(min-width: 1024px) 45vw, 100vw"
             />
           </div>

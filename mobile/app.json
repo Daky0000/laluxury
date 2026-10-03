@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Nobel Enclave",
+    "name": "Noble Enclave",
     "slug": "danny",
     "owner": "danny1999s-team",
-    "version": "1.2.6",
+    "version": "1.2.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "com.nobleenclave.management",
-      "versionCode": 8,
+      "versionCode": 9,
       "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
@@ -26,15 +26,23 @@
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Nobel Enclave to access your photos to attach product imagery.",
-          "cameraPermission": "Allow Nobel Enclave to capture inventory photos directly with camera."
+          "photosPermission": "Allow Noble Enclave to access your photos to attach product imagery.",
+          "cameraPermission": "Allow Noble Enclave to capture inventory photos directly with camera."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/splash-icon.png",
+          "color": "#7A2E3C"
         }
       ]
     ],

@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Animated } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { View, Text, StyleSheet, Animated, Image } from "react-native";
 import { colors } from "../theme/colors";
 
 export function SplashScreen() {
@@ -21,12 +20,14 @@ export function SplashScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Centered Brand Title with Compass Icon */}
+      {/* Centered Brand Emblem + Title */}
       <View style={styles.brandBox}>
-        <Text style={styles.brandTitle}>NOBEL ENCLAVE</Text>
-        <View style={styles.leafIconContainer}>
-          <Feather name="compass" size={26} color={colors.gold} />
-        </View>
+        <Image
+          source={require("../../assets/emblem-transparent.png")}
+          style={styles.emblemImage}
+        />
+        <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
+        <Text style={styles.brandSubtitle}>HOME TEXTILES • LIVING ESSENTIALS</Text>
       </View>
 
       {/* Bottom Loading Progress Bar */}
@@ -53,17 +54,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  emblemImage: {
+    width: 120,
+    height: 82,
+    resizeMode: "contain",
+    marginBottom: 18,
+  },
   brandTitle: {
     fontFamily: "serif",
-    fontSize: 34,
+    fontSize: 32,
     fontWeight: "700",
     color: "#FFFFFF",
     letterSpacing: 4,
     textAlign: "center",
   },
-  leafIconContainer: {
-    marginTop: 22,
-    opacity: 0.9,
+  brandSubtitle: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.gold,
+    letterSpacing: 2.5,
+    marginTop: 8,
+    textAlign: "center",
   },
   bottomBox: {
     alignItems: "center",

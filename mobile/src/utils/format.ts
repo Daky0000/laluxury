@@ -1,5 +1,5 @@
 /**
- * Nobel Enclave Currency & Date Formatter
+ * Noble Enclave Currency & Date Formatter
  * Standard currency is GHS (GH₵). Amounts in the database are minor units (pesewas).
  */
 

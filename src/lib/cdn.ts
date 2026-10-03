@@ -84,7 +84,7 @@ export async function uploadToCloudinary(
 
   try {
     const result = await cloudinary.uploader.upload(dataUri, {
-      folder: `laluxury/${options.folder}`,
+      folder: `nobleenclave/${options.folder}`,
       resource_type: "image",
       overwrite: false,
       unique_filename: true,

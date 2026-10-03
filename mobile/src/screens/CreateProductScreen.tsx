@@ -26,7 +26,7 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
   const [priceGHS, setPriceGHS] = useState("");
   const [stock, setStock] = useState("5");
   const [status, setStatus] = useState<"ACTIVE" | "DRAFT">("ACTIVE");
-  const [brand, setBrand] = useState("Nobel Enclave");
+  const [brand, setBrand] = useState("Noble Enclave");
   const [material, setMaterial] = useState("");
   const [isPreorder, setIsPreorder] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -257,7 +257,7 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
             <Text style={styles.inputLabel}>BRAND</Text>
             <TextInput
               style={styles.input}
-              placeholder="Nobel Enclave"
+              placeholder="Noble Enclave"
               placeholderTextColor={colors.textSubtle}
               value={brand}
               onChangeText={setBrand}

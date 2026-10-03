@@ -43,7 +43,7 @@ export async function updateSettingsAction(
     // An unknown value would leave the front door blank, so it falls back to
     // the shipped default.
     landingPage: isLandingPage(landingPage) ? landingPage : DEFAULT_SETTINGS.landingPage,
-    storeName: String(formData.get("storeName") || "").trim() || "Nobel Enclave",
+    storeName: String(formData.get("storeName") || "").trim() || "Noble Enclave",
     tagline: String(formData.get("tagline") || "").trim(),
     supportEmail: String(formData.get("supportEmail") || "").trim(),
     supportPhone: String(formData.get("supportPhone") || "").trim(),

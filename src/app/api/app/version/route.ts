@@ -15,14 +15,14 @@ export async function GET() {
   }
   return NextResponse.json(
     {
-      latestVersion: "1.2.6",
-      versionCode: 8,
-      appName: "Nobel Enclave Atelier & Living",
+      latestVersion: "1.2.7",
+      versionCode: 9,
+      appName: "Noble Enclave Atelier & Living",
       downloadUrl: releaseUrl,
       directUrl: releaseUrl,
-      releaseNotes: "Nobel Enclave v1.2.6 release: New regal app launcher icon, high-reliability 3-stage SMS OTP retry with USSD (*928*01#) instant lookup fallback, and friction-free sign-in.",
+      releaseNotes: "Noble Enclave v1.2.7 release: Official Noble Enclave branding, royal gold NE monogram & app launcher icon, status bar system notifications for updates, and cross-platform synchronization.",
       minSupportedVersion: "1.0.0",
-      publishedAt: "2026-10-02T23:20:00.000Z",
+      publishedAt: "2026-10-03T14:30:00.000Z",
     },
     {
       headers: {

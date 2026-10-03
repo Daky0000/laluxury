@@ -6,7 +6,7 @@ import { LegalShell } from "@/components/shop/legal-shell";
 export const metadata: Metadata = {
   title: "Terms of sale",
   description:
-    "The terms you agree to when you order from Nobel Enclave: prices, payment, delivery, returns and how to reach us.",
+    "The terms you agree to when you order from Noble Enclave: prices, payment, delivery, returns and how to reach us.",
 };
 
 /**

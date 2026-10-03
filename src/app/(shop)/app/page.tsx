@@ -3,8 +3,8 @@ import Link from "next/link";
 import { Download, Smartphone, ShieldCheck, CheckCircle2, ArrowRight } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Download Mobile App | Nobel Enclave",
-  description: "Download the Nobel Enclave mobile app for Android to browse luxury living collections, track orders, and manage pieces.",
+  title: "Download Mobile App | Noble Enclave",
+  description: "Download the Noble Enclave mobile app for Android to browse luxury living collections, track orders, and manage pieces.",
 };
 
 const DOWNLOAD_URL = "/api/app/download";
@@ -19,7 +19,7 @@ export default function AppDownloadPage() {
           Version 1.2.5 &bull; Latest Release
         </div>
         <h1 className="mt-2 text-[clamp(2.25rem,5vw,3.5rem)] leading-tight font-serif text-[var(--text-primary)]">
-          Nobel Enclave Mobile App
+          Noble Enclave Mobile App
         </h1>
         <p className="mx-auto mt-3 max-w-[620px] text-sm sm:text-base font-light leading-relaxed text-[var(--text-muted)]">
           The complete luxury living experience in your pocket. Browse handcrafted collections in GH₵, purchase seamlessly with Paystack or MoMo, or sign in to manage your orders and concierge services in real time.
@@ -105,7 +105,7 @@ export default function AppDownloadPage() {
                   Allow Installation
                 </h4>
                 <p className="mt-1 text-sm font-light leading-relaxed text-[var(--text-secondary)]">
-                  Open your phone&rsquo;s <strong>Downloads</strong> and tap <code>Nobel-Enclave.apk</code>. If prompted by your browser or Android system to allow unknown apps, toggle &ldquo;Allow from this source&rdquo;.
+                  Open your phone&rsquo;s <strong>Downloads</strong> and tap <code>Noble-Enclave.apk</code>. If prompted by your browser or Android system to allow unknown apps, toggle &ldquo;Allow from this source&rdquo;.
                 </p>
               </div>
             </li>

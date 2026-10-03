@@ -24,7 +24,7 @@ function fail(name: string, reason: string) {
 }
 
 console.log("\n=======================================================");
-console.log("   LaLuxury Cross-Platform Sync & Anti-Drift Suite     ");
+console.log("   Noble Enclave Cross-Platform Sync & Anti-Drift Suite");
 console.log("=======================================================\n");
 
 const ROOT = process.cwd();

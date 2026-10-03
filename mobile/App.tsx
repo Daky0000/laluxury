@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, View, SafeAreaView, StatusBar, Alert, BackHandler, ToastAndroid } from "react-native";
+import { StyleSheet, View, SafeAreaView, StatusBar, Alert, BackHandler, ToastAndroid, Platform } from "react-native";
+import * as Notifications from "expo-notifications";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "./src/theme/colors";
@@ -69,7 +70,18 @@ import { PopNotification, PopNotificationData } from "./src/components/PopNotifi
 import { AppUpdateModal, AppUpdateInfo } from "./src/components/AppUpdateModal";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const CURRENT_APP_VERSION = "1.2.6";
+// Configure phone notification handler for system tray
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+const CURRENT_APP_VERSION = "1.2.7";
 
 function isNewerVersion(current: string, latest: string): boolean {
   const cParts = current.split(".").map((n) => parseInt(n, 10) || 0);
@@ -112,6 +124,30 @@ function MainApp() {
     setNotification(data);
   };
 
+  // Configure Android notification channel & interaction listeners
+  useEffect(() => {
+    async function configureNotifications() {
+      if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync("noble_updates", {
+          name: "Noble Enclave Updates",
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: "#7A2E3C",
+          sound: "default",
+        });
+      }
+    }
+    configureNotifications().catch(() => {});
+
+    const responseSub = Notifications.addNotificationResponseReceivedListener(() => {
+      setShowUpdateModal(true);
+    });
+
+    return () => {
+      responseSub.remove();
+    };
+  }, []);
+
   // Check for app updates on launch and prompt user
   useEffect(() => {
     async function checkAppUpdates() {
@@ -120,9 +156,32 @@ function MainApp() {
         if (info && info.latestVersion) {
           setUpdateInfo(info);
           if (isNewerVersion(CURRENT_APP_VERSION, info.latestVersion)) {
-            const dismissed = await AsyncStorage.getItem("@laluxury_dismissed_update_v");
+            const dismissed = await AsyncStorage.getItem("@nobleenclave_dismissed_update_v");
             if (dismissed !== info.latestVersion) {
               setShowUpdateModal(true);
+
+              // Post native push notification to phone notification area
+              try {
+                const { status: existingStatus } = await Notifications.getPermissionsAsync();
+                let finalStatus = existingStatus;
+                if (existingStatus !== "granted") {
+                  const { status } = await Notifications.requestPermissionsAsync();
+                  finalStatus = status;
+                }
+                if (finalStatus === "granted") {
+                  await Notifications.scheduleNotificationAsync({
+                    content: {
+                      title: "Noble Enclave Update Available",
+                      body: `Version ${info.latestVersion} is ready to install with official brand assets & improvements.`,
+                      data: { version: info.latestVersion, url: info.downloadUrl },
+                      color: "#7A2E3C",
+                    },
+                    trigger: null,
+                  });
+                }
+              } catch {
+                // Non-blocking notification fallback
+              }
             }
           }
         }
@@ -137,7 +196,7 @@ function MainApp() {
     setShowUpdateModal(false);
     if (updateInfo) {
       try {
-        await AsyncStorage.setItem("@laluxury_dismissed_update_v", updateInfo.latestVersion);
+        await AsyncStorage.setItem("@nobleenclave_dismissed_update_v", updateInfo.latestVersion);
       } catch {
         // ignore
       }

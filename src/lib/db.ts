@@ -46,7 +46,7 @@ function createClient() {
     allowExitOnIdle: true,
     // Names the connections in pg_stat_activity, so "who is holding these?" has
     // an answer next time.
-    application_name: "laluxury",
+    application_name: "nobleenclave",
   });
 
   const client = new PrismaClient({

@@ -40,7 +40,7 @@ const nextConfig: NextConfig = {
     const cdnUrl = (process.env.CATALOG_CDN_URL || process.env.R2_PUBLIC_URL || "").replace(/\/+$/, "");
     return [
       ...(cdnUrl ? [{ source: "/catalog/:path*", destination: `${cdnUrl}/catalog/:path*`, permanent: false }] : []),
-      ...["/downloads/:file(.*\\.apk)", "/NobelEnclave-Management.apk", "/download", "/app/download"].map((source) => ({
+      ...["/downloads/:file(.*\\.apk)", "/NobleEnclave-Management.apk", "/Noble-Enclave.apk", "/NobelEnclave-Management.apk", "/download", "/app/download"].map((source) => ({
         source, destination: "/api/app/download", permanent: false,
       })),
     ];
