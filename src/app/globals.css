@@ -50,8 +50,8 @@
   --color-danger: #a63d3d;
   --color-info: #3c5a78;
 
-  --font-display: var(--font-display), Georgia, "Times New Roman", serif;
-  --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-sans: Jost, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Restored luxury typography scale.
      The old override clamped text-xs and text-sm to 1rem, collapsing the entire
@@ -71,6 +71,7 @@
 }
 
 :root {
+  --font-body: Jost, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --surface: #f1f0ec;
   --surface-raised: #fbfaf6;
   --surface-sunken: #e9e8e3;

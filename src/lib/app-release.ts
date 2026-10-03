@@ -1,6 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
-
 export const APP_BASE_RELEASE = {
   version: "1.3.2",
   versionCode: 14,
@@ -14,31 +11,8 @@ export const APP_BASE_RELEASE = {
 export const FALLBACK_APK_URL =
   "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.3.2.apk";
 
-/**
- * Resolves the latest version and build number directly from mobile/app.json,
- * ensuring the download link always matches the newest built version automatically.
- */
+/** Release metadata is compile-time data so server tracing stays bounded. */
 export function resolveAppVersion(): { version: string; versionCode: number } {
-  try {
-    const candidates = [
-      path.join(process.cwd(), "mobile", "app.json"),
-      path.join(process.cwd(), "..", "mobile", "app.json"),
-    ];
-    for (const p of candidates) {
-      if (fs.existsSync(p)) {
-        const raw = fs.readFileSync(p, "utf-8");
-        const json = JSON.parse(raw);
-        if (json?.expo?.version) {
-          const version = String(json.expo.version);
-          const versionCode = Number(json.expo?.android?.versionCode) || APP_BASE_RELEASE.versionCode;
-          return { version, versionCode };
-        }
-      }
-    }
-  } catch {
-    // fallback if file cannot be read
-  }
-
   return {
     version: APP_BASE_RELEASE.version,
     versionCode: APP_BASE_RELEASE.versionCode,
@@ -90,9 +64,7 @@ export type AppReleaseInfo = {
   minSupportedVersion: string;
 };
 
-/**
- * Returns complete release info dynamically aligned with the latest app version.
- */
+/** Returns complete release information from the compile-time release manifest. */
 export function getAppReleaseInfo(): AppReleaseInfo {
   const { version, versionCode } = resolveAppVersion();
   const downloadUrl = appDownloadUrl();
