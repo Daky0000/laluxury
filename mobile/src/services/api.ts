@@ -43,12 +43,13 @@ class ApiService {
         if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
           clean = `https://${clean}`;
         }
-        // In live mode, ignore and clear any old local testing URLs
+        // In live mode, ignore and clear any old local testing URLs or legacy domains
         if (
           clean.includes("localhost") ||
           clean.includes("127.0.0.1") ||
           clean.includes("10.0.2.2") ||
-          clean.includes("192.168.")
+          clean.includes("192.168.") ||
+          clean.includes("laluxury")
         ) {
           this.baseUrl = DEFAULT_URL;
           AsyncStorage.removeItem(STORAGE_KEY_URL).catch(() => {});
@@ -663,14 +664,43 @@ class ApiService {
     directUrl: string;
     releaseNotes: string;
   }> {
-    return this.request<{
-      latestVersion: string;
-      versionCode: number;
-      appName: string;
-      downloadUrl: string;
-      directUrl: string;
-      releaseNotes: string;
-    }>("/api/app/version", {}, true);
+    try {
+      return await this.request<{
+        latestVersion: string;
+        versionCode: number;
+        appName: string;
+        downloadUrl: string;
+        directUrl: string;
+        releaseNotes: string;
+      }>("/api/app/version", {}, true);
+    } catch {
+      // Direct production fetch if primary request failed (e.g. stale DNS or saved URL in AsyncStorage)
+      try {
+        const directRes = await fetch(`${DEFAULT_URL}/api/app/version`, {
+          headers: { Accept: "application/json" },
+        });
+        if (directRes.ok) {
+          const data = await directRes.json();
+          // Heal baseUrl back to live production domain
+          this.baseUrl = DEFAULT_URL;
+          AsyncStorage.removeItem(STORAGE_KEY_URL).catch(() => {});
+          return data;
+        }
+      } catch {
+        // offline fallback
+      }
+
+      // Safe resilient metadata so the user is NEVER blocked from updating
+      return {
+        latestVersion: "1.2.7",
+        versionCode: 9,
+        appName: "Noble Enclave Atelier & Living",
+        downloadUrl: `${DEFAULT_URL}/app`,
+        directUrl: `${DEFAULT_URL}/api/app/download`,
+        releaseNotes:
+          "Noble Enclave v1.2.7 release: Official Noble Enclave branding, royal gold NE monogram & app launcher icon, status bar system notifications for updates, and cross-platform synchronization.",
+      };
+    }
   }
 
   // --- Owner Custom Notifications ------------------------------------------

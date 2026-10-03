@@ -12,6 +12,7 @@ import {
   Linking,
   Modal,
   Share,
+  Alert,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -99,22 +100,43 @@ export function AccountScreen({
     try {
       const res = await api.checkAppVersion();
       setUpdateInfo(res);
-      if (res.latestVersion === "1.2.5") {
-        setUpdateStatus("You are running the latest version (v1.2.5).");
+      if (res.latestVersion === "1.2.7") {
+        setUpdateStatus("You are running the latest version (v1.2.7).");
+        Alert.alert(
+          "Noble Enclave v1.2.7",
+          "You are on the latest version (v1.2.7). If you wish to re-download or update your install, tap below.",
+          [
+            { text: "Close", style: "cancel" },
+            {
+              text: "Download Page",
+              onPress: () => Linking.openURL(res.downloadUrl || "https://nobleenclave.com/app"),
+            },
+          ]
+        );
       } else {
         setUpdateStatus(`Update available: v${res.latestVersion}`);
         setShowUpdateModal(true);
       }
     } catch {
-      setUpdateStatus("Could not reach update server. Check your connection.");
+      setUpdateStatus("Redirecting to download page...");
+      Alert.alert(
+        "Noble Enclave Update",
+        "Could not verify version online. Would you like to open the official download page to get the latest APK?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Go to Download Page",
+            onPress: () => Linking.openURL("https://nobleenclave.com/app"),
+          },
+        ]
+      );
     } finally {
       setCheckingUpdate(false);
     }
   };
 
   const handleDownloadUpdate = (url?: string) => {
-    // The backend redirects to wherever the current APK is hosted.
-    const fallback = `${api.getBaseUrl()}/api/app/download`;
+    const fallback = "https://nobleenclave.com/app";
     Linking.openURL(url || fallback).catch(() => {
       Linking.openURL(fallback);
     });

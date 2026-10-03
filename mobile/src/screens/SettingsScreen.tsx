@@ -33,13 +33,33 @@ export function SettingsScreen({ user, onLogout }: Props) {
     try {
       const res = await api.checkAppVersion();
       setUpdateInfo(res);
-      if (res.latestVersion === "1.2.2") {
-        Alert.alert("Latest Release", "This app is running the latest version (v1.2.2).");
+      if (res.latestVersion === "1.2.7") {
+        Alert.alert(
+          "Noble Enclave v1.2.7",
+          "Your app is running the latest version (v1.2.7). If you would like to re-download or update your install, tap below.",
+          [
+            { text: "OK", style: "cancel" },
+            {
+              text: "Download Page",
+              onPress: () => Linking.openURL(res.downloadUrl || "https://nobleenclave.com/app"),
+            },
+          ]
+        );
       } else {
         setShowUpdateModal(true);
       }
     } catch {
-      Alert.alert("Update Error", "Could not reach update server. Check your connection.");
+      Alert.alert(
+        "Noble Enclave Update",
+        "Could not verify version online. Would you like to open the official download page to get the latest APK?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Open Download Page",
+            onPress: () => Linking.openURL("https://nobleenclave.com/app"),
+          },
+        ]
+      );
     } finally {
       setCheckingUpdate(false);
     }

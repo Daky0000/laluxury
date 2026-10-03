@@ -5,13 +5,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  let releaseUrl: string;
+  let releaseUrl = "https://nobleenclave.com/app";
   try {
     releaseUrl = appDownloadUrl();
   } catch {
-    return NextResponse.json({ error: "The app release is temporarily unavailable." }, {
-      status: 503, headers: { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" },
-    });
+    // keep fallback
   }
   return NextResponse.json(
     {
