@@ -1,5 +1,5 @@
-export const FALLBACK_APK_URL =
-  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.2.8.apk";
+import fs from "node:fs";
+import path from "node:path";
 
 export const APP_BASE_RELEASE = {
   version: "1.2.8",
@@ -11,19 +11,72 @@ export const APP_BASE_RELEASE = {
     "Noble Enclave v1.2.8 release: Store design management on web & mobile, refreshed Bedding · Curtains · Carpets · Cushions category carousel with dark overlays, 2-column newly stocked catalog view, direct search header button, phone-only authentication with SMS OTP, dynamic runtime version verification, and configurable delivery fees.",
 };
 
-/** Shared server-side destination. Prefer a versioned R2 object in production. */
-export function appDownloadUrl(): string {
-  const raw = process.env.APK_DOWNLOAD_URL || FALLBACK_APK_URL;
+export const FALLBACK_APK_URL =
+  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.2.8.apk";
+
+/**
+ * Resolves the latest version and build number directly from mobile/app.json,
+ * ensuring the download link always matches the newest built version automatically.
+ */
+export function resolveAppVersion(): { version: string; versionCode: number } {
   try {
-    const url = new URL(raw);
-    if (url.protocol !== "https:") return FALLBACK_APK_URL;
-    if (url.username || url.password) {
-      return FALLBACK_APK_URL;
+    const candidates = [
+      path.join(process.cwd(), "mobile", "app.json"),
+      path.join(process.cwd(), "..", "mobile", "app.json"),
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        const raw = fs.readFileSync(p, "utf-8");
+        const json = JSON.parse(raw);
+        if (json?.expo?.version) {
+          const version = String(json.expo.version);
+          const versionCode = Number(json.expo?.android?.versionCode) || APP_BASE_RELEASE.versionCode;
+          return { version, versionCode };
+        }
+      }
     }
-    return url.toString();
   } catch {
-    return FALLBACK_APK_URL;
+    // fallback if file cannot be read
   }
+
+  return {
+    version: APP_BASE_RELEASE.version,
+    versionCode: APP_BASE_RELEASE.versionCode,
+  };
+}
+
+/**
+ * Dynamic download URL. Resolves to the current versioned APK on the verified R2 CDN.
+ * If an APK_DOWNLOAD_URL environment variable is provided, it is only accepted if it
+ * matches the current version (preventing stale env vars from serving old APKs).
+ */
+export function appDownloadUrl(): string {
+  const { version } = resolveAppVersion();
+  const cdnBase = (
+    process.env.R2_PUBLIC_URL ||
+    process.env.NEXT_PUBLIC_MEDIA_BASE_URL ||
+    "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev"
+  ).replace(/\/+$/, "");
+
+  const versionedUrl = `${cdnBase}/downloads/NobleEnclave-v${version}.apk`;
+
+  const envUrl = process.env.APK_DOWNLOAD_URL;
+  if (envUrl) {
+    try {
+      const u = new URL(envUrl);
+      if (u.protocol === "https:" && !u.username && !u.password) {
+        const match = u.pathname.match(/(?:v|-v)?(\d+\.\d+\.\d+)(?:[._-]apk|\.apk)?$/i);
+        // Only accept the env var if it matches the current app version
+        if (match && match[1] === version) {
+          return u.toString();
+        }
+      }
+    } catch {
+      // ignore invalid URL
+    }
+  }
+
+  return versionedUrl;
 }
 
 export type AppReleaseInfo = {
@@ -38,30 +91,17 @@ export type AppReleaseInfo = {
 };
 
 /**
- * Resolves current release info dynamically from the configured APK download URL
- * or falls back to the canonical APP_BASE_RELEASE metadata.
+ * Returns complete release info dynamically aligned with the latest app version.
  */
 export function getAppReleaseInfo(): AppReleaseInfo {
+  const { version, versionCode } = resolveAppVersion();
   const downloadUrl = appDownloadUrl();
-  let fileName = "NobleEnclave-v1.2.7.apk";
-  try {
-    const u = new URL(downloadUrl);
-    const parts = u.pathname.split("/");
-    const last = parts[parts.length - 1];
-    if (last && last.toLowerCase().endsWith(".apk")) {
-      fileName = last;
-    }
-  } catch {
-    // keep default
-  }
-
-  // Extract version from file name if pattern matches e.g. -v1.2.7.apk or -1.2.7.apk
-  const versionMatch = fileName.match(/(?:v|-v)?(\d+\.\d+\.\d+)(?:[._-]apk|\.apk)?$/i);
-  const version = versionMatch ? versionMatch[1] : APP_BASE_RELEASE.version;
+  const fileName = `NobleEnclave-v${version}.apk`;
 
   return {
     ...APP_BASE_RELEASE,
     version,
+    versionCode,
     downloadUrl,
     fileName,
   };
