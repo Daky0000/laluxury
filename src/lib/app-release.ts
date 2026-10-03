@@ -1,5 +1,5 @@
 const FALLBACK_APK_URL =
-  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobelEnclave-v1.2.6.apk";
+  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.2.7.apk";
 
 /** Shared server-side destination. Prefer a versioned R2 object in production. */
 export function appDownloadUrl(): string {
