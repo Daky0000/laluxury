@@ -26,12 +26,6 @@ type Props = {
   onNavigateToBag: () => void;
   onSelectProduct: (productId: string) => void;
   onAddToCart: (product: Product) => void;
-  onNotify?: (notif: {
-    title: string;
-    message?: string;
-    type?: "success" | "info" | "warning" | "error";
-    icon?: keyof typeof Feather.glyphMap;
-  }) => void;
 };
 
 const FILTER_PILLS = [
@@ -50,7 +44,6 @@ export function StorefrontShopScreen({
   onNavigateToBag,
   onSelectProduct,
   onAddToCart,
-  onNotify,
 }: Props) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +52,6 @@ export function StorefrontShopScreen({
     initialFilter ? initialFilter.toUpperCase() : "ALL"
   );
   const [searchQuery, setSearchQuery] = useState("");
-  const [addedToast, setAddedToast] = useState<string | null>(null);
 
   const { width: windowWidth } = useWindowDimensions();
   const gridMetrics = getProductGridMetrics(windowWidth);
@@ -96,16 +88,6 @@ export function StorefrontShopScreen({
 
   const handleQuickAdd = (product: Product) => {
     onAddToCart(product);
-    setAddedToast(`Added "${product.title}" to bag`);
-    setTimeout(() => setAddedToast(null), 2200);
-    if (onNotify) {
-      onNotify({
-        title: "Added to Bag",
-        message: `${product.title} added to your bag.`,
-        type: "success",
-        icon: "shopping-bag",
-      });
-    }
   };
 
   // Filter and sort products according to the selected basic filter
@@ -213,16 +195,6 @@ export function StorefrontShopScreen({
           )}
         </TouchableOpacity>
       </View>
-
-      {/* Added Toast */}
-      {addedToast && (
-        <View style={styles.toast}>
-          <Feather name="check-circle" size={14} color="#FFFFFF" />
-          <Text style={styles.toastText} numberOfLines={1}>
-            {addedToast}
-          </Text>
-        </View>
-      )}
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}

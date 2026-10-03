@@ -701,7 +701,6 @@ function MainApp() {
                 onNavigateToAccount={() => setStorefrontTab("ACCOUNT")}
                 onSelectProduct={(id) => setSelectedProductId(id)}
                 onAddToCart={(prod) => handleAddToCart(prod)}
-                onNotify={notify}
                 onSwitchToBackend={
                   isOwnerStaff
                     ? () => {
@@ -727,7 +726,6 @@ function MainApp() {
                 onNavigateToBag={() => setStorefrontTab("BAG")}
                 onSelectProduct={(id) => setSelectedProductId(id)}
                 onAddToCart={(prod) => handleAddToCart(prod)}
-                onNotify={notify}
               />
             )}
 

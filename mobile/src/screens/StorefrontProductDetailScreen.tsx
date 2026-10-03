@@ -195,8 +195,6 @@ export function StorefrontProductDetailScreen({
   const sliderRef = useRef<ScrollView>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [addedToast, setAddedToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
 
   const { width: windowWidth } = useWindowDimensions();
   const gridMetrics = getProductGridMetrics(windowWidth);
@@ -310,16 +308,6 @@ export function StorefrontProductDetailScreen({
   const handleAdd = () => {
     if (!activeVariant || isSoldOut) return;
     onAddToCart(product, activeVariant, quantity);
-    setAddedToast(true);
-    setTimeout(() => setAddedToast(false), 2200);
-    if (onNotify) {
-      onNotify({
-        title: "Added to Bag",
-        message: `${quantity}× ${product.title} (${activeVariant.title}) added to your bag.`,
-        type: "success",
-        icon: "shopping-bag",
-      });
-    }
   };
 
   const handleShare = async () => {
@@ -421,18 +409,6 @@ export function StorefrontProductDetailScreen({
     }
 
     setShowBulkModal(false);
-    setToastMessage(`Added ${totalBulkItems} items across ${bulkSelectedVariants.length} option(s)`);
-    setAddedToast(true);
-    setTimeout(() => setAddedToast(false), 2400);
-
-    if (onNotify) {
-      onNotify({
-        title: "Bulk Added to Bag",
-        message: `${totalBulkItems} items added across ${bulkSelectedVariants.length} option(s).`,
-        type: "success",
-        icon: "shopping-bag",
-      });
-    }
   };
 
   return (
@@ -472,14 +448,6 @@ export function StorefrontProductDetailScreen({
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Added Toast */}
-      {addedToast && (
-        <View style={styles.toast}>
-          <Feather name="check" size={14} color="#FFFFFF" />
-          <Text style={styles.toastText}>{toastMessage || `Added ${quantity} to your bag`}</Text>
-        </View>
-      )}
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Large Product Image Gallery with Swipeable Carousel */}
@@ -790,17 +758,6 @@ export function StorefrontProductDetailScreen({
                             stock: item.totalStock || 1,
                           } as any);
                           onAddToCart(item, defaultVariant, 1);
-                          setToastMessage(`Added "${item.title}" to bag`);
-                          setAddedToast(true);
-                          setTimeout(() => setAddedToast(false), 2200);
-                          if (onNotify) {
-                            onNotify({
-                              title: "Added to Bag",
-                              message: `${item.title} added to your bag.`,
-                              type: "success",
-                              icon: "shopping-bag",
-                            });
-                          }
                         }}
                         activeOpacity={0.8}
                       >

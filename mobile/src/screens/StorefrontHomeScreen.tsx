@@ -27,12 +27,6 @@ type Props = {
   onSelectProduct: (productId: string) => void;
   onAddToCart: (product: Product) => void;
   onSwitchToBackend?: () => void;
-  onNotify?: (notif: {
-    title: string;
-    message?: string;
-    type?: "success" | "info" | "warning" | "error";
-    icon?: keyof typeof Feather.glyphMap;
-  }) => void;
 };
 
 const DEFAULT_CATEGORIES: Category[] = [
@@ -51,14 +45,12 @@ export function StorefrontHomeScreen({
   onSelectProduct,
   onAddToCart,
   onSwitchToBackend,
-  onNotify,
 }: Props) {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [addedNotice, setAddedNotice] = useState<string | null>(null);
 
   const isOwnerOrStaff =
     user && ["OWNER", "ADMIN", "MANAGER", "STAFF"].includes(user.role);
@@ -94,16 +86,6 @@ export function StorefrontHomeScreen({
 
   const handleQuickAdd = (product: Product) => {
     onAddToCart(product);
-    setAddedNotice(`Added "${product.title}" to bag`);
-    setTimeout(() => setAddedNotice(null), 2500);
-    if (onNotify) {
-      onNotify({
-        title: "Added to Bag",
-        message: `${product.title} added to your bag.`,
-        type: "success",
-        icon: "shopping-bag",
-      });
-    }
   };
 
   const greetingName = user?.firstName || "Guest";
@@ -210,16 +192,6 @@ export function StorefrontHomeScreen({
           </View>
           <Feather name="arrow-right" size={14} color="#FFFFFF" />
         </TouchableOpacity>
-      )}
-
-      {/* Toast Notice when item added */}
-      {addedNotice && (
-        <View style={styles.toastNotice}>
-          <Feather name="check" size={14} color="#FFFFFF" />
-          <Text style={styles.toastNoticeText} numberOfLines={1}>
-            {addedNotice}
-          </Text>
-        </View>
       )}
 
       <ScrollView
