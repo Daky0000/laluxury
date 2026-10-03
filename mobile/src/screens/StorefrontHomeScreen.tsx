@@ -118,10 +118,10 @@ export function StorefrontHomeScreen({
   // Categories list to display
   const displayCategories = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
 
-  // 1. Featured pieces: exactly 3 products
-  const featuredPieces = products.slice(0, 3);
+  // 1. Featured pieces: 4 products, 2 columns and 2 rows
+  const featuredPieces = products.slice(0, 4);
 
-  // 2. All products: ranked by newly modified or added (updatedAt or createdAt desc), 6 products
+  // 2. All products: ranked by newly modified or added (updatedAt or createdAt desc), 6 products (2 each, left and right)
   const recentAllProducts = [...products]
     .sort((a, b) => {
       const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
@@ -132,23 +132,17 @@ export function StorefrontHomeScreen({
 
   return (
     <View style={styles.container}>
-      {/* Top Header */}
+      {/* Top Header: Logo on left (no menu icon), Search + Bag on right */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.iconBtn}
-          onPress={onNavigateToAccount}
-          activeOpacity={0.7}
-        >
-          <Feather name="menu" size={22} color={colors.text} />
-        </TouchableOpacity>
-
-        <View style={styles.brandContainer}>
+        <View style={styles.brandContainerLeft}>
           <Image
             source={require("../../assets/emblem-transparent.png")}
-            style={{ width: 28, height: 19, resizeMode: "contain", marginBottom: 2 }}
+            style={{ width: 28, height: 20, resizeMode: "contain", marginRight: 10 }}
           />
-          <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
-          <Text style={styles.brandSubtitle}>HOME TEXTILES • LIVING ESSENTIALS</Text>
+          <View>
+            <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
+            <Text style={styles.brandSubtitle}>HOME TEXTILES • LIVING ESSENTIALS</Text>
+          </View>
         </View>
 
         {/* Search button directly before the cart bag */}
@@ -234,7 +228,12 @@ export function StorefrontHomeScreen({
           </Text>
         </View>
 
-        {/* Categories Carousel (Replaced the featured post) */}
+        {/* Categories Section Heading (19px) */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionHeading19}>Categories</Text>
+        </View>
+
+        {/* Categories Carousel */}
         <View style={styles.categoriesSection}>
           <ScrollView
             horizontal
@@ -278,9 +277,9 @@ export function StorefrontHomeScreen({
           </ScrollView>
         </View>
 
-        {/* Featured Pieces Section (3 products, NO view all button) */}
+        {/* Featured Pieces Section (Heading: 19px, 4 products in 2 column and 2 row grid) */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>FEATURED PIECES</Text>
+          <Text style={styles.sectionHeading19}>Featured Pieces</Text>
         </View>
 
         {loading ? (
@@ -290,11 +289,11 @@ export function StorefrontHomeScreen({
             style={{ marginVertical: 32 }}
           />
         ) : (
-          <View style={styles.featuredRow}>
+          <View style={styles.twoColumnGrid}>
             {featuredPieces.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={styles.featuredCard}
+                style={[styles.productGridCard, { width: GRID_ITEM_WIDTH }]}
                 onPress={() => onSelectProduct(item.id)}
                 activeOpacity={0.9}
               >
@@ -338,11 +337,11 @@ export function StorefrontHomeScreen({
           </View>
         )}
 
-        {/* All Products Section (2 products in a row, ranked newly modified/added, displays 6) */}
+        {/* All Products Section (Heading: 19px, 2 each, left and right) */}
         <View style={styles.sectionHeaderWithLink}>
-          <Text style={styles.sectionTitle}>ALL PRODUCTS</Text>
+          <Text style={styles.sectionHeading19}>All Products</Text>
           <TouchableOpacity onPress={() => onNavigateToShop()} activeOpacity={0.7}>
-            <Text style={styles.viewAllText}>VIEW ALL PRODUCTS ›</Text>
+            <Text style={styles.viewAllText}>VIEW ALL ›</Text>
           </TouchableOpacity>
         </View>
 
@@ -353,11 +352,11 @@ export function StorefrontHomeScreen({
             style={{ marginVertical: 32 }}
           />
         ) : (
-          <View style={styles.allProductsGrid}>
+          <View style={styles.twoColumnGrid}>
             {recentAllProducts.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={[styles.allProductCard, { width: GRID_ITEM_WIDTH }]}
+                style={[styles.productGridCard, { width: GRID_ITEM_WIDTH }]}
                 onPress={() => onSelectProduct(item.id)}
                 activeOpacity={0.9}
               >
@@ -449,6 +448,11 @@ const styles = StyleSheet.create({
   brandContainer: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  brandContainerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
   },
   brandTitle: {
     fontFamily: "serif",
@@ -620,6 +624,33 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.text,
     letterSpacing: 1.5,
+  },
+  sectionHeading19: {
+    fontFamily: "serif",
+    fontSize: 19,
+    fontWeight: "700",
+    color: colors.text,
+    letterSpacing: 1.2,
+  },
+  twoColumnGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    rowGap: 14,
+  },
+  productGridCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: 10,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    justifyContent: "space-between",
   },
   viewAllText: {
     fontSize: 11,

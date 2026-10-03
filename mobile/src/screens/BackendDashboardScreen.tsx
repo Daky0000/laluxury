@@ -15,6 +15,7 @@ import { api } from "../services/api";
 import { User, DashboardData } from "../types";
 import { formatCurrency, formatDate } from "../utils/format";
 import { CustomNotificationModal } from "../components/CustomNotificationModal";
+import { OrderPromptModal, OrderPromptData } from "../components/OrderPromptModal";
 import { PopNotificationData } from "../components/PopNotification";
 
 type Props = {
@@ -42,6 +43,8 @@ export function BackendDashboardScreen({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [selectedOrderForPrompt, setSelectedOrderForPrompt] = useState<OrderPromptData | null>(null);
+  const [orderFilter, setOrderFilter] = useState<"all" | "pending">("all");
 
   const loadData = useCallback(async () => {
     try {
@@ -63,6 +66,12 @@ export function BackendDashboardScreen({
     setRefreshing(true);
     loadData();
   };
+
+  const pendingOrders = (data?.recentOrders || []).filter(
+    (o) => o.fulfillmentStatus !== "FULFILLED" || o.status === "PENDING"
+  );
+  const displayedOrders =
+    orderFilter === "pending" ? pendingOrders : (data?.recentOrders || []);
 
   return (
     <View style={styles.container}>
@@ -128,17 +137,37 @@ export function BackendDashboardScreen({
             <Text style={styles.kpiSub}>Past 30 days</Text>
           </View>
 
-          {/* Pending Fulfilment */}
-          <View style={styles.kpiCard}>
+          {/* Pending Fulfilment (Interactive: tap to filter & send direct prompt) */}
+          <TouchableOpacity
+            style={[
+              styles.kpiCard,
+              orderFilter === "pending" && styles.kpiCardActive,
+            ]}
+            onPress={() =>
+              setOrderFilter((prev) => (prev === "pending" ? "all" : "pending"))
+            }
+            activeOpacity={0.8}
+          >
             <View style={styles.kpiHeader}>
-              <Text style={styles.kpiLabel}>ORDERS TO PACK</Text>
+              <Text
+                style={[
+                  styles.kpiLabel,
+                  orderFilter === "pending" && { color: "#FBBF24" },
+                ]}
+              >
+                ORDERS TO PACK
+              </Text>
               <Feather name="package" size={16} color="#FBBF24" />
             </View>
             <Text style={styles.kpiValue}>
               {loading ? "..." : (data?.metrics.pendingFulfilment ?? 0)}
             </Text>
-            <Text style={styles.kpiSub}>Awaiting warehouse packing</Text>
-          </View>
+            <Text style={styles.kpiSub}>
+              {orderFilter === "pending"
+                ? "Active: showing pending orders"
+                : "Tap to view & prompt"}
+            </Text>
+          </TouchableOpacity>
 
           {/* Active Products */}
           <View style={styles.kpiCard}>
@@ -259,27 +288,103 @@ export function BackendDashboardScreen({
           </View>
         )}
 
-        {/* Recent Live Orders */}
+        {/* Store Orders & Direct Prompts */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>RECENT STORE ORDERS</Text>
-            <Text style={styles.sectionSub}>Live from database</Text>
+            <View>
+              <Text style={styles.sectionTitle}>STORE ORDERS & PROMPTS</Text>
+              <Text style={styles.sectionSub}>Tap any order to send direct prompt</Text>
+            </View>
+            {pendingOrders.length > 0 && (
+              <View style={styles.pendingBadgeHeader}>
+                <Text style={styles.pendingBadgeHeaderText}>
+                  {pendingOrders.length} TO PACK
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Filter Pills */}
+          <View style={styles.orderFilterRow}>
+            <TouchableOpacity
+              style={[
+                styles.filterChip,
+                orderFilter === "all" && styles.filterChipActive,
+              ]}
+              onPress={() => setOrderFilter("all")}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  orderFilter === "all" && styles.filterChipTextActive,
+                ]}
+              >
+                All Orders ({data?.recentOrders?.length ?? 0})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterChip,
+                orderFilter === "pending" && styles.filterChipActive,
+              ]}
+              onPress={() => setOrderFilter("pending")}
+              activeOpacity={0.7}
+            >
+              <Feather
+                name="package"
+                size={12}
+                color={orderFilter === "pending" ? "#FFFFFF" : "#FBBF24"}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.filterChipText,
+                  orderFilter === "pending" && styles.filterChipTextActive,
+                ]}
+              >
+                Orders to Pack ({pendingOrders.length})
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {loading ? (
             <ActivityIndicator size="small" color={colors.gold} style={{ marginVertical: 20 }} />
-          ) : !data?.recentOrders || data.recentOrders.length === 0 ? (
+          ) : displayedOrders.length === 0 ? (
             <View style={styles.emptyOrders}>
-              <Text style={styles.emptyText}>No recent orders recorded.</Text>
+              <Feather name="check-circle" size={24} color="#10B981" style={{ marginBottom: 6 }} />
+              <Text style={styles.emptyText}>
+                {orderFilter === "pending"
+                  ? "All pending orders have been packed and dispatched!"
+                  : "No store orders recorded yet."}
+              </Text>
             </View>
           ) : (
             <View style={styles.ordersList}>
-              {data.recentOrders.map((ord) => (
-                <View key={ord.id} style={styles.orderRow}>
+              {displayedOrders.map((ord) => (
+                <TouchableOpacity
+                  key={ord.id}
+                  style={styles.orderRow}
+                  onPress={() => setSelectedOrderForPrompt(ord)}
+                  activeOpacity={0.75}
+                >
                   <View style={styles.orderLeft}>
-                    <Text style={styles.orderNumber}>{ord.orderNumber}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                      <Text style={styles.orderNumber}>#{ord.orderNumber}</Text>
+                      {ord.fulfillmentStatus !== "FULFILLED" && (
+                        <View style={styles.pendingTag}>
+                          <Text style={styles.pendingTagText}>TO PACK</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.orderCustomer}>{ord.customerName}</Text>
-                    <Text style={styles.orderDate}>{formatDate(ord.placedAt)}</Text>
+                    <View style={styles.orderMetaRow}>
+                      <Text style={styles.orderDate}>{formatDate(ord.placedAt)}</Text>
+                      {ord.customerPhone ? (
+                        <Text style={styles.orderPhoneTag}>• {ord.customerPhone}</Text>
+                      ) : null}
+                    </View>
                   </View>
                   <View style={styles.orderRight}>
                     <Text style={styles.orderTotal}>
@@ -295,8 +400,12 @@ export function BackendDashboardScreen({
                     >
                       <Text style={styles.orderStatusText}>{ord.status}</Text>
                     </View>
+                    <View style={styles.promptActionBtn}>
+                      <Feather name="send" size={10} color={colors.gold} style={{ marginRight: 4 }} />
+                      <Text style={styles.promptActionBtnText}>Prompt</Text>
+                    </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           )}
@@ -313,6 +422,8 @@ export function BackendDashboardScreen({
 
         <View style={{ height: 60 }} />
       </ScrollView>
+
+      {/* Owner Custom Notification / Banner Modal */}
       <CustomNotificationModal
         visible={showNotificationModal}
         onClose={() => setShowNotificationModal(false)}
@@ -330,6 +441,33 @@ export function BackendDashboardScreen({
           if (onNotify) {
             onNotify({
               title: "Failed to Send",
+              message: err,
+              type: "error",
+              icon: "alert-circle",
+            });
+          }
+        }}
+      />
+
+      {/* Owner Direct Prompt to Customer for Pending Order */}
+      <OrderPromptModal
+        visible={!!selectedOrderForPrompt}
+        order={selectedOrderForPrompt}
+        onClose={() => setSelectedOrderForPrompt(null)}
+        onSuccess={(msg) => {
+          if (onNotify) {
+            onNotify({
+              title: "Prompt Sent",
+              message: msg,
+              type: "success",
+              icon: "send",
+            });
+          }
+        }}
+        onError={(err) => {
+          if (onNotify) {
+            onNotify({
+              title: "Prompt Failed",
               message: err,
               type: "error",
               icon: "alert-circle",
@@ -442,6 +580,10 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: colors.darkBorder,
+  },
+  kpiCardActive: {
+    borderColor: "#FBBF24",
+    backgroundColor: "#221D15",
   },
   kpiHeader: {
     flexDirection: "row",
@@ -628,6 +770,88 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: colors.gold,
     marginBottom: 4,
+  },
+  pendingBadgeHeader: {
+    backgroundColor: "rgba(245, 158, 11, 0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.4)",
+  },
+  pendingBadgeHeaderText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#FBBF24",
+    letterSpacing: 0.5,
+  },
+  orderFilterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.darkSurface,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.darkBorder,
+  },
+  filterChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#9CA3AF",
+  },
+  filterChipTextActive: {
+    color: "#FFFFFF",
+  },
+  pendingTag: {
+    backgroundColor: "rgba(245, 158, 11, 0.2)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.4)",
+  },
+  pendingTagText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#FBBF24",
+    letterSpacing: 0.5,
+  },
+  orderMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  orderPhoneTag: {
+    fontSize: 10,
+    color: colors.gold,
+    fontWeight: "600",
+  },
+  promptActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(212, 175, 55, 0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "rgba(212, 175, 55, 0.35)",
+  },
+  promptActionBtnText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: colors.gold,
+    letterSpacing: 0.5,
   },
   orderStatusBadge: {
     paddingHorizontal: 8,

@@ -708,13 +708,13 @@ class ApiService {
 
       // Safe resilient metadata so the user is NEVER blocked from updating
       return {
-        latestVersion: "1.2.8",
-        versionCode: 10,
+        latestVersion: "1.2.9",
+        versionCode: 11,
         appName: "Noble Enclave",
         downloadUrl: `${DEFAULT_URL}/app`,
         directUrl: `${DEFAULT_URL}/api/app/download`,
         releaseNotes:
-          "Noble Enclave v1.2.8 release: Store design management on web & mobile, refreshed Bedding · Curtains · Carpets · Cushions category carousel with dark overlays, 2-column newly stocked catalog view, direct search header button, phone-only authentication with SMS OTP, dynamic runtime version verification, and configurable delivery fees.",
+          "Noble Enclave v1.2.9 release: Direct customer prompt dispatch for pending orders, 4-piece 2x2 featured collection grid, 2-column catalog view, left-aligned brand header emblem, and 19px section typography.",
       };
     }
   }

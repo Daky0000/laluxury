@@ -2,17 +2,17 @@ import fs from "node:fs";
 import path from "node:path";
 
 export const APP_BASE_RELEASE = {
-  version: "1.2.8",
-  versionCode: 10,
+  version: "1.2.9",
+  versionCode: 11,
   appName: "Noble Enclave",
-  publishedAt: "2026-10-03T18:30:00.000Z",
+  publishedAt: "2026-10-03T19:35:00.000Z",
   minSupportedVersion: "1.0.0",
   releaseNotes:
-    "Noble Enclave v1.2.8 release: Store design management on web & mobile, refreshed Bedding · Curtains · Carpets · Cushions category carousel with dark overlays, 2-column newly stocked catalog view, direct search header button, phone-only authentication with SMS OTP, dynamic runtime version verification, and configurable delivery fees.",
+    "Noble Enclave v1.2.9 release: Direct customer prompt dispatch for pending orders, 4-piece 2x2 featured collection grid, 2-column catalog view, left-aligned brand header emblem, and 19px section typography.",
 };
 
 export const FALLBACK_APK_URL =
-  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.2.8.apk";
+  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.2.9.apk";
 
 /**
  * Resolves the latest version and build number directly from mobile/app.json,

@@ -180,9 +180,20 @@ export type DashboardData = {
     currency: string;
     status: string;
     paymentStatus: string;
+    fulfillmentStatus?: string;
     placedAt: string;
     customerName: string;
+    customerPhone?: string | null;
+    customerEmail?: string | null;
     city: string | null;
+    line1?: string | null;
+    items?: Array<{
+      id: string;
+      productTitle: string;
+      variantTitle: string;
+      quantity: number;
+      unitPrice: number;
+    }>;
   }>;
   lowStockItems: Array<{
     id: string;

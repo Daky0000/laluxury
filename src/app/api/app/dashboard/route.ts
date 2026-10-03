@@ -22,7 +22,7 @@ export const GET = withApiAuth(async () => {
     db.product.count(),
     db.order.findMany({
       orderBy: { placedAt: "desc" },
-      take: 12,
+      take: 20,
       select: {
         id: true,
         orderNumber: true,
@@ -30,13 +30,26 @@ export const GET = withApiAuth(async () => {
         currency: true,
         status: true,
         paymentStatus: true,
+        fulfillmentStatus: true,
         placedAt: true,
         email: true,
+        phone: true,
         shippingAddress: {
           select: {
             firstName: true,
             lastName: true,
+            phone: true,
             city: true,
+            line1: true,
+          },
+        },
+        items: {
+          select: {
+            id: true,
+            productTitle: true,
+            variantTitle: true,
+            quantity: true,
+            unitPrice: true,
           },
         },
       },
@@ -91,11 +104,22 @@ export const GET = withApiAuth(async () => {
       currency: o.currency,
       status: o.status,
       paymentStatus: o.paymentStatus,
+      fulfillmentStatus: o.fulfillmentStatus,
       placedAt: o.placedAt.toISOString(),
       customerName: o.shippingAddress
         ? `${o.shippingAddress.firstName} ${o.shippingAddress.lastName}`.trim()
         : o.email,
+      customerPhone: o.phone || o.shippingAddress?.phone || null,
+      customerEmail: o.email,
       city: o.shippingAddress?.city ?? null,
+      line1: o.shippingAddress?.line1 ?? null,
+      items: o.items.map((i) => ({
+        id: i.id,
+        productTitle: i.productTitle,
+        variantTitle: i.variantTitle,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+      })),
     })),
     lowStockItems: lowStockVariants.map((v) => ({
       id: v.id,
