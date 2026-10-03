@@ -229,7 +229,7 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 sm:gap-y-12 md:grid-cols-3">
+              <div className="grid grid-cols-1 min-[340px]:grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 sm:gap-y-12 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4">
                 {results.items.map((product, index) => (
                   <ProductTile key={product.id} product={toTile(product)} priority={index < 3} />
                 ))}

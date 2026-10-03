@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   TextInput,
-  Dimensions,
+  useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -17,9 +17,7 @@ import { api } from "../services/api";
 import { Product } from "../types";
 import { formatCurrency } from "../utils/format";
 import { resolveImageUrl } from "../utils/image";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const GRID_ITEM_WIDTH = Math.round((SCREEN_WIDTH - 40 - 12) / 2);
+import { getProductGridMetrics } from "../utils/layout";
 
 type Props = {
   initialFilter?: string;
@@ -62,6 +60,9 @@ export function StorefrontShopScreen({
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [addedToast, setAddedToast] = useState<string | null>(null);
+
+  const { width: windowWidth } = useWindowDimensions();
+  const gridMetrics = getProductGridMetrics(windowWidth);
 
   const loadProducts = useCallback(async () => {
     try {
@@ -327,11 +328,11 @@ export function StorefrontShopScreen({
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.productsGrid}>
+          <View style={[styles.productsGrid, { gap: gridMetrics.gap }]}>
             {displayedProducts.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={[styles.productCard, { width: GRID_ITEM_WIDTH }]}
+                style={[styles.productCard, { width: gridMetrics.itemWidth }]}
                 onPress={() => onSelectProduct(item.id)}
                 activeOpacity={0.9}
               >
@@ -483,7 +484,7 @@ const styles = StyleSheet.create({
   },
   categoryTitle: {
     fontFamily: "serif",
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: "700",
     color: colors.primary,
     letterSpacing: 1,

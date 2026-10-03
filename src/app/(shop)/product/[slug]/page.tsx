@@ -310,7 +310,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
               View all →
             </Link>
           </div>
-          <div className="grid grid-cols-2 gap-x-5 gap-y-8 md:grid-cols-4">
+          <div className="grid grid-cols-1 min-[340px]:grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {related.map((item) => (
               <ProductTile key={item.id} product={toTile(item)} />
             ))}

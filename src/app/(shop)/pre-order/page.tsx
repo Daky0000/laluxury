@@ -147,7 +147,7 @@ export default async function PreorderPage({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-5 sm:gap-y-12 md:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-1 min-[340px]:grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-5 sm:gap-y-12 md:grid-cols-3 lg:grid-cols-4">
             {tiles.map((product, idx) => (
               <ProductTile key={product.id} product={product} priority={idx < 4} />
             ))}

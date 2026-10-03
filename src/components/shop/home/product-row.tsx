@@ -54,7 +54,7 @@ export function ProductRow({
           ) : null}
         </div>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-5 sm:gap-y-12 md:grid-cols-4">
+        <div className="grid grid-cols-1 min-[340px]:grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-5 sm:gap-y-12 md:grid-cols-3 lg:grid-cols-4">
           {products.map((product) => (
             <article key={product.id} className="group flex flex-col">
               <Link

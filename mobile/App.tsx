@@ -602,6 +602,7 @@ function MainApp() {
             setSelectedProductId(null);
             setStorefrontTab("BAG");
           }}
+          onSelectProduct={(id) => setSelectedProductId(id)}
           onAddToCart={(product, variant, qty) => {
             handleAddToCart(product, variant, qty);
           }}

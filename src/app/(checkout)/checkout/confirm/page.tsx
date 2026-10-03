@@ -371,7 +371,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
             <h2 className="mb-7 text-center text-[clamp(1.75rem,4vw,2.125rem)]">
               Complete the room
             </h2>
-            <div className="grid grid-cols-2 gap-x-5 gap-y-8 md:grid-cols-4">
+            <div className="grid grid-cols-1 min-[340px]:grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               {relatedRows.map((row) => (
                 <ProductTile key={row.id} product={toTile(row)} />
               ))}

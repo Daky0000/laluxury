@@ -8,7 +8,7 @@ export async function GET() {
   const release = getAppReleaseInfo();
   return NextResponse.json(
     {
-      latestVersion: release.version, // latestVersion: "1.2.9"
+      latestVersion: release.version, // latestVersion: "1.3.0"
       versionCode: release.versionCode,
       appName: release.appName,
       downloadUrl: release.downloadUrl,

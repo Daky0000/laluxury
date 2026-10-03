@@ -8,7 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  Dimensions,
+  useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -16,12 +16,7 @@ import { api } from "../services/api";
 import { Product, User, Category, AppConfig } from "../types";
 import { formatCurrency } from "../utils/format";
 import { resolveImageUrl } from "../utils/image";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-// 2 full cards visible + 0.25 card peek on the right edge
-const CATEGORY_CARD_WIDTH = Math.round((SCREEN_WIDTH - 40 - 12) / 2.25);
-// 2 columns for all products grid
-const GRID_ITEM_WIDTH = Math.round((SCREEN_WIDTH - 40 - 12) / 2);
+import { getProductGridMetrics } from "../utils/layout";
 
 type Props = {
   user: User | null;
@@ -118,17 +113,40 @@ export function StorefrontHomeScreen({
   // Categories list to display
   const displayCategories = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
 
-  // 1. Featured pieces: 4 products, 2 columns and 2 rows
-  const featuredPieces = products.slice(0, 4);
+  // Responsive dimensions & column metrics
+  const { width: windowWidth } = useWindowDimensions();
+  const gridMetrics = getProductGridMetrics(windowWidth);
 
-  // 2. All products: ranked by newly modified or added (updatedAt or createdAt desc), 6 products (2 each, left and right)
+  // Responsive category card width for carousel:
+  // - on compact phones (<340px): 1.25 cards peek
+  // - on tablets/landscape (>=600px): 3.25 cards peek
+  // - on standard phones: 2.25 cards peek (2 visible + 1/4 peek on right)
+  const categoryCardWidth = Math.round(
+    (windowWidth - 40 - 12) /
+      (gridMetrics.numColumns === 1 ? 1.25 : gridMetrics.numColumns >= 3 ? 3.25 : 2.25)
+  );
+
+  // 1. Featured pieces: 2 rows of items matching responsive columns:
+  // - 2 columns -> 4 products (2x2)
+  // - 3 columns -> 6 products (3x2)
+  // - 4 columns -> 8 products (4x2)
+  // - 1 column  -> 4 products (1x4)
+  const featuredLimit = gridMetrics.numColumns === 1 ? 4 : gridMetrics.numColumns * 2;
+  const featuredPieces = products.slice(0, featuredLimit);
+
+  // 2. All products: 3 rows matching responsive columns:
+  // - 2 columns -> 6 products (2x3)
+  // - 3 columns -> 9 products (3x3)
+  // - 4 columns -> 12 products (4x3)
+  // - 1 column  -> 6 products (1x6)
+  const allProductsLimit = gridMetrics.numColumns === 1 ? 6 : gridMetrics.numColumns * 3;
   const recentAllProducts = [...products]
     .sort((a, b) => {
       const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
       const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
       return timeB - timeA;
     })
-    .slice(0, 6);
+    .slice(0, allProductsLimit);
 
   return (
     <View style={styles.container}>
@@ -239,7 +257,7 @@ export function StorefrontHomeScreen({
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.categoryCarouselContent}
-            snapToInterval={CATEGORY_CARD_WIDTH + 12}
+            snapToInterval={categoryCardWidth + 12}
             decelerationRate="fast"
           >
             {displayCategories.map((cat) => {
@@ -247,7 +265,7 @@ export function StorefrontHomeScreen({
               return (
                 <TouchableOpacity
                   key={cat.id || cat.slug}
-                  style={[styles.categoryCard, { width: CATEGORY_CARD_WIDTH }]}
+                  style={[styles.categoryCard, { width: categoryCardWidth }]}
                   onPress={() => onNavigateToShop(cat.name)}
                   activeOpacity={0.88}
                 >
@@ -277,7 +295,7 @@ export function StorefrontHomeScreen({
           </ScrollView>
         </View>
 
-        {/* Featured Pieces Section (Heading: 19px, 4 products in 2 column and 2 row grid) */}
+        {/* Featured Pieces Section (Heading: 19px, responsive 2x2 on phones, 3-column / 1-column adaptive) */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionHeading19}>Featured Pieces</Text>
         </View>
@@ -289,11 +307,11 @@ export function StorefrontHomeScreen({
             style={{ marginVertical: 32 }}
           />
         ) : (
-          <View style={styles.twoColumnGrid}>
+          <View style={[styles.responsiveGrid, { gap: gridMetrics.gap }]}>
             {featuredPieces.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={[styles.productGridCard, { width: GRID_ITEM_WIDTH }]}
+                style={[styles.productGridCard, { width: gridMetrics.itemWidth }]}
                 onPress={() => onSelectProduct(item.id)}
                 activeOpacity={0.9}
               >
@@ -337,7 +355,7 @@ export function StorefrontHomeScreen({
           </View>
         )}
 
-        {/* All Products Section (Heading: 19px, 2 each, left and right) */}
+        {/* All Products Section (Heading: 19px, responsive 2-column on phone, 3-col on tablet) */}
         <View style={styles.sectionHeaderWithLink}>
           <Text style={styles.sectionHeading19}>All Products</Text>
           <TouchableOpacity onPress={() => onNavigateToShop()} activeOpacity={0.7}>
@@ -352,11 +370,11 @@ export function StorefrontHomeScreen({
             style={{ marginVertical: 32 }}
           />
         ) : (
-          <View style={styles.twoColumnGrid}>
+          <View style={[styles.responsiveGrid, { gap: gridMetrics.gap }]}>
             {recentAllProducts.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={[styles.productGridCard, { width: GRID_ITEM_WIDTH }]}
+                style={[styles.productGridCard, { width: gridMetrics.itemWidth }]}
                 onPress={() => onSelectProduct(item.id)}
                 activeOpacity={0.9}
               >
@@ -636,6 +654,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
+    paddingHorizontal: 20,
+    rowGap: 14,
+  },
+  responsiveGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     paddingHorizontal: 20,
     rowGap: 14,
   },

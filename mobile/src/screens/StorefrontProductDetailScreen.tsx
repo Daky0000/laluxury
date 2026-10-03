@@ -13,6 +13,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,6 +22,7 @@ import { api } from "../services/api";
 import { ProductDetail, Variant, Product } from "../types";
 import { formatCurrency } from "../utils/format";
 import { resolveImageUrl } from "../utils/image";
+import { getProductGridMetrics } from "../utils/layout";
 
 type Props = {
   productId: string;
@@ -29,6 +31,7 @@ type Props = {
   onNavigateToBag: () => void;
   onAddToCart: (product: Product, variant: Variant, quantity: number) => void;
   onBulkAddToCart?: (items: Array<{ product: Product; variant: Variant; quantity: number }>) => void;
+  onSelectProduct?: (productId: string) => void;
   onNotify?: (notif: {
     title: string;
     message?: string;
@@ -179,10 +182,12 @@ export function StorefrontProductDetailScreen({
   onNavigateToBag,
   onAddToCart,
   onBulkAddToCart,
+  onSelectProduct,
   onNotify,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [product, setProduct] = useState<ProductDetail | null>(null);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [quantity, setQuantity] = useState(1);
@@ -193,6 +198,9 @@ export function StorefrontProductDetailScreen({
   const [addedToast, setAddedToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
+  const { width: windowWidth } = useWindowDimensions();
+  const gridMetrics = getProductGridMetrics(windowWidth);
+
   // Bulk Order Assistant states
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkQuantities, setBulkQuantities] = useState<Record<string, number>>({});
@@ -202,9 +210,17 @@ export function StorefrontProductDetailScreen({
     async function load() {
       try {
         setLoading(true);
-        const res = await api.getStoreProduct(productId);
+        const [res, listRes] = await Promise.all([
+          api.getStoreProduct(productId),
+          api.getStoreProducts({ limit: 12 }).catch(() => ({ products: [] })),
+        ]);
         const p = res.product;
         setProduct(p);
+
+        const others = (listRes.products || [])
+          .filter((item) => item.id !== productId)
+          .slice(0, 8);
+        setRelatedProducts(others);
 
         const opts = getProductDisplayOptions(p);
         const firstVariant = p.variants?.[0];
@@ -715,6 +731,90 @@ export function StorefrontProductDetailScreen({
             <View style={styles.specRow}>
               <Text style={styles.specLabel}>Material & Finish</Text>
               <Text style={styles.specValue}>{product.material}</Text>
+            </View>
+          )}
+
+          {/* Complementary Pieces / You May Also Like (Responsive Grid, 19px Heading) */}
+          {relatedProducts.length > 0 && (
+            <View style={styles.relatedSection}>
+              <View style={styles.relatedSectionHeader}>
+                <Text style={styles.sectionHeading19}>You May Also Like</Text>
+              </View>
+
+              <View style={[styles.responsiveGrid, { gap: gridMetrics.gap }]}>
+                {relatedProducts
+                  .slice(0, gridMetrics.numColumns === 1 ? 4 : gridMetrics.numColumns * 2)
+                  .map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[styles.productGridCard, { width: gridMetrics.itemWidth }]}
+                      onPress={() => {
+                        if (onSelectProduct) {
+                          onSelectProduct(item.id);
+                        }
+                      }}
+                      activeOpacity={0.9}
+                    >
+                      <View style={styles.productCardImageContainer}>
+                        {resolveImageUrl(item.images?.[0]?.url) ? (
+                          <Image
+                            source={{ uri: resolveImageUrl(item.images?.[0]?.url)! }}
+                            style={styles.productCardImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={styles.productCardImageFallback}>
+                            <Feather name="box" size={24} color={colors.textMuted} />
+                          </View>
+                        )}
+                      </View>
+
+                      <View style={styles.productCardInfo}>
+                        <Text style={styles.productCardTitle} numberOfLines={2}>
+                          {item.title}
+                        </Text>
+                        <Text style={styles.productCardPrice}>
+                          {formatCurrency(item.minPrice)}
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.cardAddToCartBtn}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          const defaultVariant = item.variants?.[0] || ({
+                            id: `v_${item.id}`,
+                            title: "Default",
+                            price: item.minPrice,
+                            sku: "",
+                            stock: item.totalStock || 1,
+                          } as any);
+                          onAddToCart(item, defaultVariant, 1);
+                          setToastMessage(`Added "${item.title}" to bag`);
+                          setAddedToast(true);
+                          setTimeout(() => setAddedToast(false), 2200);
+                          if (onNotify) {
+                            onNotify({
+                              title: "Added to Bag",
+                              message: `${item.title} added to your bag.`,
+                              type: "success",
+                              icon: "shopping-bag",
+                            });
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Feather
+                          name="shopping-bag"
+                          size={13}
+                          color="#FFFFFF"
+                          style={{ marginRight: 6 }}
+                        />
+                        <Text style={styles.cardAddToCartBtnText}>Add to Cart</Text>
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  ))}
+              </View>
             </View>
           )}
 
@@ -1636,5 +1736,86 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     letterSpacing: 0.5,
+  },
+  relatedSection: {
+    marginTop: 28,
+    marginBottom: 8,
+  },
+  relatedSectionHeader: {
+    marginBottom: 14,
+  },
+  sectionHeading19: {
+    fontFamily: "serif",
+    fontSize: 19,
+    fontWeight: "700",
+    color: colors.text,
+    letterSpacing: 1.2,
+  },
+  responsiveGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: 14,
+  },
+  productGridCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: 10,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    justifyContent: "space-between",
+  },
+  productCardImageContainer: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: colors.surfaceElevated,
+    marginBottom: 8,
+  },
+  productCardImage: {
+    width: "100%",
+    height: "100%",
+  },
+  productCardImageFallback: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  productCardInfo: {
+    flex: 1,
+    marginBottom: 8,
+  },
+  productCardTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.text,
+    lineHeight: 17,
+    marginBottom: 4,
+  },
+  productCardPrice: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  cardAddToCartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  cardAddToCartBtnText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.4,
   },
 });
