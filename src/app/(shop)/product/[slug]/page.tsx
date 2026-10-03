@@ -2,20 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Star, Truck, Wallet, ShieldCheck, MessageCircle } from "lucide-react";
-import { db } from "@/lib/db";
 import { getProductBySlug, ratingFor, relatedProducts } from "@/lib/catalog";
 import { toTile } from "@/lib/product-view";
 import { availableOf } from "@/lib/inventory";
 import { getSettings } from "@/lib/settings";
-import { currentUser } from "@/lib/auth";
 import { formatPrice } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { ProductView } from "@/components/shop/product-view";
 import { ProductTile } from "@/components/shop/product-tile";
-import { ReviewForm } from "@/components/shop/review-form";
+import { ProductCustomerState, CustomerReviewForm } from "@/components/shop/product-customer-state";
+import { publicAssetUrl } from "@/lib/media-url";
 import { Divider } from "@/components/ui";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 /** Merchandising badges are ordinary tags, matching the grid tiles. */
 const BADGES: Record<string, string> = {
@@ -39,7 +38,7 @@ export async function generateMetadata({
     openGraph: {
       title: product.title,
       description: product.shortDescription ?? undefined,
-      images: product.images[0]?.url ? [product.images[0].url] : [],
+      images: product.images[0]?.url ? [publicAssetUrl(product.images[0].url)] : [],
     },
   };
 }
@@ -49,28 +48,9 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
   const product = await getProductBySlug(slug);
   if (!product) notFound();
 
-  const [rating, related, settings, user] = await Promise.all([
-    ratingFor(product.id),
-    relatedProducts(product, 4),
-    getSettings(),
-    currentUser(),
+  const [rating, related, settings] = await Promise.all([
+    ratingFor(product.id), relatedProducts(product, 4), getSettings(),
   ]);
-
-  // Only ask about the wishlist, and their own review, once we know who is asking.
-  const [saved, ownReview] = user
-    ? await Promise.all([
-        db.wishlistItem
-          .findUnique({
-            where: { userId_productId: { userId: user.id, productId: product.id } },
-            select: { id: true },
-          })
-          .then(Boolean),
-        db.review.findFirst({
-          where: { productId: product.id, userId: user.id },
-          select: { rating: true, title: true, body: true, isApproved: true },
-        }),
-      ])
-    : [false, null];
 
   const options = product.options.map((option) => ({
     id: option.id,
@@ -93,7 +73,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
 
   const images = product.images.map((image) => ({
     id: image.id,
-    url: image.url,
+    url: publicAssetUrl(image.url),
     alt: image.alt,
     optionValueId: image.optionValueId,
   }));
@@ -134,6 +114,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
   ].filter((section) => section.body.trim().length > 0);
 
   return (
+    <ProductCustomerState key={product.id} productId={product.id}>
     <div className="lx-container py-8 sm:py-12">
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" className="mb-6 text-xs tracking-[0.04em] text-[var(--text-muted)]">
@@ -168,7 +149,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
         title={product.title}
         badge={badge}
         productId={product.id}
-        isSaved={saved}
+        isSaved={false}
         isPreorder={isPreorder}
         preorderLeadTime={product.preorderLeadTime ?? (isPreorder ? "2–3 weeks" : null)}
         preorderDepositPercent={product.preorderDepositPercent}
@@ -316,7 +297,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
         )}
 
         <div className="max-w-[640px]">
-          <ReviewForm productId={product.id} signedIn={Boolean(user)} existing={ownReview} />
+          <CustomerReviewForm productId={product.id} />
         </div>
       </section>
 
@@ -348,7 +329,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
             "@type": "Product",
             name: product.title,
             description: product.shortDescription ?? product.description ?? undefined,
-            image: product.images.map((i) => i.url),
+            image: product.images.map((i) => publicAssetUrl(i.url)),
             sku: product.variants[0]?.sku,
             offers: {
               "@type": "AggregateOffer",
@@ -373,5 +354,6 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
         }}
       />
     </div>
+    </ProductCustomerState>
   );
 }

@@ -60,7 +60,7 @@ export function StorefrontShopScreen({
 
   const loadProducts = useCallback(async () => {
     try {
-      const res = await api.getProducts({
+      const res = await api.getStoreProducts({
         q: searchQuery.trim() || undefined,
         limit: 50,
       });

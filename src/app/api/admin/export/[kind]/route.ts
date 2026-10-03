@@ -4,6 +4,7 @@ import { currentUser } from "@/lib/auth";
 import { can, type Permission } from "@/lib/auth/rbac";
 import { formatPhone } from "@/lib/phone";
 import { availableOf } from "@/lib/inventory";
+import { assertExportBytes, assertExportRows, exportAllowance, EXPORT_ROW_LIMIT, ExportTooLargeError } from "@/lib/export-limits";
 import type { OrderStatus, PaymentStatus, Prisma } from "@/generated/prisma";
 
 export const runtime = "nodejs";
@@ -36,6 +37,7 @@ function cell(value: unknown): string {
 }
 
 function csv(header: string[], rows: unknown[][]): string {
+  assertExportRows(rows);
   // A byte-order mark, so Excel opens cedi signs and accented names correctly.
   return "﻿" + [header, ...rows].map((row) => row.map(cell).join(",")).join("\r\n") + "\r\n";
 }
@@ -50,9 +52,22 @@ export async function GET(request: Request, ctx: RouteContext<"/api/admin/export
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
   if (!can(user.role, permission)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const allowance = exportAllowance(user.id);
+  if (!allowance.ok) return NextResponse.json({ error: "Too many exports. Try again later." }, {
+    status: 429, headers: { "Cache-Control": "private, no-store", "Retry-After": String(allowance.retryAfterSeconds) },
+  });
 
   const params = new URL(request.url).searchParams;
-  const body = await build(kind, params);
+  let body: string;
+  try {
+    body = await build(kind, params);
+    assertExportBytes(body);
+  } catch (error) {
+    if (error instanceof ExportTooLargeError) return NextResponse.json({ error: error.message }, {
+      status: 413, headers: { "Cache-Control": "private, no-store" },
+    });
+    throw error;
+  }
   const stamp = new Date().toISOString().slice(0, 10);
 
   return new NextResponse(body, {
@@ -68,12 +83,14 @@ async function build(kind: string, params: URLSearchParams): Promise<string> {
   switch (kind) {
     case "products": {
       const products = await db.product.findMany({
+        take: EXPORT_ROW_LIMIT + 1,
         orderBy: { title: "asc" },
         include: {
           categories: { include: { category: { select: { name: true } } } },
           variants: { orderBy: { position: "asc" }, include: { inventory: true } },
         },
       });
+      assertExportRows(products);
       return csv(
         ["Product", "Handle", "Status", "Featured", "Categories", "Tags", "Variant", "SKU", "Price (GHS)", "Was (GHS)", "Cost (GHS)", "On hand", "Reserved", "Available", "Active"],
         products.flatMap((product) =>
@@ -100,6 +117,7 @@ async function build(kind: string, params: URLSearchParams): Promise<string> {
 
     case "inventory": {
       const items = await db.inventoryItem.findMany({
+        take: EXPORT_ROW_LIMIT + 1,
         include: { variant: { include: { product: { select: { title: true, status: true } } } } },
         orderBy: { variant: { product: { title: "asc" } } },
       });
@@ -145,7 +163,7 @@ async function build(kind: string, params: URLSearchParams): Promise<string> {
           payments: { where: { status: "SUCCESS" }, take: 1, orderBy: { createdAt: "desc" } },
           redemptions: { include: { discount: { select: { code: true } } } },
         },
-        take: 5000,
+        take: EXPORT_ROW_LIMIT + 1,
       });
 
       return csv(
@@ -178,6 +196,7 @@ async function build(kind: string, params: URLSearchParams): Promise<string> {
 
     case "customers": {
       const customers = await db.user.findMany({
+        take: EXPORT_ROW_LIMIT + 1,
         where: { role: "CUSTOMER" },
         orderBy: { createdAt: "desc" },
         include: {

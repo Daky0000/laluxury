@@ -16,7 +16,7 @@ const SEARCH_CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
 /** Type-ahead endpoint for the header search dialog. */
 export async function GET(request: Request) {
-  const term = new URL(request.url).searchParams.get("q") ?? "";
+  const term = (new URL(request.url).searchParams.get("q") ?? "").slice(0, 200);
   const cleanTerm = term.trim().toLowerCase();
   if (cleanTerm.length < 2) {
     return NextResponse.json(

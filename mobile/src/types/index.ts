@@ -75,7 +75,7 @@ export type Variant = {
   costPrice: number | null;
   isActive: boolean;
   stock?: number;
-  available?: number;
+  available?: number | null;
   inventory?: InventoryItem | null;
   optionValues?: VariantOptionValue[];
 };

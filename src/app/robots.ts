@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { env } from "@/lib/env";
+import { BULK_CRAWLER_AGENTS } from "@/lib/public-traffic";
 
 /**
  * What crawlers may index. The storefront is open; anything personal, in
@@ -10,7 +11,7 @@ export default function robots(): MetadataRoute.Robots {
   const base = env.siteUrl();
 
   return {
-    rules: {
+    rules: [{
       userAgent: "*",
       allow: "/",
       disallow: [
@@ -23,8 +24,12 @@ export default function robots(): MetadataRoute.Robots {
         "/forgot-password",
         "/reset-password",
         "/api/",
+        "/downloads/",
+        "/*.apk$",
+        "/shop?",
+        "/search?",
       ],
-    },
+    }, { userAgent: BULK_CRAWLER_AGENTS, disallow: "/" }],
     sitemap: `${base}/sitemap.xml`,
   };
 }

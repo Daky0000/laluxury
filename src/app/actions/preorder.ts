@@ -9,6 +9,7 @@ import { rateLimit, requestAddress, retryMessage } from "@/lib/rate-limit";
 import { toMinorUnits } from "@/lib/money";
 import { postAlert } from "@/lib/agent/slack";
 import { recordAudit } from "@/lib/audit";
+import { storeUpload, UploadError } from "@/lib/media";
 import type { PreorderRequestStatus } from "@/generated/prisma";
 
 export type PreorderActionState = {
@@ -19,19 +20,20 @@ export type PreorderActionState = {
 };
 
 const requestSchema = z.object({
-  name: z.string().trim().min(2, "Enter your name."),
-  email: z.string().trim().email("Enter a valid email address."),
+  name: z.string().trim().min(2, "Enter your name.").max(120),
+  email: z.string().trim().email("Enter a valid email address.").max(254),
   phone: z
     .string()
+    .max(32)
     .min(1, "Enter your phone number.")
     .refine((v) => normalisePhone(v) !== null, {
       message: "Enter a valid Ghana phone number (e.g. 024 000 0000) or international number.",
     }),
-  productTitle: z.string().trim().min(2, "Tell us what piece you would like us to order for you."),
-  productId: z.string().optional(),
-  variantTitle: z.string().optional(),
+  productTitle: z.string().trim().min(2, "Tell us what piece you would like us to order for you.").max(200),
+  productId: z.string().max(100).optional(),
+  variantTitle: z.string().max(200).optional(),
   quantity: z.coerce.number().int().min(1).max(200).default(1),
-  targetBudgetMajor: z.string().optional(),
+  targetBudgetMajor: z.string().max(24).optional(),
   notes: z.string().trim().max(2000).optional(),
 });
 
@@ -76,31 +78,22 @@ export async function submitPreorderRequestAction(
 
   const swatches = formData
     .getAll("swatchRequest")
+    .slice(0, 20)
     .map(String)
+    .map((value) => value.slice(0, 100))
     .filter(Boolean)
     .join(", ");
 
-  // Handle optional direct photo upload from phone/computer into MediaAsset
+  // Use the shared image pipeline so production never stores binary photos in PostgreSQL.
   let imageUrl: string | null = null;
   const photoFile = formData.get("photoFile");
-  if (photoFile instanceof File && photoFile.size > 0 && photoFile.size <= 8 * 1024 * 1024) {
-    const buffer = Buffer.from(await photoFile.arrayBuffer());
-    const asset = await db.mediaAsset.create({
-      data: {
-        source: "DATABASE",
-        url: "/api/media/pending",
-        filename: photoFile.name || "preorder-reference.jpg",
-        mimeType: photoFile.type || "image/jpeg",
-        folder: "preorders",
-        size: buffer.length,
-        data: buffer,
-      },
-    });
-    imageUrl = `/api/media/${asset.id}`;
-    await db.mediaAsset.update({
-      where: { id: asset.id },
-      data: { url: imageUrl },
-    });
+  if (photoFile instanceof File && photoFile.size > 0) {
+    try {
+      const asset = await storeUpload(photoFile, { folder: "preorders" });
+      imageUrl = asset.url;
+    } catch (error) {
+      return { ok: false, message: error instanceof UploadError ? error.message : "Could not upload the reference photo. Please try again." };
+    }
   }
 
   const created = await db.preorderRequest.create({

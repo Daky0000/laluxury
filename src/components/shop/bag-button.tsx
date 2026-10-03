@@ -3,7 +3,7 @@
 import { ShoppingBag } from "lucide-react";
 import { openBag } from "./bag-events";
 
-/** Opens the mini-bag drawer; the count is rendered on the server. */
+/** Opens the mini-bag drawer with the latest private cart count. */
 export function BagButton({ count }: { count: number }) {
   return (
     <button

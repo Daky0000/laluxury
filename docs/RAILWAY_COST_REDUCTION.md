@@ -1,5 +1,9 @@
 # Railway cost reduction
 
+The figures below are an earlier 2 October snapshot. For the current measured
+baseline, implemented crawler controls, deployment state, and procedures, use
+`RAILWAY_EGRESS_IMPLEMENTATION.md` and `RAILWAY_COST_GROWTH_RUNBOOK.md`.
+
 The screenshot shows $18.91 in accumulated usage, with $10.18 in egress,
 $6.38 in memory, $2.31 in CPU, and $0.03 in storage. The billing interval is
 unknown. These figures do not establish a monthly forecast or a traffic source.

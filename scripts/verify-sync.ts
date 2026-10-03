@@ -203,7 +203,12 @@ try {
     "paymentMode",
   ];
 
-  const missingFields = expectedConfigFields.filter((f) => !configRoute.includes(f));
+  const sharedConfig = fs.readFileSync(path.join(ROOT, "src", "lib", "store-config.ts"), "utf-8");
+  const storeConfigRoute = fs.readFileSync(path.join(ROOT, "src", "app", "api", "store", "config", "route.ts"), "utf-8");
+  const missingFields = expectedConfigFields.filter((f) => !sharedConfig.includes(f));
+  if (!configRoute.includes("getPublicStoreConfig") || !storeConfigRoute.includes("getPublicStoreConfig")) {
+    fail("Config parity", "Both config routes must use the shared public configuration service");
+  }
   if (missingFields.length === 0) {
     pass("Config endpoint /api/app/config exposes full storefront copy, hero, and policies");
   } else {

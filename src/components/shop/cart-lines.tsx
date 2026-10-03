@@ -12,6 +12,7 @@ import {
 } from "@/app/actions/cart";
 import type { CartLineView } from "@/lib/cart";
 import { Thumb } from "./photo";
+import { notifyCartChanged } from "./bag-events";
 
 /**
  * The bag rows from the cart & checkout artboard: a tall thumbnail, the piece
@@ -37,12 +38,14 @@ function CartLine({ line }: { line: CartLineView }) {
     startTransition(async () => {
       const result = await updateCartLineAction(line.id, quantity);
       if (!result.ok) setError(result.message ?? "Could not update that.");
+      else notifyCartChanged();
     });
   }
 
   function remove() {
     startTransition(async () => {
-      await removeCartLineAction(line.id);
+      const result = await removeCartLineAction(line.id);
+      if (result.ok) notifyCartChanged();
     });
   }
 

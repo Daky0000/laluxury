@@ -1,3 +1,4 @@
+import { publicAssetUrl } from "@/lib/media-url";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -237,10 +238,7 @@ export const GET = withApiAuth(async (request: Request) => {
       imageCount: p._count.images,
       salesCount: p._count.orderItems,
       images: p.images.map((img) => {
-        let url = img.url;
-        if (url.startsWith("/catalog/")) {
-          url = `https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev${url}`;
-        }
+        const url = publicAssetUrl(img.url);
         return { ...img, url };
       }),
       categories: p.categories.map((c) => c.category),

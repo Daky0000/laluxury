@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { createHash } from "node:crypto";
 
 /**
  * A small in-memory rate limiter for the handful of actions that take a
@@ -19,6 +20,7 @@ import { headers } from "next/headers";
 type Window = { hits: number[]; windowMs: number };
 
 const windows = new Map<string, Window>();
+const MAX_KEYS = 10_000;
 
 /** How often the map is swept of keys nobody has touched. */
 const SWEEP_EVERY_MS = 5 * 60 * 1000;
@@ -45,22 +47,28 @@ export type RateLimitResult =
  * Records one attempt against `key` and says whether it was allowed.
  *
  * `limit` attempts are permitted in any rolling `windowMs`. The attempt is
- * counted whether or not it is allowed, so hammering a locked key only makes
- * the lock longer.
+ * Only allowed attempts are retained. Denied traffic cannot grow the hit array
+ * or indefinitely extend a lock. At capacity, new keys fail closed until a
+ * sweep frees expired entries; existing keys retain their original limits.
  */
 export function rateLimit(
   key: string,
   options: { limit: number; windowMs: number },
 ): RateLimitResult {
+  if (key.length > 512) key = `hash:${createHash("sha256").update(key).digest("hex")}`;
   const now = Date.now();
   sweep(now);
+
+  if (!windows.has(key) && windows.size >= MAX_KEYS) {
+    return { ok: false, retryAfterSeconds: Math.ceil(SWEEP_EVERY_MS / 1000) };
+  }
 
   const window = windows.get(key) ?? { hits: [], windowMs: options.windowMs };
   window.windowMs = Math.max(window.windowMs, options.windowMs);
   window.hits = window.hits.filter((at) => now - at < options.windowMs);
 
   const allowed = window.hits.length < options.limit;
-  window.hits.push(now);
+  if (allowed) window.hits.push(now);
   windows.set(key, window);
 
   if (allowed) return { ok: true };
@@ -82,8 +90,8 @@ export function rateLimit(
 export async function requestAddress(): Promise<string> {
   const list = await headers();
   const forwarded = list.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim() || "unknown";
-  return list.get("x-real-ip") ?? "unknown";
+  if (forwarded) return forwarded.split(",")[0].trim().slice(0, 100) || "unknown";
+  return list.get("x-real-ip")?.slice(0, 100) ?? "unknown";
 }
 
 /** "Try again in a minute", scaled to how long the lock actually lasts. */

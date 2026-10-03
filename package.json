@@ -19,6 +19,7 @@
     "db:reset": "prisma migrate reset --force",
     "verify": "node scripts/verify.mjs",
     "verify:sync": "tsx scripts/verify-sync.ts",
+    "verify:egress": "tsx scripts/test-egress-hardening.ts && tsx scripts/test-cost-controls.ts",
     "catalog:images": "node scripts/fetch-catalog-images.mjs",
     "catalog:photos": "node scripts/import-product-photos.mjs",
     "postinstall": "prisma generate"

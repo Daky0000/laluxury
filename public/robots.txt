@@ -1,8 +1,0 @@
-User-agent: *
-Disallow: /api/
-Disallow: /downloads/
-Disallow: /*.apk$
-Disallow: /admin/
-Disallow: /checkout/
-
-Sitemap: https://laluxurys.com/sitemap.xml

@@ -3,15 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { rateLimit, requestAddress, retryMessage } from "@/lib/rate-limit";
 
 const tradeSchema = z.object({
-  name: z.string().min(2, "Please enter your full name"),
-  company: z.string().min(2, "Please enter your studio or firm name"),
-  role: z.string().min(2, "Please select your role"),
-  email: z.string().email("Please enter a valid email address"),
-  phone: z.string().min(6, "Please enter a valid phone / WhatsApp number"),
-  portfolioUrl: z.string().optional(),
-  projectScope: z.string().optional(),
+  name: z.string().min(2, "Please enter your full name").max(120),
+  company: z.string().min(2, "Please enter your studio or firm name").max(200),
+  role: z.string().min(2, "Please select your role").max(100),
+  email: z.string().email("Please enter a valid email address").max(254),
+  phone: z.string().min(6, "Please enter a valid phone / WhatsApp number").max(32),
+  portfolioUrl: z.string().max(2048).optional(),
+  projectScope: z.string().max(4000).optional(),
 });
 
 export type TradeFormState = {
@@ -25,6 +26,8 @@ export async function submitTradeApplicationAction(
   _prevState: TradeFormState,
   formData: FormData,
 ): Promise<TradeFormState> {
+  const limit = rateLimit(`trade:${await requestAddress()}`, { limit: 3, windowMs: 60 * 60 * 1000 });
+  if (!limit.ok) return { ok: false, message: retryMessage(limit.retryAfterSeconds) };
   const parsed = tradeSchema.safeParse({
     name: String(formData.get("name") ?? "").trim(),
     company: String(formData.get("company") ?? "").trim(),

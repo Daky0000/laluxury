@@ -1,4 +1,6 @@
 import { db } from "./db";
+import { unstable_cache } from "next/cache";
+import type { Prisma } from "@/generated/prisma";
 import { productCardSelect } from "./catalog";
 import { toTile, type ProductTileData } from "./product-view";
 import type { HomeSection } from "./home-sections";
@@ -29,6 +31,17 @@ const roomSelect = {
   _count: { select: { products: { where: { product: { status: "ACTIVE" as const } } } } },
 };
 
+const homeProducts = unstable_cache(
+  async (args: Pick<Prisma.ProductFindManyArgs, "where" | "orderBy" | "take"> & { select: typeof productCardSelect }) =>
+    db.product.findMany({ where: args.where, orderBy: args.orderBy, take: args.take, select: productCardSelect }),
+  ["public-home-products"], { revalidate: 300, tags: ["public-catalog"] },
+);
+const homeRooms = unstable_cache(
+  async (args: Pick<Prisma.CategoryFindManyArgs, "where" | "orderBy" | "take"> & { select: typeof roomSelect }) =>
+    db.category.findMany({ where: args.where, orderBy: args.orderBy, take: args.take, select: roomSelect }),
+  ["public-home-rooms"], { revalidate: 300, tags: ["public-catalog"] },
+);
+
 function toRoomCard(row: {
   name: string;
   slug: string;
@@ -51,7 +64,7 @@ export async function roomCards(section: Pick<HomeSection, "categorySlugs" | "li
 
   try {
     if (section.categorySlugs.length > 0) {
-      const rows = await db.category.findMany({
+      const rows = await homeRooms({
         where: { isActive: true, slug: { in: section.categorySlugs } },
         select: roomSelect,
       });
@@ -62,7 +75,7 @@ export async function roomCards(section: Pick<HomeSection, "categorySlugs" | "li
         .filter((card): card is RoomCard => card !== undefined);
     }
 
-    const rows = await db.category.findMany({
+    const rows = await homeRooms({
       where: { isActive: true, parentId: null },
       orderBy: [{ position: "asc" }, { name: "asc" }],
       take: section.limit,
@@ -84,7 +97,7 @@ export async function sectionProducts(section: HomeSection): Promise<ProductTile
     if (section.source === "picked") {
       if (section.productIds.length === 0) return [];
 
-      const rows = await db.product.findMany({
+      const rows = await homeProducts({
         where: { status: "ACTIVE", id: { in: section.productIds } },
         select: productCardSelect,
       });
@@ -98,7 +111,7 @@ export async function sectionProducts(section: HomeSection): Promise<ProductTile
     }
 
     if (section.source === "category" && section.categorySlugs.length > 0) {
-      const rows = await db.product.findMany({
+      const rows = await homeProducts({
         where: {
           status: "ACTIVE",
           categories: { some: { category: { slug: { in: section.categorySlugs } } } },
@@ -114,7 +127,7 @@ export async function sectionProducts(section: HomeSection): Promise<ProductTile
     // Automatic: everything on sale except the student-only range, which has its
     // own section. A product may sit in both rooms (the sleep pillow does) and
     // still belong here.
-    const rows = await db.product.findMany({
+    const rows = await homeProducts({
       where: {
         status: "ACTIVE",
         OR: [

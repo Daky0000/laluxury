@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { VariantPicker, type PickerOption, type PickerVariant } from "./variant-picker";
 import { Photo } from "./photo";
+import { useProductCustomerState } from "./product-customer-state";
 
 export type GalleryImage = {
   id: string;
@@ -61,6 +62,7 @@ export function ProductView({
   /** Perks and the detail accordions. */
   footer: ReactNode;
 }) {
+  const customer = useProductCustomerState();
   const [activeIndex, setActiveIndex] = useState(0);
 
   const safeIndex = Math.min(activeIndex, Math.max(0, images.length - 1));
@@ -191,7 +193,7 @@ export function ProductView({
           valueImages={valueImages}
           productId={productId}
           productTitle={title}
-          isSaved={isSaved}
+          isSaved={customer?.isSaved ?? isSaved}
           isPreorder={isPreorder}
           preorderLeadTime={preorderLeadTime}
           preorderDepositPercent={preorderDepositPercent}

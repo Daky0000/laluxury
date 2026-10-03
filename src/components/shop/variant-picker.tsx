@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useId, useMemo, useState, useTransition, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
 import { Check, Heart, Loader2, X } from "lucide-react";
 import { bulkAddToCartAction, buyNowAction } from "@/app/actions/cart";
 import { toggleWishlistAction } from "@/app/actions/misc";
@@ -102,7 +101,6 @@ export function VariantPicker({
   preorderNote?: string | null;
   description?: ReactNode;
 }) {
-  const router = useRouter();
   const hintId = useId();
 
   // When each option group has only 1 value (or there are 0 option groups),
@@ -127,7 +125,8 @@ export function VariantPicker({
   const [error, setError] = useState<string | null>(null);
 
   const [buying, startBuying] = useTransition();
-  const [saved, setSaved] = useState(isSaved);
+  const [savedOverride, setSaved] = useState<boolean | null>(null);
+  const saved = savedOverride ?? isSaved;
   const [savePending, startSaving] = useTransition();
   const [saveNote, setSaveNote] = useState<string | null>(null);
 
@@ -276,7 +275,6 @@ export function VariantPicker({
       setAdded(true);
       setTimeout(() => setAdded(false), 2500);
       openBag();
-      router.refresh();
     });
   }
 

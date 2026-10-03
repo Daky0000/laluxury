@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { X, Loader2 } from "lucide-react";
 import {
   cartSummaryAction,
@@ -11,7 +11,7 @@ import {
 } from "@/app/actions/cart";
 import { formatPrice } from "@/lib/money";
 import { useOverlay } from "@/lib/use-overlay";
-import { BAG_OPEN_EVENT } from "./bag-events";
+import { BAG_OPEN_EVENT, publishCartCount } from "./bag-events";
 
 const EMPTY: CartSummary = { lines: [], itemCount: 0, subtotal: 0, deliveryLabel: "—" };
 
@@ -24,6 +24,7 @@ const EMPTY: CartSummary = { lines: [], itemCount: 0, subtotal: 0, deliveryLabel
  */
 export function CartDrawer() {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [summary, setSummary] = useState<CartSummary>(EMPTY);
   const [loading, setLoading] = useState(false);
@@ -32,7 +33,9 @@ export function CartDrawer() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setSummary(await cartSummaryAction());
+      const next = await cartSummaryAction();
+      setSummary(next);
+      publishCartCount(next.itemCount);
     } finally {
       setLoading(false);
     }
@@ -53,7 +56,7 @@ export function CartDrawer() {
     startTransition(async () => {
       await updateCartLineAction(itemId, quantity);
       await load();
-      router.refresh();
+      if (pathname === "/cart" || pathname === "/checkout") router.refresh();
     });
   }
 

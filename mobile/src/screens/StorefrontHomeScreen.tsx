@@ -59,9 +59,9 @@ export function StorefrontHomeScreen({
   const loadData = useCallback(async () => {
     try {
       const [prodRes, catRes, cfgRes] = await Promise.all([
-        api.getProducts({ limit: 12 }),
-        api.getCategories().catch(() => ({ categories: [] })),
-        api.getConfig().catch(() => null),
+        api.getStoreProducts({ limit: 12 }),
+        api.getStoreCategories().catch(() => ({ categories: [] })),
+        api.getStoreConfig().catch(() => null),
       ]);
 
       setProducts(prodRes.products || []);

@@ -11,16 +11,16 @@ import { buildQuery } from "@/lib/utils";
 /** The awaited `searchParams` of whichever page is showing the catalog. */
 export type CatalogParams = Record<string, string | string[] | undefined>;
 
-/** The grid opens on four rows of three and grows a row at a time. */
+/** The grid grows to 48 products, then navigates pages instead of retransmitting the whole catalog. */
 const FIRST_PAGE = 12;
 const LOAD_MORE_STEP = 9;
 /** Matches the ceiling `searchProducts` will honour. */
-const MAX_SHOWN = 240;
+const MAX_SHOWN = 48;
 
 /** searchParams values arrive as string | string[]; normalise to an array. */
 function toArray(value: string | string[] | undefined): string[] {
   if (!value) return [];
-  return Array.isArray(value) ? value : [value];
+  return (Array.isArray(value) ? value : [value]).slice(0, 20).map((item) => item.slice(0, 200));
 }
 
 function toSingle(value: string | string[] | undefined): string | undefined {
@@ -45,7 +45,7 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
     }
   }
 
-  const q = toSingle(params.q);
+  const q = toSingle(params.q)?.slice(0, 200);
   const categorySlugs = toArray(params.category);
   const collectionSlug = toSingle(params.collection);
   const tags = toArray(params.tag);
@@ -54,7 +54,9 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
   const onSaleOnly = toSingle(params.onSale) === "1";
 
   const showRaw = Number(toSingle(params.show));
-  const show = Math.min(
+  const pageRaw = Number(toSingle(params.page));
+  const page = Number.isInteger(pageRaw) && pageRaw > 0 ? Math.min(10_000, pageRaw) : 1;
+  const show = page > 1 ? MAX_SHOWN : Math.min(
     MAX_SHOWN,
     Number.isFinite(showRaw) && showRaw > 0 ? Math.floor(showRaw) : FIRST_PAGE,
   );
@@ -77,6 +79,7 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
       inStockOnly,
       onSaleOnly,
       perPage: show,
+      page,
     }),
     catalogFacets(),
   ]);
@@ -96,7 +99,7 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
     ),
   };
 
-  const remaining = results.total - results.items.length;
+  const remaining = Math.max(0, results.total - ((page - 1) * show + results.items.length));
 
   // Shown on the phone's filter button, so a filtered grid never looks
   // unfiltered while the rail is folded away behind it.
@@ -232,19 +235,28 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
                 ))}
               </div>
 
-              {remaining > 0 ? (
+              {remaining > 0 || page > 1 ? (
                 <div className="mt-9 flex justify-center sm:mt-11">
+                  {page > 1 ? <Link prefetch={false}
+                    href={`/shop${buildQuery({ ...carried, sort, show, page: page - 1 })}`}
+                    className="mr-4 border border-[var(--border-strong)] px-6 py-4 text-sm uppercase tracking-[0.14em]">
+                    Previous
+                  </Link> : null}
+                  {remaining > 0 ?
                   <Link
+                    prefetch={false}
                     href={`/shop${buildQuery({
                       ...carried,
                       sort,
                       show: Math.min(MAX_SHOWN, show + LOAD_MORE_STEP),
+                      page: show >= MAX_SHOWN ? page + 1 : page,
                     })}`}
                     scroll={false}
                     className="flex w-full items-center justify-center border border-[var(--border-strong)] px-6 py-4 text-sm uppercase tracking-[0.14em] transition-colors hover:bg-[var(--surface-sunken)] sm:w-auto sm:px-10"
                   >
-                    Load more ({remaining})
+                    {show >= MAX_SHOWN ? "Next page" : "Load more"} ({remaining})
                   </Link>
+                  : null}
                 </div>
               ) : null}
             </>

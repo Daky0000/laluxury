@@ -5,15 +5,18 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { postAlert } from "@/lib/agent/slack";
+import { rateLimit, requestAddress, retryMessage } from "@/lib/rate-limit";
 
 export type SimpleState = { ok: boolean; message?: string };
 
-const emailSchema = z.string().email();
+const emailSchema = z.string().trim().email().max(254);
 
 export async function subscribeAction(
   _prev: SimpleState | null,
   formData: FormData,
 ): Promise<SimpleState> {
+  const limit = rateLimit(`newsletter:${await requestAddress()}`, { limit: 6, windowMs: 60 * 60 * 1000 });
+  if (!limit.ok) return { ok: false, message: retryMessage(limit.retryAfterSeconds) };
   const parsed = emailSchema.safeParse(formData.get("email"));
   if (!parsed.success) return { ok: false, message: "Enter a valid email address." };
 
@@ -21,7 +24,7 @@ export async function subscribeAction(
 
   await db.newsletterSubscriber.upsert({
     where: { email },
-    create: { email, source: String(formData.get("source") || "footer") },
+    create: { email, source: String(formData.get("source") || "footer").slice(0, 60) },
     // Re-subscribing someone who previously opted out is intentional here.
     update: { isSubscribed: true, unsubscribedAt: null },
   });
@@ -93,17 +96,19 @@ export async function toggleWishlistAction(
 }
 
 const contactSchema = z.object({
-  name: z.string().min(1, "Tell us your name."),
-  email: z.string().email("Enter a valid email address."),
-  phone: z.string().optional(),
-  subject: z.string().optional(),
-  message: z.string().min(10, "A little more detail, please."),
+  name: z.string().trim().min(1, "Tell us your name.").max(120),
+  email: z.string().trim().email("Enter a valid email address.").max(254),
+  phone: z.string().max(32).optional(),
+  subject: z.string().max(200).optional(),
+  message: z.string().trim().min(10, "A little more detail, please.").max(4000),
 });
 
 export async function contactAction(
   _prev: SimpleState | null,
   formData: FormData,
 ): Promise<SimpleState> {
+  const limit = rateLimit(`contact:${await requestAddress()}`, { limit: 6, windowMs: 60 * 60 * 1000 });
+  if (!limit.ok) return { ok: false, message: retryMessage(limit.retryAfterSeconds) };
   const parsed = contactSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),

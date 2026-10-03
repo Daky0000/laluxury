@@ -1,5 +1,15 @@
 # LaLuxury Cross-Platform Module & Settings Registry
 
+## Public catalog delivery and caching
+
+Public mobile storefront reads now use `/api/store/config`, `/api/store/categories`, `/api/store/collections`, `/api/store/products`, and `/api/store/products/[id]`. These contracts use the same PostgreSQL data and shared settings service as the web and legacy `/api/app/*` endpoints. Public reads ignore bearer/session state and expose only active products and taxonomy; product detail accepts an ID or slug. Raw inventory, cost prices, and management sales statistics remain private.
+
+Config and taxonomy have bounded mobile TTLs; product refreshes remain uncached on the device. CDN responses use a five-minute shared TTL and one-hour stale allowance. Checkout always validates current stock, prices, discounts, and shipping independently. Private management/customer APIs remain `private, no-store` and retain their existing authentication. Legacy reads remain available for older app versions.
+
+`available: null` means an untracked or backorderable variant; mobile treats it as unrestricted stock. `totalStock` in the public compatibility payload aggregates available tracked quantities with a presence marker for unrestricted variants; it is not an internal inventory ledger or checkout quote. Images use `publicAssetUrl`; `NEXT_PUBLIC_MEDIA_BASE_URL` must be configured at build time. Release metadata sends the external APK URL in both `downloadUrl` and `directUrl`.
+
+See [Railway implementation and rollout gates](RAILWAY_EGRESS_IMPLEMENTATION.md) for production audit results and remaining Cloudflare configuration.
+
 This registry tracks the coverage, authoritative source, and synchronization status across the **Website** and **Mobile App** across all 8 functional domains.
 
 Classification:
@@ -115,3 +125,12 @@ after upload verification. See `RAILWAY_COST_REDUCTION.md` for rollout checks.
 | APK Distribution | Cloudflare R2 | `/api/app/download` | In-app download link | User action | **Shared (Parity Achieved)** | Hosted on R2 bucket |
 | In-App Update Prompt System | `/api/app/version` / `/api/app/download` | Direct download link | `AppUpdateModal` auto-prompt & account check | App launch / Focus | **Shared (Parity Achieved)** | Prompts user on new release and downloads APK in-app |
 | Drift Prevention Checks | `scripts/verify-sync.ts` | CI pipeline | `npm run verify:sync` | Pre-commit / CI | **Shared (Parity Achieved)** | Fails build if hardcoded commerce rules drift |
+
+Production cost controls also cover all image uploads, including web preorder references:
+`storeUpload` requires R2 in production and never writes new binary media to PostgreSQL.
+Web header account/cart state uses `/api/account/header-state` with `private, no-store`;
+cart mutations invalidate cart/checkout only, and client events update counts. Shared
+public product APIs remain bounded to 48 products per response; web catalog navigation
+uses pages after 48 products. Identified bulk AI/backlink crawlers are rejected before
+public catalog rendering; normal web/mobile requests and payment webhooks remain available.
+See `RAILWAY_COST_GROWTH_RUNBOOK.md` for rate limits, retention and cost procedures.

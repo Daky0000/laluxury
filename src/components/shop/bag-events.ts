@@ -5,6 +5,16 @@
  */
 
 export const BAG_OPEN_EVENT = "laluxury:bag-open";
+export const CART_CHANGED_EVENT = "laluxury:cart-changed";
+export const CART_COUNT_EVENT = "laluxury:cart-count";
+
+export function notifyCartChanged(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(CART_CHANGED_EVENT));
+}
+
+export function publishCartCount(count: number): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(CART_COUNT_EVENT, { detail: count }));
+}
 
 export function openBag(): void {
   if (typeof window === "undefined") return;

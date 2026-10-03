@@ -37,34 +37,12 @@ const nextConfig: NextConfig = {
   },
 
   async redirects() {
-    const cdnUrl = (process.env.CATALOG_CDN_URL || process.env.R2_PUBLIC_URL || "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev").replace(/\/$/, "");
-
+    const cdnUrl = (process.env.CATALOG_CDN_URL || process.env.R2_PUBLIC_URL || "").replace(/\/+$/, "");
     return [
-      {
-        source: "/catalog/:path*",
-        destination: `${cdnUrl}/catalog/:path*`,
-        permanent: false,
-      },
-      {
-        source: "/downloads/:file(.*\\.apk)",
-        destination: `${cdnUrl}/downloads/:file`,
-        permanent: false,
-      },
-      {
-        source: "/LaLuxury-Management.apk",
-        destination: `${cdnUrl}/downloads/LaLuxury-Management.apk`,
-        permanent: false,
-      },
-      {
-        source: "/download",
-        destination: `${cdnUrl}/downloads/LaLuxury-Management.apk`,
-        permanent: false,
-      },
-      {
-        source: "/app/download",
-        destination: `${cdnUrl}/downloads/LaLuxury-Management.apk`,
-        permanent: false,
-      },
+      ...(cdnUrl ? [{ source: "/catalog/:path*", destination: `${cdnUrl}/catalog/:path*`, permanent: false }] : []),
+      ...["/downloads/:file(.*\\.apk)", "/LaLuxury-Management.apk", "/download", "/app/download"].map((source) => ({
+        source, destination: "/api/app/download", permanent: false,
+      })),
     ];
   },
 
@@ -83,14 +61,9 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/products/:path*",
-        headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-        ],
-      },
-      {
         source: "/api/app/:path*",
         headers: [
+          { key: "Cache-Control", value: "private, no-store" },
           { key: "Access-Control-Allow-Origin", value: "*" },
           { key: "Access-Control-Allow-Methods", value: "GET, POST, PATCH, DELETE, OPTIONS" },
           { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },

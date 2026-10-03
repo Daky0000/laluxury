@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { currentUser, displayName } from "@/lib/auth";
 import { can, isStaff, type Permission } from "@/lib/auth/rbac";
 import { toMajorUnits } from "@/lib/money";
+import { assertExportBytes, assertExportRows, exportAllowance, EXPORT_ROW_LIMIT, ExportTooLargeError } from "@/lib/export-limits";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +24,14 @@ function csvEscape(val: unknown): string {
 }
 
 function buildCsv(headers: string[], rows: (string | number | null | undefined)[][]): string {
+  assertExportRows(rows);
   const headerLine = headers.map(csvEscape).join(",");
   const dataLines = rows.map((r) => r.map(csvEscape).join(","));
   // UTF-8 BOM (\uFEFF) ensures Microsoft Excel opens currency & accents cleanly
   return "\uFEFF" + [headerLine, ...dataLines].join("\r\n");
 }
 
-export async function GET(request: Request) {
+async function exportResponse(request: Request) {
   const user = await currentUser();
   if (!user || !isStaff(user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -41,12 +43,17 @@ export async function GET(request: Request) {
   if (!can(user.role, requiredPermission)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const allowance = exportAllowance(user.id);
+  if (!allowance.ok) return NextResponse.json({ error: "Too many exports. Try again later." }, {
+    status: 429, headers: { "Cache-Control": "private, no-store", "Retry-After": String(allowance.retryAfterSeconds) },
+  });
 
   const today = new Date().toISOString().slice(0, 10);
 
   if (type === "customers") {
     const [customers, tradeApps] = await Promise.all([
       db.user.findMany({
+        take: EXPORT_ROW_LIMIT + 1,
         where: { role: "CUSTOMER" },
         include: {
           orders: {
@@ -57,9 +64,12 @@ export async function GET(request: Request) {
         orderBy: { createdAt: "desc" },
       }),
       db.tradeApplication.findMany({
+        take: EXPORT_ROW_LIMIT + 1,
         orderBy: { createdAt: "desc" },
       }),
     ]);
+    assertExportRows(customers);
+    assertExportRows(tradeApps);
 
     const tradeByEmail = new Map(tradeApps.map((t) => [t.email.toLowerCase(), t]));
 
@@ -117,6 +127,7 @@ export async function GET(request: Request) {
 
   if (type === "preorders") {
     const requests = await db.preorderRequest.findMany({
+      take: EXPORT_ROW_LIMIT + 1,
       orderBy: { createdAt: "desc" },
     });
 
@@ -165,6 +176,7 @@ export async function GET(request: Request) {
 
   // Default: Orders & Accounting CSV
   const orders = await db.order.findMany({
+    take: EXPORT_ROW_LIMIT + 1,
     include: {
       shippingAddress: true,
       items: true,
@@ -236,4 +248,18 @@ export async function GET(request: Request) {
       "Content-Disposition": `attachment; filename="nobel-enclave-orders-accounting-${today}.csv"`,
     },
   });
+}
+
+export async function GET(request: Request) {
+  try {
+    const response = await exportResponse(request);
+    if (response.ok) assertExportBytes(await response.clone().text());
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
+  } catch (error) {
+    if (error instanceof ExportTooLargeError) return NextResponse.json({ error: error.message }, {
+      status: 413, headers: { "Cache-Control": "private, no-store" },
+    });
+    throw error;
+  }
 }

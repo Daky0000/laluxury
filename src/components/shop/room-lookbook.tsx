@@ -9,6 +9,7 @@ import {
   useStoreCurrency,
 } from "@/components/shop/currency-switcher";
 import { cn } from "@/lib/utils";
+import { notifyCartChanged } from "./bag-events";
 
 export type LookbookSpot = {
   id: string;
@@ -48,7 +49,9 @@ export function RoomLookbook({ scenes }: { scenes: LookbookScene[] }) {
 
   function addSinglePiece(variantId: string, id: string) {
     startTransition(async () => {
-      await addToCartAction(variantId, 1);
+      const result = await addToCartAction(variantId, 1);
+      if (!result.ok) return;
+      notifyCartChanged();
       setAddedId(id);
       setTimeout(() => setAddedId(null), 2000);
     });
@@ -60,6 +63,7 @@ export function RoomLookbook({ scenes }: { scenes: LookbookScene[] }) {
       for (const spot of scene.spots) {
         await addToCartAction(spot.variantId, 1);
       }
+      notifyCartChanged();
       setAddedId("ALL_ROOM");
       setTimeout(() => setAddedId(null), 2500);
     });

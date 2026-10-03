@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Check, Loader2, Plus, Zap } from "lucide-react";
 import { addToCartAction, buyNowAction } from "@/app/actions/cart";
 import { openBag } from "./bag-events";
@@ -30,7 +29,6 @@ type Props = {
  * to the product page rather than disappearing and breaking the grid rhythm.
  */
 export function AddToBag({ variantId, href, label = "Add to bag", soldOut = false }: Props) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buying, startBuying] = useTransition();
   const [added, setAdded] = useState(false);
@@ -94,7 +92,6 @@ export function AddToBag({ variantId, href, label = "Add to bag", soldOut = fals
       setAdded(true);
       setTimeout(() => setAdded(false), 1800);
       openBag();
-      router.refresh();
     });
   }
 
@@ -174,7 +171,6 @@ export function AddToBag({ variantId, href, label = "Add to bag", soldOut = fals
  * and the control share one line.
  */
 export function AddToBagIcon({ variantId, href, soldOut = false }: Props) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [added, setAdded] = useState(false);
 
@@ -204,7 +200,6 @@ export function AddToBagIcon({ variantId, href, soldOut = false }: Props) {
       setAdded(true);
       setTimeout(() => setAdded(false), 1800);
       openBag();
-      router.refresh();
     });
   }
 

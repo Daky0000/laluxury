@@ -24,6 +24,7 @@ const STORAGE_KEY_URL = "lx_api_url";
 const STORAGE_KEY_CART = "lx_cart";
 
 class ApiService {
+  private publicCache = new Map<string, { expiresAt: number; data: unknown }>();
   private token: string | null = null;
   private baseUrl: string = DEFAULT_URL;
 
@@ -103,16 +104,16 @@ class ApiService {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
+    publicRead = false,
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
     const headers: Record<string, string> = {
       Accept: "application/json",
-      "Cache-Control": "no-cache, no-store, must-revalidate",
-      Pragma: "no-cache",
+      ...(publicRead ? {} : { "Cache-Control": "no-store" }),
       ...(options.headers as Record<string, string>),
     };
 
-    if (this.token && !headers["Authorization"]) {
+    if (!publicRead && this.token && !headers["Authorization"]) {
       headers["Authorization"] = `Bearer ${this.token}`;
     }
 
@@ -122,7 +123,7 @@ class ApiService {
 
     let response: Response;
     try {
-      response = await fetch(url, { ...options, headers, cache: "no-store" });
+      response = await fetch(url, { ...options, headers, ...(publicRead ? { credentials: "omit" as const } : { cache: "no-store" as const }) });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Network request failed";
       throw new Error(`Unable to connect to Nobel Enclave server (${this.baseUrl}). ${msg}`);
@@ -132,7 +133,7 @@ class ApiService {
 
     if (!response.ok) {
       const errorMsg = data?.error || `Request failed with status ${response.status}`;
-      const err = new Error(errorMsg) as any;
+      const err = new Error(errorMsg) as Error & Record<string, unknown>;
       if (data && typeof data === "object") {
         Object.assign(err, data);
       }
@@ -140,6 +141,40 @@ class ApiService {
     }
 
     return data as T;
+  }
+
+  private async publicRequest<T>(endpoint: string, ttlMs = 0): Promise<T> {
+    const key = `${this.baseUrl}${endpoint}`;
+    const cached = this.publicCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.data as T;
+    const data = await this.request<T>(endpoint, {}, true);
+    if (ttlMs > 0) {
+      if (this.publicCache.size >= 64) this.publicCache.clear();
+      this.publicCache.set(key, { expiresAt: Date.now() + ttlMs, data });
+    }
+    return data;
+  }
+
+  async getStoreProducts(params: { page?: number; limit?: number; q?: string; categoryId?: string; isFeatured?: boolean; isPreorder?: boolean } = {}): Promise<{ products: Product[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") query.set(key, String(value));
+    return this.publicRequest(`/api/store/products?${query}`);
+  }
+
+  async getStoreProduct(id: string): Promise<{ product: ProductDetail }> {
+    return this.publicRequest(`/api/store/products/${encodeURIComponent(id)}`);
+  }
+
+  async getStoreCategories(): Promise<{ categories: Category[] }> {
+    return this.publicRequest("/api/store/categories", 15 * 60 * 1000);
+  }
+
+  async getStoreCollections(): Promise<{ collections: Collection[] }> {
+    return this.publicRequest("/api/store/collections", 15 * 60 * 1000);
+  }
+
+  async getStoreConfig(): Promise<AppConfig> {
+    return this.publicRequest("/api/store/config", 5 * 60 * 1000);
   }
 
   // --- Auth -----------------------------------------------------------------
@@ -635,7 +670,7 @@ class ApiService {
       downloadUrl: string;
       directUrl: string;
       releaseNotes: string;
-    }>("/api/app/version");
+    }>("/api/app/version", {}, true);
   }
 
   // --- Owner Custom Notifications ------------------------------------------

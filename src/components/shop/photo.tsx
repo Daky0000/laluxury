@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { publicAssetUrl } from "@/lib/media-url";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,6 +41,7 @@ export function Photo({
   priority?: boolean;
   className?: string;
 }) {
+  src = publicAssetUrl(src);
   if (!canOptimize(src)) {
     return (
       // A pasted http:// address or a data URI still shows, just unprocessed.
@@ -82,6 +84,7 @@ export function Thumb({
   height: number;
   className?: string;
 }) {
+  src = publicAssetUrl(src);
   if (!canOptimize(src)) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={src} alt={alt} loading="lazy" className={cn("h-full w-full", className)} />;

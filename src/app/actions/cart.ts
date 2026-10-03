@@ -26,7 +26,7 @@ export async function addToCartAction(
   try {
     await addToCart(variantId, quantity);
     revalidatePath("/cart");
-    revalidatePath("/", "layout");
+    revalidatePath("/checkout");
     return { ok: true };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Could not add that." };
@@ -49,7 +49,7 @@ export async function bulkAddToCartAction(items: BulkCartItem[]): Promise<Action
   try {
     await addManyToCart(items);
     revalidatePath("/cart");
-    revalidatePath("/", "layout");
+    revalidatePath("/checkout");
     return { ok: true };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Could not add items." };
@@ -72,7 +72,7 @@ export async function buyNowAction(variantId: string, quantity = 1): Promise<Act
   }
 
   revalidatePath("/cart");
-  revalidatePath("/", "layout");
+  revalidatePath("/checkout");
 
   // Outside the try: redirect() signals by throwing, and catching it here would
   // turn a successful hand-off into an error message.
@@ -124,7 +124,7 @@ export async function updateCartLineAction(
   try {
     await updateCartLine(itemId, quantity);
     revalidatePath("/cart");
-    revalidatePath("/", "layout");
+    revalidatePath("/checkout");
     return { ok: true };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Could not update that." };
@@ -135,7 +135,7 @@ export async function removeCartLineAction(itemId: string): Promise<ActionState>
   try {
     await removeCartLine(itemId);
     revalidatePath("/cart");
-    revalidatePath("/", "layout");
+    revalidatePath("/checkout");
     return { ok: true };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Could not remove that." };

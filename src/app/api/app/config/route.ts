@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSettings, announcementItems } from "@/lib/settings";
-import { getIntegrations, activePaystack, isReady } from "@/lib/integrations";
+import { getPublicStoreConfig } from "@/lib/store-config";
 import { apiOptionsResponse, getBearerSession } from "@/lib/auth/bearer";
 import { db } from "@/lib/db";
 import { isStaff, can } from "@/lib/auth/rbac";
@@ -11,15 +10,7 @@ export const dynamic = "force-dynamic";
 export const OPTIONS = apiOptionsResponse;
 
 export async function GET() {
-  const [settings, integrations, session] = await Promise.all([
-    getSettings().catch(() => null),
-    getIntegrations().catch(() => null),
-    getBearerSession().catch(() => null),
-  ]);
-
-  const activeMode = settings?.paymentMode || integrations?.paystack?.mode || "live";
-  const paystack = integrations ? activePaystack(integrations) : null;
-  const paystackConfigured = integrations ? isReady(integrations, "paystack") : false;
+  const [config, session] = await Promise.all([getPublicStoreConfig(), getBearerSession().catch(() => null)]);
 
   let managementCapabilities = null;
   if (session) {
@@ -41,62 +32,8 @@ export async function GET() {
     }
   }
 
-  const announcements = settings ? announcementItems(settings) : [];
-
   return NextResponse.json(
-    {
-      ok: true,
-      apiVersion: "1.2.2",
-      revision: 1,
-      storeName: settings?.storeName || "Nobel Enclave",
-      tagline: settings?.tagline || "Atelier & Living",
-      currency: "GHS",
-      paymentMode: activeMode,
-      isTestMode: activeMode === "test",
-      paystack: {
-        ready: paystackConfigured,
-        mode: activeMode,
-        publicKey: paystack?.publicKey ? `${paystack.publicKey.slice(0, 8)}...` : null,
-      },
-      supportEmail: settings?.supportEmail || "contact@nobleenclave.com",
-      supportPhone: settings?.supportPhone || "",
-      whatsappNumber: settings?.whatsappNumber || "",
-      addressLine: settings?.addressLine || "Accra, Ghana",
-      instagramUrl: settings?.instagramUrl || "",
-      freeShippingThreshold: settings?.freeShippingThreshold ?? null,
-      lowStockThreshold: settings?.lowStockThreshold ?? 5,
-      announcementBar: settings?.announcementBar || "",
-      announcements,
-      hero: {
-        eyebrow: settings?.heroEyebrow || "The 2026 Collection",
-        title: settings?.heroTitle || "Quiet luxury for",
-        titleAccent: settings?.heroTitleAccent || "the modern home",
-        body:
-          settings?.heroBody ||
-          "Considered textiles and furnishings for Ghanaian homes that value calm and craft.",
-        imageUrl: settings?.heroImageUrl || "/catalog/hero-bedroom.webp",
-      },
-      bundle: settings?.bundleTitle
-        ? {
-            title: settings.bundleTitle,
-            eyebrow: settings.bundleEyebrow,
-            body: settings.bundleBody,
-            price: settings.bundlePrice,
-            compareAtPrice: settings.bundleCompareAtPrice,
-            imageUrl: settings.bundleImageUrl,
-            href: settings.bundleHref,
-          }
-        : null,
-      policies: {
-        returnsPolicy: settings?.returnsPolicy || "",
-        shippingPolicy: settings?.shippingPolicy || "",
-      },
-      navigation: {
-        hideStorefrontNav: Boolean(settings?.hideStorefrontNav),
-        hiddenStorefrontNavItems: settings?.hiddenStorefrontNavItems || [],
-      },
-      management: managementCapabilities,
-    },
+    { ...config, management: managementCapabilities },
     {
       headers: {
         "Access-Control-Allow-Origin": "*",

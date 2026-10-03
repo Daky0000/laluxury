@@ -1,4 +1,5 @@
 import { isInStock, type ProductCard } from "./catalog";
+import { publicAssetUrl } from "./media-url";
 
 /**
  * The single shape every product tile renders from.
@@ -89,9 +90,9 @@ export function toTile(product: ProductCard): ProductTileData {
     isPreorder,
     preorderLeadTime: product.preorderLeadTime ?? (isPreorder ? "2–3 weeks" : null),
     preorderDepositPercent: product.preorderDepositPercent ?? null,
-    imageUrl: primary?.url ?? null,
+    imageUrl: primary ? publicAssetUrl(primary.url) : null,
     imageAlt: primary?.alt ?? product.title,
-    hoverImageUrl: secondary?.url ?? null,
+    hoverImageUrl: secondary ? publicAssetUrl(secondary.url) : null,
     variantId: product.variants.length === 1 ? product.variants[0].id : null,
     inStock: isPreorder ? true : isInStock(product),
     swatches,

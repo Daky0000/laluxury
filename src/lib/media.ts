@@ -20,10 +20,8 @@ import type { Prisma } from "@/generated/prisma";
  *   CDN      — Cloudinary holds them and `url` is the delivered asset
  *   EXTERNAL — somebody pasted a link and only the address is ours
  *
- * Postgres is the default because it is the one store that survives a deploy
- * on a host with an ephemeral filesystem. Wire up Cloudinary in Settings and
- * new uploads go there instead; everything already in the library keeps
- * working either way.
+ * Production uploads require Cloudflare R2. Development can use Cloudinary or
+ * Postgres, while existing assets remain readable during staged migration.
  */
 
 export { MAX_UPLOAD_BYTES, UploadError, mediaPath };
@@ -154,6 +152,11 @@ export async function storeUpload(
 ): Promise<MediaSummary> {
   assertUploadable(file);
 
+  const useR2 = await isR2Configured();
+  if (!useR2 && process.env.NODE_ENV === "production") {
+    throw new UploadError("Media storage is unavailable. Cloudflare R2 must be configured in production.");
+  }
+
   const folder = options.folder ?? "products";
   const bytes = Buffer.from(await file.arrayBuffer());
   const checksum = createHash("sha256").update(bytes).digest("hex");
@@ -168,8 +171,6 @@ export async function storeUpload(
   const filename = (file.name || "image").slice(0, 180);
 
   // R2 serves with zero egress, so it wins over Cloudinary when both are set up.
-  const useR2 = await isR2Configured();
-
   if (!useR2 && (await isCdnConfigured())) {
     const uploaded = await uploadToCdn(bytes, { mimeType: file.type, folder, width, height });
 

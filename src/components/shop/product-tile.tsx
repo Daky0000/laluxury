@@ -28,7 +28,7 @@ export function ProductTile({
           aspect === "square" ? "aspect-square" : "aspect-[4/5]"
         }`}
       >
-        <Link href={`/product/${product.slug}`} className="block h-full w-full">
+        <Link href={`/product/${product.slug}`} prefetch={false} className="block h-full w-full">
           {product.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -86,7 +86,7 @@ export function ProductTile({
       <div className="flex items-start justify-between gap-2.5 pt-3.5">
         <div className="min-w-0">
           <h3 className="font-sans text-sm font-normal leading-snug tracking-normal">
-            <Link href={`/product/${product.slug}`} className="hover:underline">
+            <Link href={`/product/${product.slug}`} prefetch={false} className="hover:underline">
               {product.title}
             </Link>
           </h3>

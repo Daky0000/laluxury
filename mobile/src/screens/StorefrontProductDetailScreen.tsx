@@ -202,7 +202,7 @@ export function StorefrontProductDetailScreen({
     async function load() {
       try {
         setLoading(true);
-        const res = await api.getProduct(productId);
+        const res = await api.getStoreProduct(productId);
         const p = res.product;
         setProduct(p);
 
@@ -265,7 +265,7 @@ export function StorefrontProductDetailScreen({
 
   const variantStock =
     activeVariant?.stock ?? activeVariant?.inventory?.onHand ?? product.totalStock ?? 0;
-  const variantAvailable =
+  const variantAvailable = activeVariant?.available === null ? Infinity :
     activeVariant?.available ??
     (activeVariant?.inventory
       ? Math.max(0, activeVariant.inventory.onHand - activeVariant.inventory.reserved)

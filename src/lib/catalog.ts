@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { db } from "./db";
 import type { Prisma, ProductStatus } from "@/generated/prisma";
 
@@ -207,11 +208,21 @@ export function isInStock(
 
 import { isDbTemporarilyDown, checkDbConnection, recordDbFailure } from "@/lib/db-health";
 
-export async function searchProducts(filters: CatalogFilters) {
+// Cache successful public reads only; connection failures remain outside the cache.
+const cachedCatalogRead = unstable_cache(async (filters: CatalogFilters) => {
   const page = Math.max(1, filters.page ?? 1);
   const perPage = Math.min(240, Math.max(1, filters.perPage ?? 12));
   const where = buildWhere(filters);
+  return Promise.all([
+    db.product.findMany({ where, select: productCardSelect, orderBy: orderBy(filters.sort),
+      skip: (page - 1) * perPage, take: perPage }),
+    db.product.count({ where }),
+  ]);
+}, ["public-catalog-search"], { revalidate: 300, tags: ["public-catalog"] });
 
+export async function searchProducts(filters: CatalogFilters) {
+  const page = Math.max(1, filters.page ?? 1);
+  const perPage = Math.min(240, Math.max(1, filters.perPage ?? 12));
   if (isDbTemporarilyDown() || !(await checkDbConnection())) {
     return {
       items: [],
@@ -225,16 +236,7 @@ export async function searchProducts(filters: CatalogFilters) {
   }
 
   try {
-    const [items, total] = await Promise.all([
-      db.product.findMany({
-        where,
-        select: productCardSelect,
-        orderBy: orderBy(filters.sort),
-        skip: (page - 1) * perPage,
-        take: perPage,
-      }),
-      db.product.count({ where }),
-    ]);
+    const [items, total] = await cachedCatalogRead(filters);
 
     return {
       items,
@@ -452,12 +454,9 @@ export const productDetailInclude = {
 
 export type ProductDetail = Prisma.ProductGetPayload<{ include: typeof productDetailInclude }>;
 
-export const getProductBySlug = cache(async (slug: string): Promise<ProductDetail | null> => {
-  return db.product.findFirst({
-    where: { slug, status: "ACTIVE" },
-    include: productDetailInclude,
-  });
-});
+export const getProductBySlug = cache(unstable_cache(async (slug: string): Promise<ProductDetail | null> => {
+  return db.product.findFirst({ where: { slug, status: "ACTIVE" }, include: productDetailInclude });
+}, ["public-product-detail"], { revalidate: 300, tags: ["public-catalog"] }));
 
 export async function ratingFor(productId: string) {
   const result = await db.review.aggregate({

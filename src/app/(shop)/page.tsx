@@ -3,7 +3,7 @@ import { getSettings } from "@/lib/settings";
 import { CuratedHome } from "@/components/shop/home/curated-home";
 import { ProductCatalog } from "@/components/shop/product-catalog";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 /**
  * The shop's front door. Which page it serves is the owner's choice, made at

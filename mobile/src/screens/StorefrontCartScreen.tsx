@@ -159,7 +159,7 @@ export function StorefrontCartScreen({
 
   useEffect(() => {
     api
-      .getConfig()
+      .getStoreConfig()
       .then((cfg) => {
         setIsTestMode(Boolean(cfg.isTestMode));
         if (cfg.freeShippingThreshold !== undefined) {

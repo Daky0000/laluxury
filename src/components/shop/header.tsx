@@ -1,19 +1,18 @@
 import Link from "next/link";
-import { Search, User } from "lucide-react";
-import { cartItemCount } from "@/lib/cart";
-import { currentUser } from "@/lib/auth";
+import { connection } from "next/server";
+import { Search } from "lucide-react";
 import { announcementItems, getSettings } from "@/lib/settings";
 import { getNavCategories } from "@/lib/catalog";
-import { isStaff } from "@/lib/auth/rbac";
 import { SearchDialog } from "./search-dialog";
-import { BagButton } from "./bag-button";
+import { HeaderCustomerControls } from "./header-customer-controls";
 import { CategoryNav } from "./category-nav";
 
 export async function Header() {
-  const [settings, count, user, categories] = await Promise.all([
+  // Railway builds cannot reliably reach the private database. Read settings
+  // at request time rather than permanently prerendering fallback catalog copy.
+  await connection();
+  const [settings, categories] = await Promise.all([
     getSettings(),
-    cartItemCount(),
-    currentUser(),
     getNavCategories(),
   ]);
 
@@ -67,15 +66,7 @@ export async function Header() {
               </span>
             </SearchDialog>
 
-            <Link
-              href={user ? (isStaff(user.role) ? "/admin" : "/account") : "/login"}
-              className="lx-tap-tight text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-            >
-              <User className="h-[19px] w-[19px]" strokeWidth={1.5} aria-hidden />
-              <span className="sr-only">{user ? "Your account" : "Sign in"}</span>
-            </Link>
-
-            <BagButton count={count} />
+            <HeaderCustomerControls />
           </div>
         </div>
       </header>
