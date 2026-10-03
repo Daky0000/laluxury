@@ -39,8 +39,39 @@ const nextConfig: NextConfig = {
   async redirects() {
     const cdnUrl = (process.env.CATALOG_CDN_URL || process.env.R2_PUBLIC_URL || "").replace(/\/+$/, "");
     return [
+      // Domain migration redirects: forward all laluxurys.com / laluxury.com traffic to nobleenclave.com
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "laluxurys.com" }],
+        destination: "https://nobleenclave.com/:path*",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.laluxurys.com" }],
+        destination: "https://nobleenclave.com/:path*",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "laluxury.com" }],
+        destination: "https://nobleenclave.com/:path*",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.laluxury.com" }],
+        destination: "https://nobleenclave.com/:path*",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.nobleenclave.com" }],
+        destination: "https://nobleenclave.com/:path*",
+        permanent: true,
+      },
       ...(cdnUrl ? [{ source: "/catalog/:path*", destination: `${cdnUrl}/catalog/:path*`, permanent: false }] : []),
-      ...["/downloads/:file(.*\\.apk)", "/LaLuxury-Management.apk", "/download", "/app/download"].map((source) => ({
+      ...["/downloads/:file(.*\\.apk)", "/LaLuxury-Management.apk", "/NobelEnclave-Management.apk", "/download", "/app/download"].map((source) => ({
         source, destination: "/api/app/download", permanent: false,
       })),
     ];

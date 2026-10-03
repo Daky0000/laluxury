@@ -7,7 +7,7 @@ import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
 import { Card, Badge, Alert, EmptyState } from "@/components/ui";
 import { Thumb } from "@/components/shop/photo";
-import { payRemainingBalanceAction } from "@/app/actions/order-balance";
+import { OrderPaymentCard } from "@/components/shop/order-payment-card";
 
 export const metadata: Metadata = {
   title: "Track an order",
@@ -53,6 +53,21 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
     order && order.depositAmount && !order.balancePaidAt
       ? Math.max(0, order.total - order.depositAmount)
       : 0;
+
+  const isPendingInitialPayment = Boolean(
+    order &&
+      order.paymentStatus !== "SUCCESS" &&
+      order.status !== "CANCELLED" &&
+      order.status !== "REFUNDED",
+  );
+
+  const isPreorderDepositDue = Boolean(
+    isPendingInitialPayment && order?.hasPreorderItems && order?.depositAmount && !order?.paidAt,
+  );
+
+  const initialAmountDue = isPreorderDepositDue
+    ? (order?.depositAmount ?? 0)
+    : (order?.total ?? 0);
 
   return (
     <div className="lx-container max-w-3xl py-12 sm:py-16">
@@ -211,28 +226,28 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
             </div>
           ) : null}
 
+          {/* Unpaid Initial Order Payment Card */}
+          {isPendingInitialPayment && initialAmountDue > 0 ? (
+            <OrderPaymentCard
+              orderId={order.id}
+              orderNumber={order.orderNumber}
+              defaultPhone={order.phone ?? ""}
+              amountDueMinor={initialAmountDue}
+              isPreorderDeposit={isPreorderDepositDue}
+              isRemainingBalance={false}
+            />
+          ) : null}
+
           {/* 50% Remaining Balance Payment Card */}
-          {balanceRemaining > 0 ? (
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
-                  50% Pre-Order Balance Remaining
-                </p>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                  Deposit recorded: <strong>{formatMoney(order.depositAmount!)}</strong> · Balance
-                  due upon delivery/clearance: <strong>{formatMoney(balanceRemaining)}</strong>
-                </p>
-              </div>
-              <form action={payRemainingBalanceAction}>
-                <input type="hidden" name="orderId" value={order.id} />
-                <button
-                  type="submit"
-                  className="bg-[var(--accent)] px-5 py-3 text-xs font-medium uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)]"
-                >
-                  Pay Remaining Balance · {formatMoney(balanceRemaining)}
-                </button>
-              </form>
-            </div>
+          {!isPendingInitialPayment && balanceRemaining > 0 ? (
+            <OrderPaymentCard
+              orderId={order.id}
+              orderNumber={order.orderNumber}
+              defaultPhone={order.phone ?? ""}
+              amountDueMinor={balanceRemaining}
+              isPreorderDeposit={false}
+              isRemainingBalance={true}
+            />
           ) : order.balancePaidAt ? (
             <div className="mt-6 border border-sage-600/30 bg-sage-600/10 px-4 py-3 text-xs font-medium text-sage-600">
               ✓ Full 100% order balance settled ({formatDate(order.balancePaidAt)}).

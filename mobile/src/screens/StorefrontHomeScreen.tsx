@@ -101,7 +101,7 @@ export function StorefrontHomeScreen({
 
   const handleShare = async (product: Product) => {
     try {
-      const url = `https://laluxurys.com/product/${product.slug}`;
+      const url = `https://nobleenclave.com/product/${product.slug}`;
       const formattedPrice = formatCurrency(product.minPrice);
       await Share.share({
         title: product.title,

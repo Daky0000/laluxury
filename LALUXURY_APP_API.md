@@ -50,7 +50,7 @@ Sign in with an email address or Ghana phone number (`024...`, `+233...`).
 **Request Body:**
 ```json
 {
-  "identifier": "admin@laluxury.com",
+  "identifier": "admin@nobleenclave.com",
   "password": "YourPassword123"
 }
 ```
@@ -61,7 +61,7 @@ Sign in with an email address or Ghana phone number (`024...`, `+233...`).
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
     "id": "cm...user_id",
-    "email": "admin@laluxury.com",
+    "email": "admin@nobleenclave.com",
     "phone": "233240000000",
     "firstName": "Akua",
     "lastName": "Mensah",

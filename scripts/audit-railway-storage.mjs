@@ -42,7 +42,7 @@ try {
     console.log(path, response.status, response.headers.get("content-type"), response.headers.get("content-length"));
   }
   try {
-    const response = await fetch("https://media.laluxurys.com/catalog/hero-bedroom.webp", { method: "HEAD", signal: AbortSignal.timeout(10000) });
+    const response = await fetch("https://media.nobleenclave.com/catalog/hero-bedroom.webp", { method: "HEAD", signal: AbortSignal.timeout(10000) });
     console.log("Custom media domain:", response.status);
   } catch { console.log("Custom media domain: unreachable"); }
 } finally { s3.destroy(); }

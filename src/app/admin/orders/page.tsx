@@ -7,8 +7,10 @@ import { requirePermission } from "@/lib/auth";
 import { formatMoney } from "@/lib/money";
 import { formatDate, buildQuery } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
-import { Card, Badge, EmptyState, SectionHeading, InfoTooltip } from "@/components/ui";
+import { Card, Badge, EmptyState, InfoTooltip } from "@/components/ui";
 import { ManualOrderPanel } from "@/components/admin/manual-order-form";
+import { can } from "@/lib/auth/rbac";
+import { QuickMomoPromptButton } from "@/components/admin/quick-momo-prompt";
 import type { OrderStatus, PaymentStatus, Prisma } from "@/generated/prisma";
 
 export const metadata: Metadata = { title: "Orders" };
@@ -16,7 +18,8 @@ export const metadata: Metadata = { title: "Orders" };
 const PER_PAGE = 25;
 
 export default async function AdminOrdersPage({ searchParams }: PageProps<"/admin/orders">) {
-  await requirePermission("orders:read");
+  const user = await requirePermission("orders:read");
+  const canWrite = can(user.role, "orders:write");
   const params = await searchParams;
 
   const q = typeof params.q === "string" ? params.q : "";
@@ -51,7 +54,10 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
   const [orders, total, statusCounts] = await Promise.all([
     db.order.findMany({
       where,
-      include: { items: { select: { quantity: true } } },
+      include: {
+        items: { select: { quantity: true } },
+        shippingAddress: { select: { phone: true, firstName: true, lastName: true } },
+      },
       orderBy: { placedAt: "desc" },
       take: PER_PAGE,
       skip: (page - 1) * PER_PAGE,
@@ -215,6 +221,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
                   <th className="px-4 py-2.5 font-medium">Payment</th>
                   <th className="px-4 py-2.5 font-medium">Items</th>
                   <th className="px-4 py-2.5 text-right font-medium">Total</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
@@ -265,6 +272,32 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {formatMoney(order.total)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {canWrite &&
+                      order.paymentStatus !== "SUCCESS" &&
+                      order.status !== "CANCELLED" &&
+                      order.status !== "REFUNDED" ? (
+                        <QuickMomoPromptButton
+                          orderId={order.id}
+                          orderNumber={order.orderNumber}
+                          customerName={
+                            order.shippingAddress
+                              ? `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`.trim()
+                              : order.email
+                          }
+                          defaultPhone={order.phone ?? order.shippingAddress?.phone ?? ""}
+                          totalMinor={order.total}
+                          depositMinor={order.depositAmount}
+                        />
+                      ) : (
+                        <Link
+                          href={`/admin/orders/${order.id}`}
+                          className="inline-flex items-center text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                        >
+                          View →
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))}

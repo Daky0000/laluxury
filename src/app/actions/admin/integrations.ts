@@ -209,7 +209,7 @@ export async function testIntegrationAction(
           headers: {
             "X-API-Key": config.sms.apiKey,
             Accept: "application/json",
-            "User-Agent": "NobelEnclave-Shop/1.0 (+https://laluxurys.com)",
+            "User-Agent": "NobelEnclave-Shop/1.0 (+https://nobleenclave.com)",
           },
           cache: "no-store",
           signal: AbortSignal.timeout(15_000),

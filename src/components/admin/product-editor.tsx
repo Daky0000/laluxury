@@ -112,7 +112,7 @@ export function ProductEditor({
     () => "",
   );
 
-  const fullPermalink = `${origin || "https://laluxurys.com"}/product/${product.slug}`;
+  const fullPermalink = `${origin || "https://nobleenclave.com"}/product/${product.slug}`;
 
 
   const copyPermalink = async () => {
@@ -219,7 +219,7 @@ function DetailsTab({
   const [slugValue, setSlugValue] = useState(product.slug);
   const [copiedHandle, setCopiedHandle] = useState(false);
 
-  const fullPermalink = `${origin || "https://laluxurys.com"}/product/${slugValue || product.slug}`;
+  const fullPermalink = `${origin || "https://nobleenclave.com"}/product/${slugValue || product.slug}`;
 
   const copyPermalink = async () => {
     try {

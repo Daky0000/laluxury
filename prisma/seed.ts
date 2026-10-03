@@ -139,7 +139,7 @@ async function main() {
   console.log("Seeding LaLuxury...");
 
   // --- Staff ---------------------------------------------------------------
-  const ownerEmail = (process.env.SEED_OWNER_EMAIL || "owner@laluxury.com").toLowerCase();
+  const ownerEmail = (process.env.SEED_OWNER_EMAIL || "owner@nobleenclave.com").toLowerCase();
   const ownerPassword = process.env.SEED_OWNER_PASSWORD || "ChangeMe!2026";
 
   const owner = await db.user.upsert({

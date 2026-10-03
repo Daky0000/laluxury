@@ -5,7 +5,7 @@
  */
 
 const CLOUDFLARE_R2_PUBLIC_URL = "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev";
-const DEFAULT_STORE_URL = "https://laluxurys.com";
+const DEFAULT_STORE_URL = "https://nobleenclave.com";
 
 export function resolveImageUrl(
   url?: string | null,

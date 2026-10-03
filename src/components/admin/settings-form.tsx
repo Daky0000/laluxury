@@ -123,7 +123,7 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
         <Field
           label="Page visitors land on"
           htmlFor="landingPage"
-          hint="What the wordmark and laluxury.com itself open. Both pages keep their own address whichever you pick, so /shop still works."
+          hint="What the wordmark and nobleenclave.com itself open. Both pages keep their own address whichever you pick, so /shop still works."
         >
           <select
             id="landingPage"

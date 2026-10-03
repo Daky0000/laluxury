@@ -50,7 +50,7 @@ export function ProductCreateForm({
   };
 
   const currentSlug = slug || (title ? slugify(title) : "product-url-slug");
-  const fullPermalink = `${origin || "https://laluxurys.com"}/product/${currentSlug}`;
+  const fullPermalink = `${origin || "https://nobleenclave.com"}/product/${currentSlug}`;
 
   const copyPermalink = async () => {
     try {
@@ -109,7 +109,7 @@ export function ProductCreateForm({
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 text-xs sm:text-sm font-mono text-[var(--text-primary)] bg-[var(--surface-raised)] rounded px-3 py-2 border border-[var(--border-subtle)] break-all select-all">
-            <span className="text-[var(--text-muted)]">{origin || "https://laluxurys.com"}/product/</span>
+            <span className="text-[var(--text-muted)]">{origin || "https://nobleenclave.com"}/product/</span>
             <span className="font-semibold text-[var(--accent)]">{slug || (title ? slugify(title) : "your-product-name")}</span>
           </div>
 

@@ -137,7 +137,7 @@ async function call(
         Accept: "application/json",
         // An empty User-Agent is one of the cheapest things for an edge to
         // block, and a named one is something Vynfy can allowlist on request.
-        "User-Agent": "NobelEnclave-Shop/1.0 (+https://laluxurys.com)",
+        "User-Agent": "NobelEnclave-Shop/1.0 (+https://nobleenclave.com)",
         "X-API-Key": apiKey,
       },
       body: JSON.stringify(body),

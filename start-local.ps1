@@ -49,5 +49,5 @@ node scripts/seed-once.mjs
 # 3. Start Next.js local server on http://localhost:3005
 Write-Host "LaLuxury Storefront: http://localhost:3005" -ForegroundColor Green
 Write-Host "LaLuxury Pre-Orders: http://localhost:3005/pre-order" -ForegroundColor Green
-Write-Host "LaLuxury Admin Console: http://localhost:3005/admin (owner@laluxury.com / ChangeMe!2026)" -ForegroundColor Yellow
+Write-Host "Admin Console: http://localhost:3005/admin (owner@nobleenclave.com / ChangeMe!2026)" -ForegroundColor Yellow
 npm run dev

@@ -16,7 +16,7 @@ import {
 
 
 // Default to live store URL, with support for local LAN and emulator endpoints
-const DEFAULT_URL = "https://laluxurys.com";
+const DEFAULT_URL = "https://nobleenclave.com";
 
 const STORAGE_KEY_TOKEN = "lx_token";
 const STORAGE_KEY_USER = "lx_user";
