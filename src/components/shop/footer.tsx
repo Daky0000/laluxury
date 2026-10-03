@@ -74,9 +74,18 @@ export async function Footer() {
           label onto a line of its own. */}
       <div className="lx-container grid gap-x-8 gap-y-10 py-14 sm:py-20 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
-          <p className="font-display text-2xl font-light uppercase tracking-[0.16em] sm:text-3xl">
-            {settings.storeName}
-          </p>
+          <div className="flex items-center gap-3">
+            <img
+              src="/emblem.png"
+              alt={settings.storeName}
+              width={32}
+              height={32}
+              className="h-7 w-auto object-contain"
+            />
+            <p className="font-display text-2xl font-light uppercase tracking-[0.16em] sm:text-3xl">
+              {settings.storeName}
+            </p>
+          </div>
           <p data-dw-field="footer.description" className="mt-4 max-w-[320px] text-sm font-light leading-[1.7] text-[var(--text-secondary)]">
             Considered textiles and furnishings for Ghanaian homes. Order online or by WhatsApp — pay by Mobile Money (MTN, Telecel,
             AirtelTigo), card or bank transfer.

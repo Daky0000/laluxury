@@ -42,7 +42,7 @@ A custom React Native & Expo Android/iOS mobile application for managing the **N
    ```
 3. A QR code will appear in your terminal.
 4. Open the **Expo Go** app on your phone, tap **"Scan QR code"**, and point your phone at the computer screen.
-5. The **LaLuxury** app will immediately launch on your phone with full camera access, live syncing, and instant reload!
+5. The **Noble Enclave** app will immediately launch on your phone with full camera access, live syncing, and instant reload!
 
 ---
 

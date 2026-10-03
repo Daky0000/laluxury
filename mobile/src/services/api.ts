@@ -49,7 +49,8 @@ class ApiService {
           clean.includes("127.0.0.1") ||
           clean.includes("10.0.2.2") ||
           clean.includes("192.168.") ||
-          clean.includes("laluxury")
+          clean.includes("laluxury") ||
+          clean.includes("nobel")
         ) {
           this.baseUrl = DEFAULT_URL;
           AsyncStorage.removeItem(STORAGE_KEY_URL).catch(() => {});

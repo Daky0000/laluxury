@@ -150,7 +150,7 @@ export function AccountScreen({
         </View>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.updateCardTitle}>APP UPDATE & VERSION</Text>
-          <Text style={styles.updateCardSubtitle}>v1.2.5 (Build 7) &bull; Official Release</Text>
+          <Text style={styles.updateCardSubtitle}>v1.2.7 (Build 9) &bull; Official Release</Text>
         </View>
         <TouchableOpacity
           style={styles.checkUpdateBtn}
@@ -191,7 +191,7 @@ export function AccountScreen({
       <AppUpdateModal
         visible={showUpdateModal}
         updateInfo={updateInfo}
-        currentVersion="1.2.6"
+        currentVersion="1.2.7"
         onDismiss={() => setShowUpdateModal(false)}
       />
     </View>

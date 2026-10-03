@@ -1,5 +1,5 @@
 /**
- * Verification test for Laluxury Custom App API endpoints
+ * Verification test for Noble Enclave Custom App API endpoints
  * Tests:
  * 1. Unauthenticated request rejection (401)
  * 2. Token generation & verification with Bearer Auth
@@ -17,7 +17,7 @@ import { db } from "../src/lib/db";
 import { signSession } from "../src/lib/auth/session";
 
 async function run() {
-  console.log("=== Testing Laluxury Custom App API Logic ===");
+  console.log("=== Testing Noble Enclave Custom App API Logic ===");
 
   // 1. Get or create a staff test user
   let staff = await db.user.findFirst({
@@ -28,7 +28,7 @@ async function run() {
     console.log("No staff user found, creating temporary test admin...");
     staff = await db.user.create({
       data: {
-        email: "app-test-admin@laluxury.test",
+        email: "app-test-admin@nobleenclave.test",
         firstName: "Test",
         lastName: "Admin",
         role: "ADMIN",
@@ -92,7 +92,7 @@ async function run() {
       stock: 12,
       sku: `TST-${Date.now().toString(36).toUpperCase()}`,
       status: "DRAFT",
-      brand: "LaLuxury Atelier",
+      brand: "Noble Enclave Atelier",
       material: "Solid Oak / Brass",
       tags: ["handcrafted", "app-created"],
       isFeatured: false,

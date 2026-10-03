@@ -178,7 +178,7 @@ export function SettingsScreen({ user, onLogout }: Props) {
           <Text style={styles.sectionLabel}>ABOUT NOBLE ENCLAVE ATELIER</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Version:</Text>
-            <Text style={styles.infoVal}>1.2.5 (Build 7 - Official)</Text>
+            <Text style={styles.infoVal}>1.2.7 (Build 9 - Official)</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Platform:</Text>
