@@ -61,6 +61,7 @@ import { ProductsListScreen } from "./src/screens/ProductsListScreen";
 import { ProductDetailScreen } from "./src/screens/ProductDetailScreen";
 import { CreateProductScreen } from "./src/screens/CreateProductScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { StoreDesignScreen } from "./src/screens/StoreDesignScreen";
 
 // Components
 import { BottomNav, StorefrontTab, BackendTab } from "./src/components/BottomNav";
@@ -81,7 +82,9 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const CURRENT_APP_VERSION = "1.2.7";
+import appJson from "./app.json";
+
+const CURRENT_APP_VERSION = appJson.expo.version;
 
 function isNewerVersion(current: string, latest: string): boolean {
   const cParts = current.split(".").map((n) => parseInt(n, 10) || 0);
@@ -119,6 +122,7 @@ function MainApp() {
   const [notification, setNotification] = useState<PopNotificationData | null>(null);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showStoreDesign, setShowStoreDesign] = useState(false);
 
   const notify = (data: PopNotificationData) => {
     setNotification(data);
@@ -283,6 +287,12 @@ function MainApp() {
       // 1. If viewing product detail, go back to previous view
       if (selectedProductId) {
         setSelectedProductId(null);
+        return true;
+      }
+
+      // If viewing store design, return to dashboard
+      if (showStoreDesign) {
+        setShowStoreDesign(false);
         return true;
       }
 
@@ -627,6 +637,29 @@ function MainApp() {
     );
   }
 
+  // Active Store Design View in Backend
+  if (mode === "BACKEND" && showStoreDesign && user) {
+    return (
+      <SafeAreaView
+        style={[
+          styles.containerDark,
+          { paddingTop: Math.max(insets.top, StatusBar.currentHeight || 0) },
+        ]}
+      >
+        <ExpoStatusBar style="light" />
+        <StoreDesignScreen
+          user={user}
+          onBack={() => setShowStoreDesign(false)}
+          onNotify={notify}
+        />
+        <PopNotification
+          notification={notification}
+          onDismiss={() => setNotification(null)}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView
       style={[
@@ -741,6 +774,7 @@ function MainApp() {
                 user={user}
                 onNavigateToProducts={() => setBackendTab("PRODUCTS")}
                 onNavigateToCreate={() => setBackendTab("ADD")}
+                onNavigateToStoreDesign={() => setShowStoreDesign(true)}
                 onSelectProduct={(id) => setSelectedProductId(id)}
                 onSwitchToStorefront={() => {
                   setMode("STOREFRONT");

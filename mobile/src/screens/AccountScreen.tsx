@@ -20,6 +20,10 @@ import { api } from "../services/api";
 import { User, Order } from "../types";
 import { formatCurrency, formatDate } from "../utils/format";
 import { AppUpdateModal } from "../components/AppUpdateModal";
+import appJson from "../../app.json";
+
+const CURRENT_APP_VERSION = appJson.expo.version;
+const CURRENT_APP_BUILD = appJson.expo.android.versionCode;
 
 type Props = {
   user: User | null;
@@ -100,11 +104,11 @@ export function AccountScreen({
     try {
       const res = await api.checkAppVersion();
       setUpdateInfo(res);
-      if (res.latestVersion === "1.2.7") {
-        setUpdateStatus("You are running the latest version (v1.2.7).");
+      if (res.latestVersion === CURRENT_APP_VERSION) {
+        setUpdateStatus(`You are running the latest version (v${CURRENT_APP_VERSION}).`);
         Alert.alert(
-          "Noble Enclave v1.2.7",
-          "You are on the latest version (v1.2.7). If you wish to re-download or update your install, tap below.",
+          `Noble Enclave v${CURRENT_APP_VERSION}`,
+          `You are on the latest version (v${CURRENT_APP_VERSION}). If you wish to re-download or update your install, tap below.`,
           [
             { text: "Close", style: "cancel" },
             {
@@ -150,7 +154,7 @@ export function AccountScreen({
         </View>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.updateCardTitle}>APP UPDATE & VERSION</Text>
-          <Text style={styles.updateCardSubtitle}>v1.2.7 (Build 9) &bull; Official Release</Text>
+          <Text style={styles.updateCardSubtitle}>v{CURRENT_APP_VERSION} (Build {CURRENT_APP_BUILD}) &bull; Official Release</Text>
         </View>
         <TouchableOpacity
           style={styles.checkUpdateBtn}
@@ -191,7 +195,7 @@ export function AccountScreen({
       <AppUpdateModal
         visible={showUpdateModal}
         updateInfo={updateInfo}
-        currentVersion="1.2.7"
+        currentVersion={CURRENT_APP_VERSION}
         onDismiss={() => setShowUpdateModal(false)}
       />
     </View>
@@ -343,7 +347,7 @@ export function AccountScreen({
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.brandHeader}>
           <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
-          <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
+          <Text style={styles.brandSubtitle}>HOME TEXTILES • LIVING ESSENTIALS</Text>
         </View>
 
         {/* Customer Profile Card */}
@@ -634,7 +638,7 @@ export function AccountScreen({
       >
         <View style={styles.brandHeader}>
           <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
-          <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
+          <Text style={styles.brandSubtitle}>HOME TEXTILES • LIVING ESSENTIALS</Text>
         </View>
 
         {authStep === "PHONE" ? (

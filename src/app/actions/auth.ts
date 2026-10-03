@@ -34,22 +34,15 @@ export type AuthState = { ok: boolean; message?: string; fieldErrors?: Record<st
  * a question only we care about, so the field takes either and works it out.
  */
 const loginSchema = z.object({
-  identifier: z.string().min(1, "Enter your phone number or email."),
-  password: z.string().min(1, "Enter your password."),
+  phone: z.string().min(1, "Enter your phone number."),
+  password: z.string().optional(),
 });
 
-const registerSchema = z
-  .object({
-    name: z.string().trim().min(2, "Enter your name."),
-    phone: z.string().min(1, "Enter your phone number."),
-    password: z.string().min(8, "Use at least 8 characters."),
-    confirmPassword: z.string().min(1, "Type your password again."),
-    acceptsMarketing: z.boolean().optional(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    path: ["confirmPassword"],
-    message: "Those two passwords do not match.",
-  });
+const registerSchema = z.object({
+  name: z.string().trim().min(2, "Enter your name."),
+  phone: z.string().min(1, "Enter your phone number."),
+  acceptsMarketing: z.boolean().optional(),
+});
 
 function fieldErrors(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
@@ -71,23 +64,42 @@ export async function loginAction(
   _prev: AuthState | null,
   formData: FormData,
 ): Promise<AuthState> {
-  const parsed = loginSchema.safeParse({
-    identifier: formData.get("identifier"),
-    password: formData.get("password"),
-  });
-  if (!parsed.success) return { ok: false, fieldErrors: fieldErrors(parsed.error) };
+  const rawIdentifier = (formData.get("phone") || formData.get("identifier") || "").toString().trim();
+  const password = (formData.get("password") || "").toString().trim();
 
-  const identifier = parsed.data.identifier.trim();
-  // An "@" settles it before the number parser gets a look in. Without that,
-  // an address with enough digits in the local part could be read as a phone
-  // number and looked up against the wrong column.
-  const phone = identifier.includes("@") ? null : normalisePhone(identifier);
+  if (!rawIdentifier) {
+    return { ok: false, fieldErrors: { phone: "Enter your phone number." } };
+  }
 
-  // Ten tries a quarter-hour against one account, and a hundred from one
-  // address, so a password cannot be guessed at speed - by anyone, or at
-  // everyone. Counted before the lookup, so a locked key costs no query.
+  const phone = normalisePhone(rawIdentifier);
+  if (!phone) {
+    // Support email login for legacy staff fallback if password provided
+    if (rawIdentifier.includes("@") && password) {
+      const user = await db.user.findUnique({ where: { email: rawIdentifier.toLowerCase() } });
+      const valid = await verifyPassword(password, user?.passwordHash ?? null);
+      if (!user || !valid) {
+        return { ok: false, message: "Those details do not match an account." };
+      }
+      if (!user.isActive) {
+        return { ok: false, message: "That account has been disabled." };
+      }
+      await createSessionCookie({ userId: user.id, role: user.role });
+      await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+      await getOrCreateCart().catch(() => {});
+      redirect(isStaff(user.role) ? "/admin" : "/account");
+    }
+
+    return {
+      ok: false,
+      fieldErrors: {
+        phone:
+          "Enter a valid Ghanaian number like 024 000 0000, or one with its country code, like +44 7700 900123.",
+      },
+    };
+  }
+
   const address = await requestAddress();
-  const perAccount = rateLimit(`login:${phone ?? identifier.toLowerCase()}`, {
+  const perAccount = rateLimit(`login:${phone}`, {
     limit: 10,
     windowMs: 15 * 60 * 1000,
   });
@@ -95,62 +107,54 @@ export async function loginAction(
   if (!perAccount.ok) return { ok: false, message: retryMessage(perAccount.retryAfterSeconds) };
   if (!perAddress.ok) return { ok: false, message: retryMessage(perAddress.retryAfterSeconds) };
 
-  const user = phone
-    ? await db.user.findUnique({ where: { phone } })
-    : await db.user.findUnique({ where: { email: identifier.toLowerCase() } });
-
-  // One message for both cases, so this cannot be used to enumerate accounts.
-  const valid = await verifyPassword(parsed.data.password, user?.passwordHash ?? null);
-  if (!user || !valid) {
-    return { ok: false, message: "Those details do not match an account." };
+  const user = await db.user.findUnique({ where: { phone } });
+  if (!user) {
+    return { ok: false, message: "No account found with that phone number. Please create an account." };
   }
   if (!user.isActive) {
     return { ok: false, message: "That account has been disabled." };
   }
 
-  // An account that was registered by phone and never verified has no other way
-  // in, so rather than refusing it, send a fresh code and finish what was
-  // started. The session is still withheld until the code is typed.
-  if (user.phone && !user.phoneVerified && !user.email) {
-    const settings = await getSettings();
-    const sent = await sendOtp(user.phone, settings.storeName);
-    if (!sent.ok && sent.fatal) {
-      // Fallback when SMS gateway (Vynfy) is not configured: verify and sign in directly.
-      await db.user.update({
-        where: { id: user.id },
-        data: { phoneVerified: new Date(), lastLoginAt: new Date() },
-      });
+  // If a password was optionally provided by staff and matches
+  if (password && user.passwordHash) {
+    const valid = await verifyPassword(password, user.passwordHash);
+    if (valid) {
       await createSessionCookie({ userId: user.id, role: user.role });
+      await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
       await getOrCreateCart().catch(() => {});
       redirect(isStaff(user.role) ? "/admin" : "/account");
     }
-
-    await setPendingSignup({
-      userId: user.id,
-      phone: user.phone,
-      sentAt: Math.floor(Date.now() / 1000),
-      delivered: sent.ok,
-    });
-    redirect("/register/verify");
   }
 
-  await createSessionCookie({ userId: user.id, role: user.role });
-  await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  // Primary number sign-in: send SMS OTP
+  const settings = await getSettings();
+  const sent = await sendOtp(user.phone ?? phone, settings.storeName);
 
-  // Fold anything added while signed out into the account cart. This runs here
-  // because a Server Action is the only place the cart cookie may be written.
-  await getOrCreateCart().catch(() => {});
+  if (!sent.ok && sent.fatal) {
+    // Fallback when SMS gateway (Vynfy) is not configured: verify and sign in directly
+    await db.user.update({
+      where: { id: user.id },
+      data: { phoneVerified: new Date(), lastLoginAt: new Date() },
+    });
+    await createSessionCookie({ userId: user.id, role: user.role });
+    await getOrCreateCart().catch(() => {});
+    redirect(isStaff(user.role) ? "/admin" : "/account");
+  }
 
-  redirect(isStaff(user.role) ? "/admin" : "/account");
+  await setPendingSignup({
+    userId: user.id,
+    phone: user.phone ?? phone,
+    sentAt: Math.floor(Date.now() / 1000),
+    delivered: sent.ok,
+  });
+
+  redirect("/register/verify");
 }
 
 /**
- * Step one of registration: name, number, password.
+ * Step one of registration: name and phone number.
  *
- * The account is written now but left unverified, and no session is issued. The
- * code Vynfy texts is what turns it into an account you can sign in to, so an
- * abandoned sign-up is an inert row rather than a live account on somebody
- * else's phone number.
+ * Sends an SMS OTP to confirm ownership of the phone number.
  */
 export async function registerAction(
   _prev: AuthState | null,
@@ -159,8 +163,6 @@ export async function registerAction(
   const parsed = registerSchema.safeParse({
     name: formData.get("name"),
     phone: formData.get("phone"),
-    password: formData.get("password"),
-    confirmPassword: formData.get("confirmPassword"),
     acceptsMarketing: formData.get("acceptsMarketing") === "on",
   });
   if (!parsed.success) return { ok: false, fieldErrors: fieldErrors(parsed.error) };
@@ -177,11 +179,6 @@ export async function registerAction(
     };
   }
 
-  const problems = passwordProblems(parsed.data.password);
-  if (problems.length) return { ok: false, fieldErrors: { password: problems[0] } };
-
-  // Every sign-up sends a text we pay for, so one address gets a handful an
-  // hour - plenty for a household, not enough to drain the SMS balance.
   const signups = rateLimit(`register-ip:${await requestAddress()}`, {
     limit: 8,
     windowMs: 60 * 60 * 1000,
@@ -204,24 +201,16 @@ export async function registerAction(
     firstName,
     lastName,
     phone,
-    passwordHash: await hashPassword(parsed.data.password),
     acceptsMarketing,
-    // Consent has to be evidenced, not assumed — and withdrawing it clears the
-    // date as well as the flag.
     marketingConsentAt: acceptsMarketing ? new Date() : null,
   };
 
-  // An unverified row on this number is somebody's abandoned attempt, or this
-  // same person coming back. Either way it is theirs only once they hold the
-  // phone, so it is safe to take it over rather than block the number forever.
   const user = existing
     ? await db.user.update({ where: { id: existing.id }, data })
     : await db.user.create({ data: { ...data, role: "CUSTOMER" } });
 
   const sent = await sendOtp(phone, settings.storeName);
 
-  // If the SMS gateway is not configured yet, verify and sign in immediately so
-  // customers can still create accounts seamlessly.
   if (!sent.ok && sent.fatal) {
     await db.user.update({
       where: { id: user.id },
@@ -244,11 +233,6 @@ export async function registerAction(
 
 /**
  * Step two: the code. This is what creates the session.
- *
- * Called straight from the code screen rather than through a form post — the
- * six boxes verify themselves the moment the last digit lands, so there is no
- * form to submit and nothing to serialise. The redirect below still works from
- * there: a Server Action that redirects navigates the client router.
  */
 export async function verifySignupAction(code: string): Promise<AuthState> {
   const pending = await getPendingSignup();
@@ -260,8 +244,6 @@ export async function verifySignupAction(code: string): Promise<AuthState> {
   }
 
   const digits = String(code ?? "").replace(/[^0-9]/g, "");
-  // Vynfy issues exactly six digits, so anything else cannot be one of ours and
-  // is refused here rather than spent as one of the three attempts.
   if (digits.length !== OTP_LENGTH) {
     return { ok: false, fieldErrors: { code: `Enter the ${OTP_LENGTH}-digit code we texted you.` } };
   }
@@ -284,7 +266,7 @@ export async function verifySignupAction(code: string): Promise<AuthState> {
   await createSessionCookie({ userId: user.id, role: user.role });
   await getOrCreateCart().catch(() => {});
 
-  redirect("/account");
+  redirect(isStaff(user.role) ? "/admin" : "/account");
 }
 
 /** Another code, once the cooldown has passed. */

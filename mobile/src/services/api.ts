@@ -167,8 +167,23 @@ class ApiService {
     return this.publicRequest(`/api/store/products/${encodeURIComponent(id)}`);
   }
 
-  async getStoreCategories(): Promise<{ categories: Category[] }> {
-    return this.publicRequest("/api/store/categories", 15 * 60 * 1000);
+  async getStoreCategories(bypassCache = false): Promise<{ categories: Category[] }> {
+    if (bypassCache) {
+      this.publicCache.delete(`${this.baseUrl}/api/store/categories`);
+    }
+    return this.publicRequest("/api/store/categories", bypassCache ? 0 : 15 * 60 * 1000);
+  }
+
+  async updateCategory(
+    id: string,
+    data: { name?: string; imageUrl?: string | null; description?: string; position?: number }
+  ): Promise<{ ok: boolean; category: Category }> {
+    const res = await this.request<{ ok: boolean; category: Category }>("/api/app/categories", {
+      method: "PATCH",
+      body: JSON.stringify({ id, ...data }),
+    });
+    this.publicCache.clear();
+    return res;
   }
 
   async getStoreCollections(): Promise<{ collections: Collection[] }> {
@@ -693,13 +708,13 @@ class ApiService {
 
       // Safe resilient metadata so the user is NEVER blocked from updating
       return {
-        latestVersion: "1.2.7",
-        versionCode: 9,
-        appName: "Noble Enclave Atelier & Living",
+        latestVersion: "1.2.8",
+        versionCode: 10,
+        appName: "Noble Enclave",
         downloadUrl: `${DEFAULT_URL}/app`,
         directUrl: `${DEFAULT_URL}/api/app/download`,
         releaseNotes:
-          "Noble Enclave v1.2.7 release: Official Noble Enclave branding, royal gold NE monogram & app launcher icon, status bar system notifications for updates, and cross-platform synchronization.",
+          "Noble Enclave v1.2.8 release: Store design management on web & mobile, refreshed Bedding · Curtains · Carpets · Cushions category carousel with dark overlays, 2-column newly stocked catalog view, direct search header button, phone-only authentication with SMS OTP, dynamic runtime version verification, and configurable delivery fees.",
       };
     }
   }

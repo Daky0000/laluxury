@@ -8,7 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  Share,
+  Dimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -17,6 +17,11 @@ import { Product, User, Category, AppConfig } from "../types";
 import { formatCurrency } from "../utils/format";
 import { resolveImageUrl } from "../utils/image";
 
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+// 2 full cards visible + 0.25 card peek on the right edge
+const CATEGORY_CARD_WIDTH = Math.round((SCREEN_WIDTH - 40 - 12) / 2.25);
+// 2 columns for all products grid
+const GRID_ITEM_WIDTH = Math.round((SCREEN_WIDTH - 40 - 12) / 2);
 
 type Props = {
   user: User | null;
@@ -34,6 +39,13 @@ type Props = {
     icon?: keyof typeof Feather.glyphMap;
   }) => void;
 };
+
+const DEFAULT_CATEGORIES: Category[] = [
+  { id: "cat_bedding", name: "Bedding", slug: "bedding", imageUrl: "/catalog/room-bedroom.webp", position: 1, isActive: true },
+  { id: "cat_curtains", name: "Curtains", slug: "curtains", imageUrl: "/catalog/window-curtain.webp", position: 2, isActive: true },
+  { id: "cat_carpets", name: "Carpets", slug: "carpets", imageUrl: "/catalog/fluffy-carpet.webp", position: 3, isActive: true },
+  { id: "cat_cushions", name: "Cushions", slug: "cushions", imageUrl: "/catalog/throw-pillow.webp", position: 4, isActive: true },
+];
 
 export function StorefrontHomeScreen({
   user,
@@ -59,13 +71,14 @@ export function StorefrontHomeScreen({
   const loadData = useCallback(async () => {
     try {
       const [prodRes, catRes, cfgRes] = await Promise.all([
-        api.getStoreProducts({ limit: 12 }),
-        api.getStoreCategories().catch(() => ({ categories: [] })),
+        api.getStoreProducts({ limit: 50 }),
+        api.getStoreCategories(true).catch(() => ({ categories: [] })),
         api.getStoreConfig().catch(() => null),
       ]);
 
       setProducts(prodRes.products || []);
-      setCategories(catRes.categories || []);
+      const activeCats = (catRes.categories || []).filter((c) => c.isActive !== false);
+      setCategories(activeCats.length > 0 ? activeCats : DEFAULT_CATEGORIES);
       if (cfgRes) setConfig(cfgRes);
     } catch {
       // Graceful fallback
@@ -74,7 +87,6 @@ export function StorefrontHomeScreen({
       setRefreshing(false);
     }
   }, []);
-
 
   useEffect(() => {
     loadData();
@@ -99,30 +111,24 @@ export function StorefrontHomeScreen({
     }
   };
 
-  const handleShare = async (product: Product) => {
-    try {
-      const url = `https://nobleenclave.com/product/${product.slug}`;
-      const formattedPrice = formatCurrency(product.minPrice);
-      await Share.share({
-        title: product.title,
-        message: `Check out "${product.title}" (${formattedPrice}) from Noble Enclave Atelier & Living:\n${url}`,
-        url,
-      });
-      if (onNotify) {
-        onNotify({
-          title: "Product Shared",
-          message: `Link for "${product.title}" ready to share.`,
-          type: "info",
-          icon: "share-2",
-        });
-      }
-    } catch {
-      // Ignored
-    }
-  };
-
-  const featuredHero = products[0];
   const greetingName = user?.firstName || "Guest";
+  // Backend hero eyebrow config reference: config?.hero?.eyebrow
+  const _heroEyebrow = config?.hero?.eyebrow;
+
+  // Categories list to display
+  const displayCategories = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
+
+  // 1. Featured pieces: exactly 3 products
+  const featuredPieces = products.slice(0, 3);
+
+  // 2. All products: ranked by newly modified or added (updatedAt or createdAt desc), 6 products
+  const recentAllProducts = [...products]
+    .sort((a, b) => {
+      const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return timeB - timeA;
+    })
+    .slice(0, 6);
 
   return (
     <View style={styles.container}>
@@ -145,18 +151,29 @@ export function StorefrontHomeScreen({
           <Text style={styles.brandSubtitle}>HOME TEXTILES • LIVING ESSENTIALS</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.iconBtn}
-          onPress={onNavigateToBag}
-          activeOpacity={0.7}
-        >
-          <Feather name="shopping-bag" size={22} color={colors.text} />
-          {cartCount > 0 && (
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{cartCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        {/* Search button directly before the cart bag */}
+        <View style={styles.headerRightGroup}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => onNavigateToShop()}
+            activeOpacity={0.7}
+          >
+            <Feather name="search" size={22} color={colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={onNavigateToBag}
+            activeOpacity={0.7}
+          >
+            <Feather name="shopping-bag" size={22} color={colors.text} />
+            {cartCount > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{cartCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Dynamic Store Announcement Bar from Settings */}
@@ -217,114 +234,53 @@ export function StorefrontHomeScreen({
           </Text>
         </View>
 
-        {/* Hero Showcase Card */}
-        <View style={styles.heroCard}>
-          <View style={styles.heroContent}>
-            <Text style={styles.heroTag}>
-              {(config?.hero?.eyebrow || "THE ATELIER COLLECTION").toUpperCase()}
-            </Text>
-            <Text style={styles.heroSubTag}>
-              {config?.hero
-                ? `${config.hero.title} ${config.hero.titleAccent}`.toUpperCase()
-                : "BESPOKE LIVING & SEATING"}
-            </Text>
-            <TouchableOpacity
-              style={styles.heroButton}
-              onPress={() => {
-                if (featuredHero) onSelectProduct(featuredHero.id);
-                else onNavigateToShop();
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.heroButtonText}>SHOP NOW</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.heroImageWrapper}>
-            {resolveImageUrl(featuredHero?.images?.[0]?.url) ? (
-              <Image
-                source={{ uri: resolveImageUrl(featuredHero?.images?.[0]?.url)! }}
-                style={styles.heroImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={styles.heroPlaceholder}>
-                <Feather name="box" size={44} color={colors.primaryLight} />
-                <Text style={styles.heroPlaceholderText}>NOBLE ENCLAVE</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Explore Our Collection Section */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>EXPLORE OUR COLLECTION</Text>
-          <TouchableOpacity
-            onPress={() => onNavigateToShop()}
-            activeOpacity={0.7}
+        {/* Categories Carousel (Replaced the featured post) */}
+        <View style={styles.categoriesSection}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryCarouselContent}
+            snapToInterval={CATEGORY_CARD_WIDTH + 12}
+            decelerationRate="fast"
           >
-            <Text style={styles.viewAllText}>VIEW ALL</Text>
-          </TouchableOpacity>
+            {displayCategories.map((cat) => {
+              const bgUrl = resolveImageUrl(cat.imageUrl);
+              return (
+                <TouchableOpacity
+                  key={cat.id || cat.slug}
+                  style={[styles.categoryCard, { width: CATEGORY_CARD_WIDTH }]}
+                  onPress={() => onNavigateToShop(cat.name)}
+                  activeOpacity={0.88}
+                >
+                  {bgUrl ? (
+                    <Image
+                      source={{ uri: bgUrl }}
+                      style={styles.categoryCardImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.categoryFallbackBg}>
+                      <Feather name="image" size={28} color={colors.textMuted} />
+                    </View>
+                  )}
+
+                  {/* Dark overlay ensuring category title is visible */}
+                  <View style={styles.categoryDarkOverlay} />
+
+                  <View style={styles.categoryTitleContainer}>
+                    <Text style={styles.categoryCardTitle} numberOfLines={1}>
+                      {cat.name.toUpperCase()}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.collectionScroll}
-        >
-          {(categories.length > 0
-            ? categories.map((cat, idx) => ({
-                id: cat.id,
-                name: cat.name.toUpperCase(),
-                icon: (["home", "moon", "coffee", "sun", "award", "feather", "box"][idx % 7]) as any,
-              }))
-            : [
-                { id: "living", name: "LIVING ROOM", icon: "home" },
-                { id: "bedroom", name: "BEDROOM", icon: "moon" },
-                { id: "dining", name: "DINING", icon: "coffee" },
-                { id: "lighting", name: "LIGHTING", icon: "sun" },
-                { id: "decor", name: "DECOR", icon: "award" },
-              ]
-          ).map((cat) => (
-            <TouchableOpacity
-              key={cat.id}
-              style={styles.collectionItem}
-              onPress={() => onNavigateToShop(cat.name)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.collectionCircle}>
-                <Feather name={cat.icon as any} size={22} color={colors.primary} />
-              </View>
-              <Text style={styles.collectionLabel}>{cat.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Editorial Craftsmanship Banner */}
-
-        <TouchableOpacity
-          style={styles.editorialBanner}
-          onPress={() => onNavigateToShop()}
-          activeOpacity={0.85}
-        >
-          <View style={styles.editorialIconContainer}>
-            <Feather name="compass" size={24} color={colors.primary} />
-          </View>
-          <View style={styles.editorialTextContainer}>
-            <Text style={styles.editorialTitle}>CRAFTED WITH INTENT. TIMELESS LIVING.</Text>
-            <Text style={styles.editorialAction}>DISCOVER THE ATELIER ›</Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Curated Products Section */}
+        {/* Featured Pieces Section (3 products, NO view all button) */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>FEATURED PIECES</Text>
-          <TouchableOpacity
-            onPress={() => onNavigateToShop()}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.viewAllText}>SEE ALL ({products.length})</Text>
-          </TouchableOpacity>
         </View>
 
         {loading ? (
@@ -334,11 +290,11 @@ export function StorefrontHomeScreen({
             style={{ marginVertical: 32 }}
           />
         ) : (
-          <View style={styles.productsGrid}>
-            {products.slice(0, 8).map((item) => (
+          <View style={styles.featuredRow}>
+            {featuredPieces.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={styles.productCard}
+                style={styles.featuredCard}
                 onPress={() => onSelectProduct(item.id)}
                 activeOpacity={0.9}
               >
@@ -351,7 +307,7 @@ export function StorefrontHomeScreen({
                     />
                   ) : (
                     <View style={styles.productImageFallback}>
-                      <Feather name="box" size={26} color={colors.textMuted} />
+                      <Feather name="box" size={24} color={colors.textMuted} />
                     </View>
                   )}
                 </View>
@@ -360,40 +316,86 @@ export function StorefrontHomeScreen({
                   <Text style={styles.productTitle} numberOfLines={2}>
                     {item.title}
                   </Text>
-                  {item.material ? (
-                    <Text style={styles.productMaterial} numberOfLines={1}>
-                      {item.material}
-                    </Text>
-                  ) : null}
                   <Text style={styles.productPrice}>
                     {formatCurrency(item.minPrice)}
                   </Text>
                 </View>
 
-                {/* Action Buttons (Share & Add) */}
-                <View style={styles.cardActions}>
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleShare(item);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="share-2" size={14} color={colors.primary} />
-                  </TouchableOpacity>
+                {/* Explicit Add to Cart action button (NO share button, NO plus-only icon) */}
+                <TouchableOpacity
+                  style={styles.addToCartBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleQuickAdd(item);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="shopping-bag" size={13} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.addToCartBtnText}>Add to Cart</Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
-                  <TouchableOpacity
-                    style={[styles.actionBtn, styles.addCircleBtn]}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleQuickAdd(item);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="plus" size={15} color="#FFFFFF" />
-                  </TouchableOpacity>
+        {/* All Products Section (2 products in a row, ranked newly modified/added, displays 6) */}
+        <View style={styles.sectionHeaderWithLink}>
+          <Text style={styles.sectionTitle}>ALL PRODUCTS</Text>
+          <TouchableOpacity onPress={() => onNavigateToShop()} activeOpacity={0.7}>
+            <Text style={styles.viewAllText}>VIEW ALL PRODUCTS ›</Text>
+          </TouchableOpacity>
+        </View>
+
+        {loading ? (
+          <ActivityIndicator
+            size="small"
+            color={colors.primary}
+            style={{ marginVertical: 32 }}
+          />
+        ) : (
+          <View style={styles.allProductsGrid}>
+            {recentAllProducts.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.allProductCard, { width: GRID_ITEM_WIDTH }]}
+                onPress={() => onSelectProduct(item.id)}
+                activeOpacity={0.9}
+              >
+                <View style={styles.productImageContainer}>
+                  {resolveImageUrl(item.images?.[0]?.url) ? (
+                    <Image
+                      source={{ uri: resolveImageUrl(item.images?.[0]?.url)! }}
+                      style={styles.productImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.productImageFallback}>
+                      <Feather name="box" size={24} color={colors.textMuted} />
+                    </View>
+                  )}
                 </View>
+
+                <View style={styles.productInfo}>
+                  <Text style={styles.productTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.productPrice}>
+                    {formatCurrency(item.minPrice)}
+                  </Text>
+                </View>
+
+                {/* Explicit Add to Cart action button (NO share button, NO plus-only icon) */}
+                <TouchableOpacity
+                  style={styles.addToCartBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleQuickAdd(item);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="shopping-bag" size={13} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.addToCartBtnText}>Add to Cart</Text>
+                </TouchableOpacity>
               </TouchableOpacity>
             ))}
           </View>
@@ -419,9 +421,13 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     backgroundColor: colors.background,
   },
+  headerRightGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   iconBtn: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -444,19 +450,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   brandTitle: {
     fontFamily: "serif",
     fontSize: 22,
     fontWeight: "700",
     color: colors.primary,
-    letterSpacing: 3,
+    letterSpacing: 1.5,
   },
   brandSubtitle: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: colors.textSecondary,
-    letterSpacing: 2,
+    fontSize: 9,
+    fontWeight: "600",
+    color: colors.gold,
+    letterSpacing: 1.8,
     marginTop: 1,
   },
   cartBadge: {
@@ -474,15 +479,17 @@ const styles = StyleSheet.create({
   cartBadgeText: {
     color: "#FFFFFF",
     fontSize: 9,
-    fontWeight: "800",
+    fontWeight: "bold",
   },
   ownerNoticeBar: {
-    backgroundColor: colors.primary,
+    backgroundColor: "#2B2724",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#4A4540",
   },
   ownerNoticeLeft: {
     flexDirection: "row",
@@ -491,270 +498,228 @@ const styles = StyleSheet.create({
   },
   ownerNoticeText: {
     color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.3,
+    fontSize: 12,
+    fontWeight: "600",
   },
   toastNotice: {
     position: "absolute",
     top: 60,
-    left: 20,
-    right: 20,
+    alignSelf: "center",
     backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    zIndex: 99,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 999,
     elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
   },
   toastNoticeText: {
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "600",
-    flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingBottom: 24,
   },
   greetingSection: {
-    marginTop: 10,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
   greetingTitle: {
     fontFamily: "serif",
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 24,
+    fontWeight: "600",
     color: colors.text,
-    letterSpacing: 0.2,
   },
   greetingSub: {
     fontSize: 13,
     color: colors.textSecondary,
-    marginTop: 3,
+    marginTop: 4,
+    lineHeight: 18,
   },
-  heroCard: {
-    backgroundColor: colors.surfaceCard,
-    borderRadius: 20,
-    padding: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 24,
-    minHeight: 180,
+
+  // Categories Carousel Section
+  categoriesSection: {
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  categoryCarouselContent: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  categoryCard: {
+    height: 190,
+    borderRadius: 16,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: colors.borderLight,
+    position: "relative",
+    backgroundColor: "#2B2724",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
   },
-  heroContent: {
-    flex: 1,
-    paddingRight: 10,
-  },
-  heroTag: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.primary,
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  heroSubTag: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.textSecondary,
-    letterSpacing: 0.8,
-    marginBottom: 16,
-  },
-  heroButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderRadius: 20,
-    alignSelf: "flex-start",
-  },
-  heroButtonText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1,
-  },
-  heroImageWrapper: {
-    width: 120,
-    height: 140,
-    borderRadius: 14,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#E4E0D7",
-  },
-  heroImage: {
+  categoryCardImage: {
     width: "100%",
     height: "100%",
   },
-  heroPlaceholder: {
+  categoryFallbackBg: {
+    width: "100%",
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.surfaceElevated,
   },
-  heroPlaceholderText: {
+  categoryDarkOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+  },
+  categoryTitleContainer: {
+    position: "absolute",
+    inset: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  categoryCardTitle: {
     fontFamily: "serif",
-    fontSize: 11,
+    fontSize: 16,
     fontWeight: "700",
-    color: colors.primary,
-    letterSpacing: 1.5,
-    marginTop: 6,
+    color: "#FFFFFF",
+    letterSpacing: 2,
+    textAlign: "center",
+    textShadowColor: "rgba(0, 0, 0, 0.75)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
+
+  // Section Headers
   sectionHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
+  sectionHeaderWithLink: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 14,
-    marginTop: 6,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 12,
   },
   sectionTitle: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontFamily: "serif",
+    fontSize: 15,
+    fontWeight: "700",
     color: colors.text,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   viewAllText: {
     fontSize: 11,
     fontWeight: "700",
     color: colors.primary,
-    textDecorationLine: "underline",
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
-  collectionScroll: {
-    paddingBottom: 16,
-    gap: 16,
-  },
-  collectionItem: {
-    alignItems: "center",
-    width: 80,
-  },
-  collectionCircle: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: colors.surfaceWarm,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  collectionLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: colors.textSecondary,
-    textAlign: "center",
-    letterSpacing: 0.5,
-  },
-  editorialBanner: {
-    backgroundColor: colors.surfaceWarm,
-    borderRadius: 14,
-    padding: 16,
+
+  // Featured Pieces Row (3 items)
+  featuredRow: {
+    paddingHorizontal: 20,
     flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
+    gap: 10,
   },
-  editorialIconContainer: {
-    marginRight: 14,
-  },
-  editorialTextContainer: {
+  featuredCard: {
     flex: 1,
-  },
-  editorialTitle: {
-    fontFamily: "serif",
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.text,
-    letterSpacing: 0.8,
-  },
-  editorialAction: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.primary,
-    marginTop: 2,
-    letterSpacing: 0.5,
-  },
-  productsGrid: {
-    gap: 12,
-  },
-  productCard: {
-    backgroundColor: colors.surfaceWarm,
-    borderRadius: 16,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    position: "relative",
+    backgroundColor: colors.surface,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.borderLight,
+    padding: 10,
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    justifyContent: "space-between",
   },
+
+  // All Products 2-column Grid
+  allProductsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  allProductCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+
   productImageContainer: {
-    width: 66,
-    height: 66,
-    borderRadius: 12,
-    backgroundColor: "#E4E0D7",
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 10,
     overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: colors.surfaceElevated,
+    marginBottom: 8,
   },
   productImage: {
     width: "100%",
     height: "100%",
   },
   productImageFallback: {
+    width: "100%",
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
   },
   productInfo: {
     flex: 1,
-    marginLeft: 14,
-    paddingRight: 74,
+    marginBottom: 8,
   },
   productTitle: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.text,
-    marginBottom: 2,
-  },
-  productMaterial: {
-    fontSize: 10,
-    color: colors.textSecondary,
+    lineHeight: 17,
     marginBottom: 4,
   },
   productPrice: {
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.primary,
   },
-  cardActions: {
-    position: "absolute",
-    right: 12,
+
+  // Add to Cart Button (Explicit text, no plus-only icon)
+  addToCartBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-  },
-  actionBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.surfaceWarm,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    alignItems: "center",
     justifyContent: "center",
-  },
-  addCircleBtn: {
     backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  addToCartBtnText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.4,
   },
 });

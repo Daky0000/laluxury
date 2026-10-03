@@ -579,7 +579,7 @@ export function StorefrontCartScreen({
       ) {
         Alert.alert(
           "Items Unavailable in Bag",
-          "One or more products in your bag are no longer available in the atelier inventory. Would you like to remove only the unavailable items and keep the rest?",
+          "One or more products in your bag are no longer available in the store inventory. Would you like to remove only the unavailable items and keep the rest?",
           [
             { text: "Review Bag", style: "cancel" },
             {
@@ -639,7 +639,7 @@ export function StorefrontCartScreen({
           </TouchableOpacity>
           <View style={styles.brandContainer}>
             <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
-            <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
+            <Text style={styles.brandSubtitle}>HOME TEXTILES • LIVING ESSENTIALS</Text>
           </View>
           <View style={{ width: 40 }} />
         </View>
@@ -650,7 +650,7 @@ export function StorefrontCartScreen({
           </View>
           <Text style={styles.emptyTitle}>Your Bag is Empty</Text>
           <Text style={styles.emptySub}>
-            Explore our curated catalog of handcrafted furniture and atelier decor.
+            Explore our curated catalog of home textiles and living essentials.
           </Text>
           <TouchableOpacity style={styles.browseBtn} onPress={onBrowseProducts}>
             <Text style={styles.browseBtnText}>EXPLORE CATALOG</Text>
@@ -670,7 +670,7 @@ export function StorefrontCartScreen({
 
         <View style={styles.brandContainer}>
           <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
-          <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
+          <Text style={styles.brandSubtitle}>HOME TEXTILES • LIVING ESSENTIALS</Text>
         </View>
 
         <View style={styles.cartIconWrapper}>
@@ -1017,14 +1017,14 @@ export function StorefrontCartScreen({
               <View style={styles.cardContentLeft}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
                   <Text style={[styles.paymentMethodText, { color: colors.primary }]}>
-                    Noble Enclave Atelier & Living Showroom
+                    Noble Enclave Showroom
                   </Text>
                   <View style={{ backgroundColor: "#E6F4EA", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
                     <Text style={{ color: "#137333", fontSize: 11, fontWeight: "700" }}>FREE</Text>
                   </View>
                 </View>
                 <Text style={styles.addressDetail}>
-                  Spintex Road / Airport Residential Atelier, Accra
+                  Spintex Road / Airport Residential, Accra
                 </Text>
                 <Text style={[styles.paymentMethodSub, { marginTop: 4 }]}>
                   Opening Hours: Mon – Sat, 9:00 AM – 6:00 PM

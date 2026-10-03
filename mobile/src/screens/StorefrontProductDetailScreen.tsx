@@ -312,7 +312,7 @@ export function StorefrontProductDetailScreen({
       const formattedPrice = formatCurrency(price);
       await Share.share({
         title: product.title,
-        message: `Check out "${product.title}" (${formattedPrice}) from Noble Enclave Atelier & Living:\n${url}`,
+        message: `Check out "${product.title}" (${formattedPrice}) from Noble Enclave:\n${url}`,
         url,
       });
       if (onNotify) {
@@ -429,7 +429,7 @@ export function StorefrontProductDetailScreen({
 
         <View style={styles.brandContainer}>
           <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
-          <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
+          <Text style={styles.brandSubtitle}>HOME TEXTILES • LIVING ESSENTIALS</Text>
         </View>
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -706,7 +706,7 @@ export function StorefrontProductDetailScreen({
             <Text style={styles.descriptionText}>
               {product.description ||
                 product.shortDescription ||
-                "Handcrafted with heirloom joinery and finished in natural oils to highlight the timber's organic grain. Each piece is made to order in our atelier."}
+                "Carefully crafted and finished with premium materials to elevate your living spaces."}
             </Text>
           </View>
 

@@ -14,6 +14,8 @@ export type Category = {
   slug: string;
   description?: string | null;
   imageUrl?: string | null;
+  position?: number;
+  isActive?: boolean;
 };
 
 export type Collection = {

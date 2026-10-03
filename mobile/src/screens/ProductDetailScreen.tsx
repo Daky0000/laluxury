@@ -507,7 +507,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>BRAND / ATELIER</Text>
+            <Text style={styles.inputLabel}>BRAND</Text>
             <TextInput
               style={styles.input}
               value={brand}

@@ -31,7 +31,7 @@ import type { Prisma } from "../src/generated/prisma/client";
  */
 
 /** Bump to force the catalog to re-apply without otherwise changing it. */
-const CATALOG_SCHEMA_VERSION = 3;
+const CATALOG_SCHEMA_VERSION = 4;
 
 const REVISION_KEY = "catalog.revision";
 
@@ -91,6 +91,8 @@ const RETIRED_PRODUCT_SLUGS = [
 
 /** Rooms with nothing left in them. */
 const RETIRED_CATEGORY_SLUGS = [
+  "living",
+  "windows",
   "lighting",
   "textiles",
   "tableware",
@@ -138,23 +140,44 @@ function catalogRevision(): string {
 async function main() {
   console.log("Seeding Noble Enclave...");
 
-  // --- Staff ---------------------------------------------------------------
-  const ownerEmail = (process.env.SEED_OWNER_EMAIL || "owner@nobleenclave.com").toLowerCase();
-  const ownerPassword = process.env.SEED_OWNER_PASSWORD || "ChangeMe!2026";
+  // --- Owners --------------------------------------------------------------
+  const ownerPassword = process.env.SEED_OWNER_PASSWORD || "NobleEnclave2026!";
+  const passwordHash = await bcrypt.hash(ownerPassword, 12);
 
-  const owner = await db.user.upsert({
-    where: { email: ownerEmail },
-    create: {
-      email: ownerEmail,
-      firstName: "Store",
-      lastName: "Owner",
-      role: "OWNER",
-      passwordHash: await bcrypt.hash(ownerPassword, 12),
-      emailVerified: new Date(),
+  const ownersToSeed = [
+    {
+      phone: "233555979409",
+      email: "lois@nobleenclave.com",
+      firstName: "Lois",
+      lastName: "Ayipah",
+      role: "OWNER" as const,
+      passwordHash,
+      phoneVerified: new Date(),
     },
-    update: { role: "OWNER" },
-  });
-  console.log(`  owner: ${owner.email}`);
+    {
+      phone: "233545950611",
+      email: "dan@nobleenclave.com",
+      firstName: "Dan",
+      lastName: "Ayipah",
+      role: "OWNER" as const,
+      passwordHash,
+      phoneVerified: new Date(),
+    },
+  ];
+
+  for (const ownerData of ownersToSeed) {
+    const owner = await db.user.upsert({
+      where: { phone: ownerData.phone },
+      create: ownerData,
+      update: {
+        firstName: ownerData.firstName,
+        lastName: ownerData.lastName,
+        role: "OWNER",
+        phoneVerified: ownerData.phoneVerified,
+      },
+    });
+    console.log(`  owner: ${owner.firstName} ${owner.lastName} (${owner.phone})`);
+  }
 
 
   // --- Catalog -------------------------------------------------------------
@@ -238,7 +261,7 @@ async function main() {
   const storeDefaults = {
     storeName: "Noble Enclave",
     tagline: "Considered textiles and furnishings for Ghanaian homes.",
-    supportEmail: ownerEmail,
+    supportEmail: "hello@nobleenclave.com",
     announcementBar: ANNOUNCEMENT,
     freeShippingThreshold: cedis(10000),
     agentRequiresApproval: true,
@@ -339,18 +362,25 @@ async function seedCatalog() {
       imageUrl: "/catalog/room-bedroom.webp",
     },
     {
-      name: "Living",
-      slug: "living",
+      name: "Curtains",
+      slug: "curtains",
       position: 2,
-      description: "Carpets, stools, tables and the small things that finish a room.",
-      imageUrl: "/catalog/room-living.webp",
+      description: "Curtains, drapes, blinds and rods, measured for Ghanaian windows.",
+      imageUrl: "/catalog/window-curtain.webp",
     },
     {
-      name: "Windows",
-      slug: "windows",
+      name: "Carpets",
+      slug: "carpets",
       position: 3,
-      description: "Curtains, blinds and rods, measured for Ghanaian windows.",
-      imageUrl: "/catalog/room-windows.webp",
+      description: "Plush area rugs, living carpets, and doormats that ground any room.",
+      imageUrl: "/catalog/fluffy-carpet.webp",
+    },
+    {
+      name: "Cushions",
+      slug: "cushions",
+      position: 4,
+      description: "Accent cushions, throw pillows, and covers to complete your seating.",
+      imageUrl: "/catalog/throw-pillow.webp",
     },
   ];
 
@@ -549,7 +579,7 @@ async function seedCatalog() {
         { url: photo("3d-carpet-6"), alt: "Black marble and gold seams, in stock" },
         { url: photo("3d-carpet-7"), alt: "Ivory with charcoal and amber brushwork, in stock" },
       ],
-      categories: ["living"],
+      categories: ["carpets"],
       collections: ["best-sellers"],
       tags: ["bestseller", "carpet", "rug", "3d"],
       material: "Printed polyester pile, anti-slip backing",
@@ -570,7 +600,7 @@ async function seedCatalog() {
           alt: "Fury throw pillows stacked in dark ash and baby pink",
         },
       ],
-      categories: ["living"],
+      categories: ["cushions"],
       collections: ["best-sellers"],
       tags: ["bestseller", "pillow", "cushion", "fur"],
       material: "Long-pile faux fur, hollow-fibre fill",
@@ -604,7 +634,7 @@ async function seedCatalog() {
       description:
         "A knot cushion, hand-tied from a stuffed velvet tube so it holds its shape on a bed or a reading chair. Sold ready-filled.",
       images: ["/catalog/throw-pillow.webp"],
-      categories: ["living"],
+      categories: ["cushions"],
       collections: ["new-in"],
       tags: ["new", "pillow", "cushion"],
       material: "Velvet, hollow-fibre fill",
@@ -620,7 +650,7 @@ async function seedCatalog() {
       images: [
         { url: photo("doormat-1"), alt: "Doormat in deep green", swatch: ["Colour", "Green"] },
       ],
-      categories: ["living"],
+      categories: ["carpets"],
       collections: [],
       tags: ["doormat", "entry"],
       material: "Carved polyester pile, non-slip backing",
@@ -646,7 +676,7 @@ async function seedCatalog() {
       ],
     },
 
-    // --- Windows -----------------------------------------------------------
+    // --- Curtains & Windows ------------------------------------------------
     {
       title: "Already Made Curtains",
       slug: "already-made-curtains",
@@ -658,7 +688,7 @@ async function seedCatalog() {
         { url: photo("already-made-curtain-1"), alt: "Brown eyelet curtain panel hanging" },
         { url: photo("already-made-curtain-2"), alt: "Close-up of the woven curtain fabric" },
       ],
-      categories: ["windows"],
+      categories: ["curtains"],
       collections: ["best-sellers"],
       tags: ["bestseller", "curtain"],
       material: "Textured polyester, steel eyelets",
@@ -674,7 +704,7 @@ async function seedCatalog() {
       images: [
         { url: photo("curtain-blinds-1"), alt: "Zebra blind in black and white, half open" },
       ],
-      categories: ["windows"],
+      categories: ["curtains"],
       collections: ["new-in"],
       tags: ["new", "blinds"],
       material: "Light-filtering polyester, aluminium roller",
@@ -696,7 +726,7 @@ async function seedCatalog() {
       description:
         "A steel curtain rod with the brackets, finials and wall fixings in the box. The 2 metre carries a single window or a two-in-one; the 3 metre is the one to order for a three-in-one run.",
       images: ["/catalog/curtain-pole.webp"],
-      categories: ["windows"],
+      categories: ["curtains"],
       collections: [],
       tags: ["rod", "hardware"],
       material: "Powder-coated steel",

@@ -52,7 +52,7 @@ export function LoginScreen({ onLoginSuccess, onBrowseCatalog }: Props) {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.brandBox}>
-          <Text style={styles.brandSubtitle}>ATELIER & LIVING</Text>
+          <Text style={styles.brandSubtitle}>HOME TEXTILES • LIVING ESSENTIALS</Text>
           <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
           <Text style={styles.portalBadge}>MANAGEMENT PORTAL</Text>
         </View>

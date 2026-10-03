@@ -23,6 +23,7 @@ type Props = {
   onNavigateToCreate: () => void;
   onSelectProduct: (productId: string) => void;
   onSwitchToStorefront: () => void;
+  onNavigateToStoreDesign?: () => void;
   onLogout: () => void;
   onNotify?: (data: PopNotificationData) => void;
 };
@@ -33,6 +34,7 @@ export function BackendDashboardScreen({
   onNavigateToCreate,
   onSelectProduct,
   onSwitchToStorefront,
+  onNavigateToStoreDesign,
   onLogout,
   onNotify,
 }: Props) {
@@ -189,6 +191,24 @@ export function BackendDashboardScreen({
           </View>
           <Feather name="chevron-right" size={16} color={colors.gold} />
         </TouchableOpacity>
+
+        {/* Store Design Quick Action */}
+        {onNavigateToStoreDesign && (
+          <TouchableOpacity
+            style={[styles.actionBtnNotif, { marginTop: 10 }]}
+            onPress={onNavigateToStoreDesign}
+            activeOpacity={0.8}
+          >
+            <View style={styles.notifIconCircle}>
+              <Feather name="layout" size={16} color={colors.gold} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.notifActionTitle}>STORE DESIGN</Text>
+              <Text style={styles.notifActionSub}>Manage category cards & background photos</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={colors.gold} />
+          </TouchableOpacity>
+        )}
 
         {/* Low Stock Alerts */}
         {data?.lowStockItems && data.lowStockItems.length > 0 && (

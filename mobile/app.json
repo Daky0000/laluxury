@@ -3,7 +3,7 @@
     "name": "Noble Enclave",
     "slug": "danny",
     "owner": "danny1999s-team",
-    "version": "1.2.7",
+    "version": "1.2.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "com.nobleenclave.management",
-      "versionCode": 9,
+      "versionCode": 10,
       "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {

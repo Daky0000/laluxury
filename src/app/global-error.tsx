@@ -58,7 +58,7 @@ export default function GlobalError({
               letterSpacing: 1,
             }}
           >
-            Noble Enclave Atelier &amp; Living
+            Noble Enclave
           </h1>
           <p
             style={{

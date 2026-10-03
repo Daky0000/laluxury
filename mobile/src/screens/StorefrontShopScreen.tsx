@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   TextInput,
-  Share,
+  Dimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -17,6 +17,9 @@ import { api } from "../services/api";
 import { Product } from "../types";
 import { formatCurrency } from "../utils/format";
 import { resolveImageUrl } from "../utils/image";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const GRID_ITEM_WIDTH = Math.round((SCREEN_WIDTH - 40 - 12) / 2);
 
 type Props = {
   initialFilter?: string;
@@ -35,11 +38,11 @@ type Props = {
 
 const FILTER_PILLS = [
   { id: "ALL", label: "ALL" },
-  { id: "LIVING ROOM", label: "LIVING ROOM" },
-  { id: "BEDROOM", label: "BEDROOM" },
-  { id: "DINING", label: "DINING" },
-  { id: "LIGHTING", label: "LIGHTING" },
-  { id: "PRE-ORDER", label: "PRE-ORDER" },
+  { id: "RECENTLY_STOCKED", label: "RECENTLY STOCKED" },
+  { id: "BEDDING", label: "BEDDING" },
+  { id: "CURTAINS", label: "CURTAINS" },
+  { id: "CARPETS", label: "CARPETS" },
+  { id: "CUSHIONS", label: "CUSHIONS" },
 ];
 
 export function StorefrontShopScreen({
@@ -54,7 +57,9 @@ export function StorefrontShopScreen({
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeFilter, setActiveFilter] = useState(initialFilter || "ALL");
+  const [activeFilter, setActiveFilter] = useState(
+    initialFilter ? initialFilter.toUpperCase() : "ALL"
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [addedToast, setAddedToast] = useState<string | null>(null);
 
@@ -62,7 +67,7 @@ export function StorefrontShopScreen({
     try {
       const res = await api.getStoreProducts({
         q: searchQuery.trim() || undefined,
-        limit: 50,
+        limit: 60,
       });
       setProducts(res.products || []);
     } catch {
@@ -77,6 +82,12 @@ export function StorefrontShopScreen({
     loadProducts();
   }, [loadProducts]);
 
+  useEffect(() => {
+    if (initialFilter) {
+      setActiveFilter(initialFilter.toUpperCase());
+    }
+  }, [initialFilter]);
+
   const onRefresh = () => {
     setRefreshing(true);
     loadProducts();
@@ -84,7 +95,7 @@ export function StorefrontShopScreen({
 
   const handleQuickAdd = (product: Product) => {
     onAddToCart(product);
-    setAddedToast(`Added ${product.title} to bag`);
+    setAddedToast(`Added "${product.title}" to bag`);
     setTimeout(() => setAddedToast(null), 2200);
     if (onNotify) {
       onNotify({
@@ -96,41 +107,80 @@ export function StorefrontShopScreen({
     }
   };
 
-  const handleShare = async (product: Product) => {
-    try {
-      const url = `https://nobleenclave.com/product/${product.slug}`;
-      const formattedPrice = formatCurrency(product.minPrice);
-      await Share.share({
-        title: product.title,
-        message: `Check out "${product.title}" (${formattedPrice}) from Noble Enclave Atelier & Living:\n${url}`,
-        url,
+  // Filter and sort products according to the selected basic filter
+  const displayedProducts = useMemo(() => {
+    let list = [...products];
+
+    if (activeFilter === "RECENTLY_STOCKED") {
+      return list.sort((a, b) => {
+        const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return timeB - timeA;
       });
-      if (onNotify) {
-        onNotify({
-          title: "Product Shared",
-          message: `Link for "${product.title}" ready to share.`,
-          type: "info",
-          icon: "share-2",
-        });
-      }
-    } catch {
-      // Ignored
     }
-  };
 
-  // Filter products by selected pill
-  const filteredProducts = products.filter((p) => {
-    if (activeFilter === "ALL") return true;
-    if (activeFilter === "PRE-ORDER") return p.isPreorder;
+    if (activeFilter === "ALL") {
+      return list;
+    }
 
-    const lowerFilter = activeFilter.toLowerCase();
-    const inTitle = p.title.toLowerCase().includes(lowerFilter);
-    const inTags = p.tags?.some((t) => t.toLowerCase().includes(lowerFilter));
-    const inCats = p.categories?.some((c) =>
-      c.name.toLowerCase().includes(lowerFilter),
-    );
-    return inTitle || inTags || inCats;
-  });
+    const filterTerm = activeFilter.toLowerCase();
+    return list.filter((p) => {
+      const title = (p.title || "").toLowerCase();
+      const tags = (p.tags || []).map((t) => t.toLowerCase());
+      const cats = (p.categories || []).map((c) => (c.name || "").toLowerCase());
+
+      if (filterTerm === "curtains") {
+        return (
+          title.includes("curtain") ||
+          title.includes("blind") ||
+          title.includes("rod") ||
+          tags.includes("curtain") ||
+          tags.includes("blinds") ||
+          cats.includes("curtains") ||
+          cats.includes("windows")
+        );
+      }
+
+      if (filterTerm === "carpets") {
+        return (
+          title.includes("carpet") ||
+          title.includes("rug") ||
+          title.includes("doormat") ||
+          tags.includes("carpet") ||
+          tags.includes("rug") ||
+          cats.includes("carpets") ||
+          cats.includes("living")
+        );
+      }
+
+      if (filterTerm === "cushions") {
+        return (
+          (title.includes("cushion") || (title.includes("pillow") && !title.includes("bed") && !title.includes("sleep"))) ||
+          tags.includes("cushion") ||
+          cats.includes("cushions")
+        );
+      }
+
+      if (filterTerm === "bedding") {
+        return (
+          title.includes("bed") ||
+          title.includes("duvet") ||
+          title.includes("blanket") ||
+          title.includes("sheet") ||
+          title.includes("topper") ||
+          title.includes("pillow") ||
+          tags.includes("bedding") ||
+          cats.includes("bedding")
+        );
+      }
+
+      return (
+        title.includes(filterTerm) ||
+        tags.some((t) => t.includes(filterTerm)) ||
+        cats.some((c) => c.includes(filterTerm))
+      );
+    });
+  }, [products, activeFilter]);
 
   return (
     <View style={styles.container}>
@@ -184,16 +234,16 @@ export function StorefrontShopScreen({
           />
         }
       >
-        {/* Collection Heading Banner */}
+        {/* Collection Heading Banner (No 'atelier' copy) */}
         <View style={styles.categoryHero}>
           <View style={styles.categoryHeroLeft}>
-            <Text style={styles.categoryTitle}>THE ATELIER CATALOG</Text>
+            <Text style={styles.categoryTitle}>ALL PRODUCTS</Text>
             <Text style={styles.categoryDescription}>
-              Artisan materials, sculptural silhouettes, and timeless craftsmanship designed to elevate your living spaces.
+              Considered textiles and furnishings for Ghanaian homes — bedding, curtains, carpets and cushions.
             </Text>
           </View>
           <View style={styles.categoryHeroRight}>
-            <Feather name="compass" size={36} color={colors.gold} />
+            <Feather name="grid" size={32} color={colors.gold} />
           </View>
         </View>
 
@@ -202,7 +252,7 @@ export function StorefrontShopScreen({
           <Feather name="search" size={16} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search pieces by title, material, or category..."
+            placeholder="Search pieces by title, category, or material..."
             placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -215,7 +265,7 @@ export function StorefrontShopScreen({
           ) : null}
         </View>
 
-        {/* Filter Pills */}
+        {/* Basic Filter Pills (Clean, simple, includes Recently Stocked) */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -238,90 +288,99 @@ export function StorefrontShopScreen({
           })}
         </ScrollView>
 
-        {/* Product Listing */}
+        {/* Product Count Header */}
+        <View style={styles.countRow}>
+          <Text style={styles.countText}>
+            Showing {displayedProducts.length} {displayedProducts.length === 1 ? "piece" : "pieces"}
+          </Text>
+          {activeFilter !== "ALL" && (
+            <TouchableOpacity onPress={() => setActiveFilter("ALL")}>
+              <Text style={styles.resetFilterText}>Reset filter</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Products Grid: 2 Products in a row */}
         {loading ? (
           <ActivityIndicator
-            size="large"
+            size="small"
             color={colors.primary}
             style={{ marginVertical: 40 }}
           />
-        ) : filteredProducts.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Feather name="inbox" size={40} color={colors.textMuted} />
+        ) : displayedProducts.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Feather name="inbox" size={44} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>No pieces found</Text>
             <Text style={styles.emptySub}>
-              Try adjusting your filter or search keyword.
+              {searchQuery
+                ? `No products matched "${searchQuery}". Try a broader term.`
+                : "No pieces available in this filter."}
             </Text>
+            <TouchableOpacity
+              style={styles.resetBtn}
+              onPress={() => {
+                setSearchQuery("");
+                setActiveFilter("ALL");
+              }}
+            >
+              <Text style={styles.resetBtnText}>View All Products</Text>
+            </TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.productsList}>
-            {filteredProducts.map((product) => (
+          <View style={styles.productsGrid}>
+            {displayedProducts.map((item) => (
               <TouchableOpacity
-                key={product.id}
-                style={styles.productCard}
-                onPress={() => onSelectProduct(product.id)}
-                activeOpacity={0.85}
+                key={item.id}
+                style={[styles.productCard, { width: GRID_ITEM_WIDTH }]}
+                onPress={() => onSelectProduct(item.id)}
+                activeOpacity={0.9}
               >
-                {/* Product Thumbnail */}
                 <View style={styles.productImageContainer}>
-                  {resolveImageUrl(product.images?.[0]?.url) ? (
+                  {resolveImageUrl(item.images?.[0]?.url) ? (
                     <Image
-                      source={{ uri: resolveImageUrl(product.images?.[0]?.url)! }}
+                      source={{ uri: resolveImageUrl(item.images?.[0]?.url)! }}
                       style={styles.productImage}
                       resizeMode="cover"
                     />
                   ) : (
-                    <View style={styles.imageFallback}>
+                    <View style={styles.productImageFallback}>
                       <Feather name="box" size={26} color={colors.textMuted} />
                     </View>
                   )}
                 </View>
 
-                {/* Product Details */}
-                <View style={styles.productDetails}>
+                <View style={styles.productInfo}>
                   <Text style={styles.productTitle} numberOfLines={2}>
-                    {product.title}
+                    {item.title}
                   </Text>
-                  {product.material ? (
+                  {item.material ? (
                     <Text style={styles.productMaterial} numberOfLines={1}>
-                      {product.material}
+                      {item.material}
                     </Text>
                   ) : null}
                   <Text style={styles.productPrice}>
-                    {formatCurrency(product.minPrice)}
+                    {formatCurrency(item.minPrice)}
                   </Text>
                 </View>
 
-                {/* Action Buttons (Share & Add) */}
-                <View style={styles.cardActions}>
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleShare(product);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="share-2" size={14} color={colors.primary} />
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.actionBtn, styles.addCircleBtn]}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleQuickAdd(product);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="plus" size={15} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
+                {/* Explicit Add to Cart action button (NO share button, NO plus-only icon) */}
+                <TouchableOpacity
+                  style={styles.addToCartBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleQuickAdd(item);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="shopping-bag" size={13} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.addToCartBtnText}>Add to Cart</Text>
+                </TouchableOpacity>
               </TouchableOpacity>
             ))}
           </View>
         )}
 
-        <View style={{ height: 60 }} />
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
@@ -342,27 +401,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   iconBtn: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
   },
   brandContainer: {
     alignItems: "center",
+    justifyContent: "center",
   },
   brandTitle: {
     fontFamily: "serif",
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "700",
     color: colors.primary,
-    letterSpacing: 3,
+    letterSpacing: 1.5,
   },
   brandSubtitle: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: colors.textSecondary,
-    letterSpacing: 2,
+    fontSize: 9,
+    fontWeight: "600",
+    color: colors.gold,
+    letterSpacing: 1.8,
     marginTop: 1,
   },
   cartBadge: {
@@ -380,189 +440,235 @@ const styles = StyleSheet.create({
   cartBadgeText: {
     color: "#FFFFFF",
     fontSize: 9,
-    fontWeight: "800",
+    fontWeight: "bold",
   },
   toast: {
     position: "absolute",
     top: 60,
-    left: 20,
-    right: 20,
+    alignSelf: "center",
     backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    zIndex: 99,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 999,
+    elevation: 6,
   },
   toastText: {
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "600",
-    flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingBottom: 24,
   },
   categoryHero: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginVertical: 12,
+    backgroundColor: "#F9F6F0",
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
   categoryHeroLeft: {
     flex: 1,
-    paddingRight: 10,
-  },
-  categoryHeroRight: {
-    opacity: 0.8,
+    paddingRight: 12,
   },
   categoryTitle: {
     fontFamily: "serif",
-    fontSize: 16,
-    fontWeight: "800",
-    color: colors.text,
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.primary,
     letterSpacing: 1,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   categoryDescription: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.textSecondary,
     lineHeight: 16,
+  },
+  categoryHeroRight: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surfaceWarm,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginTop: 10,
-    marginBottom: 14,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.borderLight,
-    gap: 10,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 20,
+    marginBottom: 14,
   },
   searchInput: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 13,
     color: colors.text,
+    marginLeft: 8,
     padding: 0,
   },
   pillsScroll: {
+    paddingHorizontal: 20,
     gap: 8,
-    paddingBottom: 16,
+    marginBottom: 16,
   },
   pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: colors.surfaceWarm,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderLight,
   },
   pillActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
   pillText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
     color: colors.textSecondary,
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   pillTextActive: {
     color: "#FFFFFF",
   },
-  productsList: {
-    gap: 12,
-    marginTop: 4,
-  },
-  productCard: {
-    backgroundColor: colors.surfaceWarm,
-    borderRadius: 18,
-    padding: 14,
+  countRow: {
     flexDirection: "row",
     alignItems: "center",
-    position: "relative",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    marginBottom: 14,
+  },
+  countText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: "500",
+  },
+  resetFilterText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: "600",
+  },
+
+  // 2 products in a row
+  productsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  productCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.borderLight,
+    padding: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    justifyContent: "space-between",
+    marginBottom: 4,
   },
   productImageContainer: {
-    width: 68,
-    height: 68,
-    borderRadius: 14,
-    backgroundColor: "#E4E0D7",
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 10,
     overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: colors.surfaceElevated,
+    marginBottom: 8,
   },
   productImage: {
     width: "100%",
     height: "100%",
   },
-  imageFallback: {
+  productImageFallback: {
+    width: "100%",
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
   },
-  productDetails: {
+  productInfo: {
     flex: 1,
-    marginLeft: 14,
-    paddingRight: 74,
+    marginBottom: 8,
   },
   productTitle: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.text,
+    lineHeight: 17,
     marginBottom: 2,
-    lineHeight: 18,
   },
   productMaterial: {
-    fontSize: 10,
-    color: colors.textSecondary,
+    fontSize: 11,
+    color: colors.textMuted,
     marginBottom: 4,
   },
   productPrice: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "700",
     color: colors.primary,
   },
-  cardActions: {
-    position: "absolute",
-    right: 12,
+
+  // Add to Cart Button (Explicit text, no plus-only icon)
+  addToCartBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-  },
-  actionBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.surfaceWarm,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    alignItems: "center",
     justifyContent: "center",
-  },
-  addCircleBtn: {
     backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderRadius: 8,
   },
-  emptyState: {
+  addToCartBtnText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+  },
+
+  emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 50,
-    gap: 8,
+    paddingVertical: 60,
+    paddingHorizontal: 20,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontFamily: "serif",
+    fontSize: 17,
     fontWeight: "700",
     color: colors.text,
+    marginTop: 14,
+    marginBottom: 6,
   },
   emptySub: {
-    fontSize: 12,
-    color: colors.textMuted,
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  resetBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  resetBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

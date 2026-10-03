@@ -170,54 +170,50 @@ function StrengthMeter({ password }: { password: string }) {
 
 export function LoginForm() {
   const [state, action, pending] = useActionState<AuthState | null, FormData>(loginAction, null);
-  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
   const errors = state?.fieldErrors ?? {};
+
+  const read = readBack(phone);
+  const unreadable = phone.trim().length > 0 && !isValidPhone(phone);
 
   return (
     <form action={action} className="flex flex-col gap-4">
       {state?.message ? <Alert tone="danger">{state.message}</Alert> : null}
 
       <Field
-        label="Phone number or email"
-        htmlFor="identifier"
+        label="Phone number"
+        htmlFor="phone"
         required
-        error={errors.identifier}
-        hint="The number you signed up with — 024 000 0000, or with its country code."
+        error={
+          errors.phone ??
+          (unreadable
+            ? "Enter a valid phone number, e.g. 055 597 9409 or +233 55 597 9409."
+            : undefined)
+        }
+        hint={
+          read
+            ? `${read} — we will text a code to verify.`
+            : "Enter your phone number. We will text you a verification code to sign in."
+        }
       >
         <input
-          id="identifier"
-          name="identifier"
-          type="text"
+          id="phone"
+          name="phone"
+          type="tel"
           inputMode="tel"
           required
-          autoComplete="username"
+          autoComplete="tel"
           autoFocus
+          placeholder="055 597 9409"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
           className="lx-field"
         />
       </Field>
 
-      <PasswordField
-        id="password"
-        name="password"
-        label="Password"
-        autoComplete="current-password"
-        error={errors.password}
-        value={password}
-        onChange={setPassword}
-      />
-
-      <p className="-mt-2 text-right text-sm">
-        <Link
-          href="/forgot-password"
-          className="text-[var(--text-secondary)] underline underline-offset-4 hover:text-[var(--accent)]"
-        >
-          Forgotten your password?
-        </Link>
-      </p>
-
       <button type="submit" disabled={pending} className={submitClass}>
         {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-        Sign in
+        Send verification code
       </button>
     </form>
   );
@@ -245,13 +241,10 @@ function readBack(phone: string): string | null {
 export function RegisterForm() {
   const [state, action, pending] = useActionState<AuthState | null, FormData>(registerAction, null);
   const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const errors = state?.fieldErrors ?? {};
 
   const read = readBack(phone);
   const unreadable = phone.trim().length > 0 && !isValidPhone(phone);
-  const mismatch = confirm.length > 0 && confirm !== password;
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -299,28 +292,6 @@ export function RegisterForm() {
         />
       </Field>
 
-      <PasswordField
-        id="password"
-        name="password"
-        label="Password"
-        autoComplete="new-password"
-        error={errors.password}
-        value={password}
-        onChange={setPassword}
-      >
-        <StrengthMeter password={password} />
-      </PasswordField>
-
-      <PasswordField
-        id="confirmPassword"
-        name="confirmPassword"
-        label="Confirm password"
-        autoComplete="new-password"
-        error={errors.confirmPassword ?? (mismatch ? "Those two passwords do not match." : undefined)}
-        value={confirm}
-        onChange={setConfirm}
-      />
-
       <label className="flex items-start gap-2.5 text-sm text-[var(--text-secondary)]">
         <input type="checkbox" name="acceptsMarketing" className="mt-0.5 accent-[var(--accent)]" />
         Text and email me about new arrivals. No more than twice a month, and you can stop any time.
@@ -340,7 +311,7 @@ export function RegisterForm() {
 
       <button type="submit" disabled={pending} className={submitClass}>
         {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-        Send me a code
+        Send verification code
       </button>
     </form>
   );

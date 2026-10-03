@@ -12,6 +12,7 @@ export const colors = {
   surfaceWarm: "#F3F1EC",     // Warm stone surface
   surfaceCard: "#EDEAE3",     // Featured / rounded product card background
   surfaceInput: "#F9F8F5",    // Soft input background
+  surfaceElevated: "#FFFFFF", // Elevated modal / card surface
   surfaceLight: "#2A2826",    // Dark backend surface element
   card: "#FFFFFF",
 

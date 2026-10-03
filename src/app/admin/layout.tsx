@@ -105,6 +105,14 @@ const NAV: {
     description: "Track on-hand stock & low inventory alerts",
   },
   {
+    href: "/admin/store-design",
+    label: "Store Design",
+    icon: "media",
+    permission: "products:read",
+    group: "Catalog & Inventory",
+    description: "Manage categories & visual background images",
+  },
+  {
     href: "/admin/categories",
     label: "Categories",
     icon: "categories",
@@ -156,6 +164,14 @@ const NAV: {
   },
 
   // --- Settings & Tools ---
+  {
+    href: "/admin/settings/delivery",
+    label: "Delivery Fees & Zones",
+    icon: "shipments",
+    permission: "settings:manage",
+    group: "Settings & Tools",
+    description: "Manage delivery rates, zones & station fees",
+  },
   {
     href: "/admin/settings",
     label: "Store Settings",
