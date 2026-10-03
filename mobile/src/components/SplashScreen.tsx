@@ -23,7 +23,7 @@ export function SplashScreen() {
       {/* Centered Brand Emblem + Title */}
       <View style={styles.brandBox}>
         <Image
-          source={require("../../assets/emblem-transparent.png")}
+          source={require("../../assets/emblem-white.png")}
           style={styles.emblemImage}
         />
         <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>

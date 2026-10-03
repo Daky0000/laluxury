@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { existsSync, mkdirSync, copyFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = process.cwd();
@@ -81,19 +81,41 @@ async function extractTransparentCutout(inputPath, minDistance = 14, maxDistance
   };
 }
 
+// Transform RGBA buffer into pure white (RGB=255,255,255) while keeping anti-aliased alpha
+async function makePureWhite(pngBuffer) {
+  const { data, info } = await sharp(pngBuffer).raw().toBuffer({ resolveWithObject: true });
+  const whiteData = Buffer.from(data);
+  for (let i = 0; i < whiteData.length; i += 4) {
+    whiteData[i] = 255;
+    whiteData[i + 1] = 255;
+    whiteData[i + 2] = 255;
+    // preserve alpha at i + 3
+  }
+  return sharp(whiteData, { raw: { width: info.width, height: info.height, channels: 4 } })
+    .png()
+    .toBuffer();
+}
+
 async function main() {
   console.log("Processing Noble Enclave high-resolution brand assets...");
 
-  // 1. Process Square Emblem
+  // 1. Process Square Emblem (Gold)
   const emblemResult = await extractTransparentCutout(imgSquare, 12, 45);
-  console.log("Emblem extracted. Dimensions:", emblemResult.bbox.width, "x", emblemResult.bbox.height);
+  console.log("Gold emblem extracted. Dimensions:", emblemResult.bbox.width, "x", emblemResult.bbox.height);
 
-  // Save transparent emblem
+  // Save transparent gold emblem
   await sharp(emblemResult.croppedBuffer).toFile(resolve(publicImagesDir, "noble-emblem-transparent.png"));
   await sharp(emblemResult.croppedBuffer).toFile(resolve(publicDir, "emblem.png"));
   await sharp(emblemResult.croppedBuffer).toFile(resolve(mobileAssets, "emblem-transparent.png"));
 
-  // 2. Process Horizontal Logo
+  // 2. Generate Pure White Emblem (for app icon, favicons, dark/wine backgrounds)
+  const whiteEmblemBuffer = await makePureWhite(emblemResult.croppedBuffer);
+  await sharp(whiteEmblemBuffer).toFile(resolve(publicImagesDir, "noble-emblem-white.png"));
+  await sharp(whiteEmblemBuffer).toFile(resolve(publicDir, "emblem-white.png"));
+  await sharp(whiteEmblemBuffer).toFile(resolve(mobileAssets, "emblem-white.png"));
+  console.log("Pure white emblem generated.");
+
+  // 3. Process Horizontal Logo
   const logoResult = await extractTransparentCutout(imgHorizontal, 14, 45);
   console.log("Horizontal logo extracted. Dimensions:", logoResult.bbox.width, "x", logoResult.bbox.height);
 
@@ -102,7 +124,11 @@ async function main() {
   await sharp(logoResult.croppedBuffer).toFile(resolve(publicDir, "logo-transparent.png"));
   await sharp(logoResult.croppedBuffer).toFile(resolve(mobileAssets, "logo-horizontal.png"));
 
-  // Also create a padded horizontal logo suitable for website headers (with nice padding)
+  // Horizontal logo with white text & white emblem for dark headers
+  const whiteLogoBuffer = await makePureWhite(logoResult.croppedBuffer);
+  await sharp(whiteLogoBuffer).toFile(resolve(publicImagesDir, "noble-logo-white.png"));
+
+  // Padded horizontal logo for website headers
   await sharp({
     create: {
       width: 1000,
@@ -120,19 +146,14 @@ async function main() {
     .png()
     .toFile(resolve(publicImagesDir, "noble-enclave-header.png"));
 
-  // 3. Create Square Emblems with solid backgrounds
-  // Brand Wine Background: #7A2E3C
+  // 4. Create App Icons and Favicons with WHITE emblem against Noble Enclave Wine (#7A2E3C)
   const wineBg = { r: 122, g: 46, b: 60, alpha: 1 };
-  // Warm Ivory Background: #FAF8F5
-  const ivoryBg = { r: 250, g: 248, b: 245, alpha: 1 };
 
-  // Master App Icon (1024x1024) - Mobile & Stores require NO TRANSPARENCY
-  // Emblem scaled nicely inside (700x700 inside 1024x1024)
-  const emblemForIcon = await sharp(emblemResult.croppedBuffer)
+  // Master App Icon (1024x1024) - White emblem on solid wine background
+  const whiteEmblemForIcon = await sharp(whiteEmblemBuffer)
     .resize(680, 680, { fit: "inside" })
     .toBuffer();
 
-  // Wine master icon
   await sharp({
     create: {
       width: 1024,
@@ -141,13 +162,13 @@ async function main() {
       background: wineBg,
     },
   })
-    .composite([{ input: emblemForIcon, gravity: "center" }])
+    .composite([{ input: whiteEmblemForIcon, gravity: "center" }])
     .png()
     .toFile(resolve(mobileAssets, "icon.png"));
 
-  // Adaptive icon foreground (centered with safe margins ~480px inside 1024x1024)
-  const emblemForAdaptive = await sharp(emblemResult.croppedBuffer)
-    .resize(500, 500, { fit: "inside" })
+  // Android adaptive icon foreground (centered with safe margins ~490px inside 1024x1024)
+  const whiteEmblemForAdaptive = await sharp(whiteEmblemBuffer)
+    .resize(490, 490, { fit: "inside" })
     .toBuffer();
 
   await sharp({
@@ -158,11 +179,11 @@ async function main() {
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     },
   })
-    .composite([{ input: emblemForAdaptive, gravity: "center" }])
+    .composite([{ input: whiteEmblemForAdaptive, gravity: "center" }])
     .png()
     .toFile(resolve(mobileAssets, "android-icon-foreground.png"));
 
-  // Adaptive icon background (solid wine)
+  // Android adaptive icon background (solid wine #7A2E3C)
   await sharp({
     create: {
       width: 1024,
@@ -174,7 +195,20 @@ async function main() {
     .png()
     .toFile(resolve(mobileAssets, "android-icon-background.png"));
 
-  // Splash screen center icon
+  // Android monochrome icon
+  await sharp({
+    create: {
+      width: 1024,
+      height: 1024,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: whiteEmblemForAdaptive, gravity: "center" }])
+    .png()
+    .toFile(resolve(mobileAssets, "android-icon-monochrome.png"));
+
+  // Splash screen center icon (white emblem, crisp on wine background)
   await sharp({
     create: {
       width: 512,
@@ -183,11 +217,11 @@ async function main() {
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     },
   })
-    .composite([{ input: await sharp(emblemResult.croppedBuffer).resize(380, 380, { fit: "inside" }).toBuffer(), gravity: "center" }])
+    .composite([{ input: await sharp(whiteEmblemBuffer).resize(380, 380, { fit: "inside" }).toBuffer(), gravity: "center" }])
     .png()
     .toFile(resolve(mobileAssets, "splash-icon.png"));
 
-  // Favicon for mobile
+  // Favicon for mobile (192x192: white emblem on wine)
   await sharp({
     create: {
       width: 192,
@@ -196,11 +230,11 @@ async function main() {
       background: wineBg,
     },
   })
-    .composite([{ input: await sharp(emblemResult.croppedBuffer).resize(140, 140, { fit: "inside" }).toBuffer(), gravity: "center" }])
+    .composite([{ input: await sharp(whiteEmblemBuffer).resize(140, 140, { fit: "inside" }).toBuffer(), gravity: "center" }])
     .png()
     .toFile(resolve(mobileAssets, "favicon.png"));
 
-  // 4. Web Favicons and Apple Touch Icons
+  // 5. Web Favicons with WHITE emblem against wine background
   // public/icon.png (512x512)
   await sharp({
     create: {
@@ -210,11 +244,11 @@ async function main() {
       background: wineBg,
     },
   })
-    .composite([{ input: await sharp(emblemResult.croppedBuffer).resize(360, 360, { fit: "inside" }).toBuffer(), gravity: "center" }])
+    .composite([{ input: await sharp(whiteEmblemBuffer).resize(360, 360, { fit: "inside" }).toBuffer(), gravity: "center" }])
     .png()
     .toFile(resolve(publicDir, "icon.png"));
 
-  // public/apple-touch-icon.png (180x180)
+  // public/apple-touch-icon.png (180x180: white emblem on wine)
   await sharp({
     create: {
       width: 180,
@@ -223,11 +257,11 @@ async function main() {
       background: wineBg,
     },
   })
-    .composite([{ input: await sharp(emblemResult.croppedBuffer).resize(130, 130, { fit: "inside" }).toBuffer(), gravity: "center" }])
+    .composite([{ input: await sharp(whiteEmblemBuffer).resize(130, 130, { fit: "inside" }).toBuffer(), gravity: "center" }])
     .png()
     .toFile(resolve(publicDir, "apple-touch-icon.png"));
 
-  // public/favicon.ico (48x48)
+  // public/favicon.ico (48x48: white emblem on wine)
   await sharp({
     create: {
       width: 48,
@@ -236,17 +270,17 @@ async function main() {
       background: wineBg,
     },
   })
-    .composite([{ input: await sharp(emblemResult.croppedBuffer).resize(36, 36, { fit: "inside" }).toBuffer(), gravity: "center" }])
+    .composite([{ input: await sharp(whiteEmblemBuffer).resize(36, 36, { fit: "inside" }).toBuffer(), gravity: "center" }])
     .png()
     .toFile(resolve(publicDir, "favicon.ico"));
 
-  // Also transparent version of favicon for web if preferred
-  await sharp(emblemResult.croppedBuffer)
+  // public/favicon-transparent.png (48x48: white emblem on transparent)
+  await sharp(whiteEmblemBuffer)
     .resize(48, 48, { fit: "inside" })
     .png()
     .toFile(resolve(publicDir, "favicon-transparent.png"));
 
-  // 5. Update Android native mipmaps
+  // 6. Update Android native mipmaps (White emblem on wine background)
   const mipmaps = [
     { dir: "mipmap-mdpi", size: 48 },
     { dir: "mipmap-hdpi", size: 72 },
@@ -259,13 +293,13 @@ async function main() {
     const targetDir = resolve(mobileRes, m.dir);
     if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true });
 
-    // Square launcher
+    // Square launcher (white emblem on wine)
     await sharp(resolve(mobileAssets, "icon.png"))
       .resize(m.size, m.size)
       .png()
       .toFile(resolve(targetDir, "ic_launcher.png"));
 
-    // Round launcher with circular mask
+    // Round launcher with circular mask (white emblem on wine)
     const circleMask = Buffer.from(
       `<svg width="${m.size}" height="${m.size}"><circle cx="${m.size / 2}" cy="${m.size / 2}" r="${m.size / 2}" fill="#fff" /></svg>`
     );
@@ -275,17 +309,17 @@ async function main() {
       .png()
       .toFile(resolve(targetDir, "ic_launcher_round.png"));
 
-    // Adaptive foreground (108dp base)
+    // Adaptive foreground (white emblem on transparent, 108dp base)
     const fgSize = Math.round((m.size / 48) * 108);
     await sharp(resolve(mobileAssets, "android-icon-foreground.png"))
       .resize(fgSize, fgSize)
       .png()
       .toFile(resolve(targetDir, "ic_launcher_foreground.png"));
 
-    console.log(`Android ${m.dir} icons generated.`);
+    console.log(`Android ${m.dir} icons generated with white emblem.`);
   }
 
-  // 6. Update splash drawables
+  // 7. Update splash drawables (white emblem)
   const splashDrawables = [
     { dir: "drawable-mdpi", size: 100 },
     { dir: "drawable-hdpi", size: 150 },
@@ -303,19 +337,18 @@ async function main() {
       .toFile(resolve(targetDir, "splashscreen_logo.png"));
   }
 
-  // 7. Update src/app/icon.svg with high fidelity embedded emblem
-  const emblemBuf = await sharp(emblemResult.croppedBuffer).resize(416, 416, { fit: "inside" }).png().toBuffer();
-  const base64 = emblemBuf.toString("base64");
+  // 8. Update src/app/icon.svg with white emblem on wine background
+  const whiteEmblemBuf = await sharp(whiteEmblemBuffer).resize(416, 416, { fit: "inside" }).png().toBuffer();
+  const base64White = whiteEmblemBuf.toString("base64");
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Noble Enclave">
   <rect width="512" height="512" rx="112" fill="#7A2E3C" />
-  <image href="data:image/png;base64,${base64}" x="48" y="48" width="416" height="416" preserveAspectRatio="xMidYMid meet" />
+  <image href="data:image/png;base64,${base64White}" x="48" y="48" width="416" height="416" preserveAspectRatio="xMidYMid meet" />
 </svg>
 `;
-  const { writeFileSync } = await import("node:fs");
   writeFileSync(resolve(root, "src/app/icon.svg"), svg);
-  console.log("src/app/icon.svg generated with official emblem.");
+  console.log("src/app/icon.svg generated with white emblem on wine background.");
 
-  console.log("All Noble Enclave brand assets, icons, favicons, and splash drawables successfully generated!");
+  console.log("All app icons and favicons successfully updated to WHITE logo icon against backgrounds!");
 }
 
 main().catch(console.error);

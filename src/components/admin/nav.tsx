@@ -279,7 +279,7 @@ export function AdminNav({
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <Link href="/admin" className="group flex items-center gap-2.5">
           <div className="grid h-8 w-8 place-items-center rounded-xl bg-[#7A2E3C] p-1 shadow-xs">
-            <Image src="/emblem.png" alt="Noble Enclave" width={24} height={24} className="h-5 w-auto object-contain" />
+            <Image src="/emblem-white.png" alt="Noble Enclave" width={24} height={24} className="h-5 w-auto object-contain" />
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-bold tracking-tight text-stone-900">
@@ -495,7 +495,7 @@ export function AdminNav({
         {/* Brand Icon */}
         <Link href="/admin" title="Noble Enclave Admin Console" className="mb-4">
           <div className="grid h-8 w-8 place-items-center rounded-xl bg-[#7A2E3C] p-1 shadow-xs hover:opacity-90 transition-opacity">
-            <Image src="/emblem.png" alt="Noble Enclave" width={24} height={24} className="h-5 w-auto object-contain" />
+            <Image src="/emblem-white.png" alt="Noble Enclave" width={24} height={24} className="h-5 w-auto object-contain" />
           </div>
         </Link>
 
