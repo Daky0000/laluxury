@@ -1,4 +1,4 @@
-// LaLuxury / Efie Home — commerce schema
+// Nobel Enclave — commerce schema
 // Money is stored as INTEGER MINOR UNITS (pesewas). GHS 120.50 => 12050.
 // Paystack also expects subunits, so no conversion is needed at that boundary.
 

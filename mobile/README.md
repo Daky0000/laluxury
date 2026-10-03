@@ -1,6 +1,6 @@
-# 📱 LaLuxury Mobile Management App
+# 📱 Nobel Enclave Mobile Management App
 
-A custom React Native & Expo Android/iOS mobile application for managing the **LaLuxury** store catalog, real-time inventory, pricing, and camera photo uploads.
+A custom React Native & Expo Android/iOS mobile application for managing the **Nobel Enclave** store catalog, real-time inventory, pricing, and camera photo uploads.
 
 ---
 

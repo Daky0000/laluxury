@@ -105,7 +105,7 @@ export default function AppDownloadPage() {
                   Allow Installation
                 </h4>
                 <p className="mt-1 text-sm font-light leading-relaxed text-[var(--text-secondary)]">
-                  Open your phone&rsquo;s <strong>Downloads</strong> and tap <code>Nobel-Enclave.apk</code> (or <code>LaLuxury-Management.apk</code>). If prompted by your browser or Android system to allow unknown apps, toggle &ldquo;Allow from this source&rdquo;.
+                  Open your phone&rsquo;s <strong>Downloads</strong> and tap <code>Nobel-Enclave.apk</code>. If prompted by your browser or Android system to allow unknown apps, toggle &ldquo;Allow from this source&rdquo;.
                 </p>
               </div>
             </li>

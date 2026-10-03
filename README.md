@@ -1,4 +1,4 @@
-# LaLuxury
+# Nobel Enclave
 
 An ecommerce store for a Ghanaian homeware brand: storefront, back office, Paystack payments
 in cedis, and an AI operations agent reachable from Slack and WhatsApp.

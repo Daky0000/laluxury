@@ -12,10 +12,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.laluxury.management"
+      "bundleIdentifier": "com.nobleenclave.management"
     },
     "android": {
-      "package": "com.laluxury.management",
+      "package": "com.nobleenclave.management",
       "versionCode": 8,
       "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
