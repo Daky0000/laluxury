@@ -80,6 +80,52 @@ export async function saveIntegrationsAction(
     return { ok: false, message: "Paystack mode must be live or test." };
   }
 
+  // Validate Paystack key prefixes to block autofilled passwords or corrupted strings
+  if (patch.paystack) {
+    const p = patch.paystack;
+    if (typeof p.secretKey === "string" && p.secretKey.trim() !== "") {
+      const trimmed = p.secretKey.trim().replace(/^["']|["']$/g, "");
+      if (!trimmed.startsWith("sk_live_") && !trimmed.startsWith("sk_test_")) {
+        return {
+          ok: false,
+          message:
+            "Invalid Paystack secret key: live secret keys must start with 'sk_live_'. Please check that your browser did not autofill an account password.",
+        };
+      }
+      p.secretKey = trimmed;
+    }
+    if (typeof p.publicKey === "string" && p.publicKey.trim() !== "") {
+      const trimmed = p.publicKey.trim().replace(/^["']|["']$/g, "");
+      if (!trimmed.startsWith("pk_live_") && !trimmed.startsWith("pk_test_")) {
+        return {
+          ok: false,
+          message: "Invalid Paystack public key: live public keys must start with 'pk_live_'.",
+        };
+      }
+      p.publicKey = trimmed;
+    }
+    if (typeof p.testSecretKey === "string" && p.testSecretKey.trim() !== "") {
+      const trimmed = p.testSecretKey.trim().replace(/^["']|["']$/g, "");
+      if (!trimmed.startsWith("sk_test_")) {
+        return {
+          ok: false,
+          message: "Invalid Paystack test secret key: test secret keys must start with 'sk_test_'.",
+        };
+      }
+      p.testSecretKey = trimmed;
+    }
+    if (typeof p.testPublicKey === "string" && p.testPublicKey.trim() !== "") {
+      const trimmed = p.testPublicKey.trim().replace(/^["']|["']$/g, "");
+      if (!trimmed.startsWith("pk_test_")) {
+        return {
+          ok: false,
+          message: "Invalid Paystack test public key: test public keys must start with 'pk_test_'.",
+        };
+      }
+      p.testPublicKey = trimmed;
+    }
+  }
+
   await updateIntegrations(patch as Parameters<typeof updateIntegrations>[0]);
 
   await recordAudit({

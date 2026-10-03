@@ -2,17 +2,17 @@ import fs from "node:fs";
 import path from "node:path";
 
 export const APP_BASE_RELEASE = {
-  version: "1.3.0",
-  versionCode: 12,
+  version: "1.3.1",
+  versionCode: 13,
   appName: "Noble Enclave",
-  publishedAt: "2026-10-03T20:10:00.000Z",
+  publishedAt: "2026-10-03T21:25:00.000Z",
   minSupportedVersion: "1.0.0",
   releaseNotes:
-    "Noble Enclave v1.3.0 release: Adaptive multi-column responsive grid layout across catalog, storefront home, and product detail complementary pieces (1-col compact, 2-col mobile, 3-col tablet, 4-col wide), and instant bag dispatch.",
+    "Noble Enclave v1.3.1 release: Fix showroom pickup flow (dedicated recipient contact details, no delivery address popups), eliminate 'Invalid key' errors with enhanced gateway error recovery, and autofill protection.",
 };
 
 export const FALLBACK_APK_URL =
-  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.3.0.apk";
+  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.3.1.apk";
 
 /**
  * Resolves the latest version and build number directly from mobile/app.json,

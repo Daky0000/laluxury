@@ -247,16 +247,23 @@ export type IntegrationGroup = {
  * live does not mean retyping the real keys — and a test key can never be left
  * behind in the live slot.
  */
+function sanitizeKey(val: unknown): string {
+  if (typeof val !== "string") return "";
+  return val.trim().replace(/^["']|["']$/g, "").trim();
+}
+
 export function activePaystack(config: Integrations): {
   mode: PaystackMode;
   secretKey: string;
   publicKey: string;
 } {
   const test = config.paystack.mode === "test";
+  const rawSecret = test ? config.paystack.testSecretKey : config.paystack.secretKey;
+  const rawPublic = test ? config.paystack.testPublicKey : config.paystack.publicKey;
   return {
     mode: config.paystack.mode,
-    secretKey: test ? config.paystack.testSecretKey : config.paystack.secretKey,
-    publicKey: test ? config.paystack.testPublicKey : config.paystack.publicKey,
+    secretKey: sanitizeKey(rawSecret),
+    publicKey: sanitizeKey(rawPublic),
   };
 }
 
@@ -265,7 +272,9 @@ export function isReady(config: Integrations, group: keyof Integrations): boolea
   switch (group) {
     case "paystack": {
       const active = activePaystack(config);
-      return Boolean(active.secretKey && active.publicKey);
+      const hasValidSecret = Boolean(active.secretKey && active.secretKey.startsWith("sk_"));
+      const hasValidPublic = Boolean(active.publicKey && active.publicKey.startsWith("pk_"));
+      return hasValidSecret && hasValidPublic;
     }
     case "ai":
       return config.ai.provider === "anthropic"

@@ -111,6 +111,7 @@ export function StorefrontCartScreen({
   const insets = useSafeAreaInsets();
   const [submitting, setSubmitting] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
+  const [showPickupContactModal, setShowPickupContactModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(PAYMENT_METHODS[0].id);
   const [isTestMode, setIsTestMode] = useState(false);
@@ -124,9 +125,9 @@ export function StorefrontCartScreen({
   const [preorderDepositOption, setPreorderDepositOption] = useState<"full" | "deposit_50">("full");
 
   // Customer contact states for instant MoMo and receipt delivery (no prefill, placeholders show)
-  const [momoPhone, setMomoPhone] = useState("");
+  const [momoPhone, setMomoPhone] = useState(user?.phone || "");
   const [momoProvider, setMomoProvider] = useState<"mtn" | "vod" | "tgo">("mtn");
-  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerEmail, setCustomerEmail] = useState(user?.email || "");
 
   // MoMo Authorization Prompt Modal states
   const [showMoMoPromptModal, setShowMoMoPromptModal] = useState(false);
@@ -169,17 +170,35 @@ export function StorefrontCartScreen({
       .catch(() => {});
   }, []);
 
-  // Ghanaian delivery address - clean empty strings so placeholders show instead of dummy text
+  // Ghanaian delivery address - initialized cleanly, synced with authenticated user if present
   const [shippingAddress, setShippingAddress] = useState<ShippingAddress>({
-    firstName: "",
-    lastName: "",
-    phone: "",
+    firstName: user?.firstName || "",
+    lastName: user?.lastName || "",
+    phone: user?.phone || "",
     line1: "",
     line2: "",
     city: "",
     region: "Greater Accra",
     country: "Ghana",
   });
+
+  // Sync user profile data into contact state when user session is active
+  useEffect(() => {
+    if (user) {
+      setShippingAddress((prev) => ({
+        ...prev,
+        firstName: prev.firstName || user.firstName || "",
+        lastName: prev.lastName || user.lastName || "",
+        phone: prev.phone || user.phone || "",
+      }));
+      if (user.email && !customerEmail) {
+        setCustomerEmail(user.email);
+      }
+      if (user.phone && !momoPhone) {
+        setMomoPhone(user.phone);
+      }
+    }
+  }, [user]);
 
   // Calculate Subtotal & Totals in pesewas (minor units)
   const subtotal = cart.reduce((acc, item) => {
@@ -376,54 +395,86 @@ export function StorefrontCartScreen({
       return;
     }
 
-    const trimmedFirst = (shippingAddress.firstName || "").trim();
-    const trimmedPhone = (shippingAddress.phone || "").trim();
+    const trimmedFirst = (shippingAddress.firstName || user?.firstName || "").trim();
+    const trimmedPhone = (shippingAddress.phone || user?.phone || momoPhone || "").trim();
     const trimmedLine1 = (shippingAddress.line1 || "").trim();
     const trimmedCity = (shippingAddress.city || "").trim();
 
-    if (!trimmedFirst) {
-      if (onNotify) {
-        onNotify({
-          title: "First Name Required",
-          message: "Please enter your first name for the delivery receipt.",
-          type: "warning",
-          icon: "user",
-        });
-      } else {
-        Alert.alert("First Name Required", "Please enter your first name for the delivery receipt.");
+    if (deliveryType === "pickup") {
+      if (!trimmedFirst) {
+        if (onNotify) {
+          onNotify({
+            title: "Name Required",
+            message: "Please enter your name for showroom collection and receipt.",
+            type: "warning",
+            icon: "user",
+          });
+        } else {
+          Alert.alert("Name Required", "Please enter your name for showroom collection and receipt.");
+        }
+        setShowPickupContactModal(true);
+        return;
       }
-      setShowAddressModal(true);
-      return;
-    }
 
-    if (!trimmedPhone || trimmedPhone.replace(/[^0-9]/g, "").length < 9) {
-      if (onNotify) {
-        onNotify({
-          title: "Phone Number Required",
-          message: "Please enter a valid phone number for your delivery and SMS receipt.",
-          type: "warning",
-          icon: "phone",
-        });
-      } else {
-        Alert.alert("Phone Required", "Please enter a valid phone number for your delivery and SMS receipt.");
+      if (!trimmedPhone || trimmedPhone.replace(/[^0-9]/g, "").length < 9) {
+        if (onNotify) {
+          onNotify({
+            title: "Phone Number Required",
+            message: "Please enter a valid phone number for SMS pickup notifications.",
+            type: "warning",
+            icon: "phone",
+          });
+        } else {
+          Alert.alert("Phone Required", "Please enter a valid phone number for SMS pickup notifications.");
+        }
+        setShowPickupContactModal(true);
+        return;
       }
-      setShowAddressModal(true);
-      return;
-    }
+    } else {
+      if (!trimmedFirst) {
+        if (onNotify) {
+          onNotify({
+            title: "First Name Required",
+            message: "Please enter your first name for the delivery receipt.",
+            type: "warning",
+            icon: "user",
+          });
+        } else {
+          Alert.alert("First Name Required", "Please enter your first name for the delivery receipt.");
+        }
+        setShowAddressModal(true);
+        return;
+      }
 
-    if (deliveryType === "delivery" && (!trimmedLine1 || !trimmedCity)) {
-      if (onNotify) {
-        onNotify({
-          title: "Address Required",
-          message: "Please enter your delivery street address and city.",
-          type: "warning",
-          icon: "map-pin",
-        });
-      } else {
-        Alert.alert("Address Required", "Please enter your delivery street address and city.");
+      if (!trimmedPhone || trimmedPhone.replace(/[^0-9]/g, "").length < 9) {
+        if (onNotify) {
+          onNotify({
+            title: "Phone Number Required",
+            message: "Please enter a valid phone number for your delivery and SMS receipt.",
+            type: "warning",
+            icon: "phone",
+          });
+        } else {
+          Alert.alert("Phone Required", "Please enter a valid phone number for your delivery and SMS receipt.");
+        }
+        setShowAddressModal(true);
+        return;
       }
-      setShowAddressModal(true);
-      return;
+
+      if (!trimmedLine1 || !trimmedCity) {
+        if (onNotify) {
+          onNotify({
+            title: "Address Required",
+            message: "Please enter your delivery street address and city.",
+            type: "warning",
+            icon: "map-pin",
+          });
+        } else {
+          Alert.alert("Address Required", "Please enter your delivery street address and city.");
+        }
+        setShowAddressModal(true);
+        return;
+      }
     }
 
     if (selectedPayment === "momo_push") {
@@ -464,6 +515,8 @@ export function StorefrontCartScreen({
           email: safeEmail,
           phone: safePhone,
         },
+        deliveryType,
+        isPickup,
         shippingAddress: isPickup
           ? {
               firstName: safeFirst,
@@ -603,6 +656,49 @@ export function StorefrontCartScreen({
                     message: "Unavailable items were removed from your bag. You can now checkout.",
                     type: "info",
                     icon: "shopping-bag",
+                  });
+                }
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      if (
+        msg.toLowerCase().includes("invalid key") ||
+        msg.toLowerCase().includes("payment gateway") ||
+        msg.toLowerCase().includes("paystack")
+      ) {
+        Alert.alert(
+          "Payment Gateway Unavailable",
+          "Automated online payment is currently undergoing maintenance. Would you like to complete your order using Direct MoMo or Pay on Delivery?",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Use Direct MoMo",
+              onPress: () => {
+                setSelectedPayment("direct_momo");
+                if (onNotify) {
+                  onNotify({
+                    title: "Payment Method Updated",
+                    message: "Switched to Direct MoMo / Bank Transfer. Tap PLACE ORDER to finish.",
+                    type: "info",
+                    icon: "check-circle",
+                  });
+                }
+              },
+            },
+            {
+              text: "Pay on Delivery",
+              onPress: () => {
+                setSelectedPayment("pay_on_delivery");
+                if (onNotify) {
+                  onNotify({
+                    title: "Payment Method Updated",
+                    message: "Switched to Pay on Delivery. Tap PLACE ORDER to finish.",
+                    type: "info",
+                    icon: "check-circle",
                   });
                 }
               },
@@ -1037,6 +1133,57 @@ export function StorefrontCartScreen({
           </View>
         )}
 
+        {/* If Store Pickup: Show Pickup Recipient Contact Card */}
+        {deliveryType === "pickup" && (
+          <View style={styles.sectionContainer}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <Text style={styles.sectionHeaderLabel}>PICKUP RECIPIENT CONTACT</Text>
+              {(shippingAddress.firstName || user?.firstName) ? (
+                <TouchableOpacity onPress={() => setShowPickupContactModal(true)}>
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: colors.primary }}>EDIT</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {(shippingAddress.firstName || user?.firstName) && (shippingAddress.phone || user?.phone || momoPhone) ? (
+              <TouchableOpacity
+                style={styles.cardSelectable}
+                onPress={() => setShowPickupContactModal(true)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.cardContentLeft}>
+                  <Text style={styles.addressName}>
+                    {[shippingAddress.firstName || user?.firstName, shippingAddress.lastName || user?.lastName].filter(Boolean).join(" ")}
+                  </Text>
+                  <Text style={styles.addressDetail}>
+                    📱 {shippingAddress.phone || user?.phone || momoPhone}
+                    {(customerEmail || user?.email) ? ` · ✉️ ${customerEmail || user?.email}` : ""}
+                  </Text>
+                  <Text style={[styles.paymentMethodSub, { color: colors.primary, marginTop: 2 }]}>
+                    Ready for collection SMS & receipt will be sent here
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.cardSelectable, { borderStyle: "dashed", borderColor: colors.primary, backgroundColor: "#FAF7F5" }]}
+                onPress={() => setShowPickupContactModal(true)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.cardContentLeft}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Feather name="user-plus" size={18} color={colors.primary} />
+                    <Text style={[styles.paymentMethodText, { color: colors.primary }]}>Enter Pickup Recipient</Text>
+                  </View>
+                  <Text style={styles.paymentMethodSub}>Tap to enter who will collect order and receive SMS</Text>
+                </View>
+                <Feather name="chevron-right" size={20} color={colors.primary} />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {/* 2. COST SUMMARY BREAKDOWN (Comes AFTER Delivery, BEFORE Payment!) */}
         <View style={styles.summaryBox}>
           <View style={styles.summaryRow}>
@@ -1360,6 +1507,101 @@ export function StorefrontCartScreen({
               activeOpacity={0.85}
             >
               <Text style={styles.modalSaveText}>Save Delivery Address</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Pickup Contact Modal */}
+      <Modal
+        visible={showPickupContactModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPickupContactModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Pickup Recipient Details</Text>
+                <Text style={styles.modalSubtitleText}>
+                  Who will be collecting this order at our showroom?
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowPickupContactModal(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Feather name="x" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={{ maxHeight: 380 }}
+            >
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>First Name *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={shippingAddress.firstName}
+                    placeholder="e.g. Kwame"
+                    placeholderTextColor="#999"
+                    onChangeText={(val) =>
+                      setShippingAddress((prev) => ({ ...prev, firstName: val }))
+                    }
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Last Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={shippingAddress.lastName}
+                    placeholder="e.g. Mensah"
+                    placeholderTextColor="#999"
+                    onChangeText={(val) =>
+                      setShippingAddress((prev) => ({ ...prev, lastName: val }))
+                    }
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.inputLabel}>Phone Number (For SMS Collection Notice) *</Text>
+              <TextInput
+                style={styles.input}
+                keyboardType="phone-pad"
+                value={shippingAddress.phone}
+                placeholder="e.g. 024 123 4567"
+                placeholderTextColor="#999"
+                onChangeText={(val) => {
+                  setShippingAddress((prev) => ({ ...prev, phone: val }));
+                  if (!momoPhone) setMomoPhone(val);
+                }}
+              />
+
+              <Text style={styles.inputLabel}>Email (For PDF Receipt & Invoice)</Text>
+              <TextInput
+                style={styles.input}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={customerEmail}
+                placeholder="e.g. kwame@example.com"
+                placeholderTextColor="#999"
+                onChangeText={setCustomerEmail}
+              />
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.modalSaveBtn}
+              onPress={() => setShowPickupContactModal(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalSaveText}>Confirm Pickup Recipient</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>

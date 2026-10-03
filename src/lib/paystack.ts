@@ -25,10 +25,11 @@ async function call<T>(
   path: string,
   init: { method: "GET" | "POST"; body?: unknown } = { method: "GET" },
 ): Promise<T> {
-  const secret = activePaystack(await getIntegrations()).secretKey;
-  if (!secret) {
+  const secret = activePaystack(await getIntegrations()).secretKey?.trim();
+  if (!secret || !secret.startsWith("sk_")) {
     throw new PaystackError(
-      "Paystack is not configured. Add its keys under Settings → Integrations.",
+      "Paystack secret key is missing or invalid. Please check your Paystack API keys in the admin console.",
+      401,
     );
   }
 
@@ -47,8 +48,13 @@ async function call<T>(
     | null;
 
   if (!response.ok || !payload?.status) {
+    const rawMsg = payload?.message ?? `Paystack request failed (${response.status}).`;
+    const friendlyMsg =
+      rawMsg.toLowerCase().includes("invalid key") || response.status === 401
+        ? "Paystack payment processor error: The API key was rejected by Paystack (Invalid key). Please verify your credentials or select another payment option."
+        : rawMsg;
     throw new PaystackError(
-      payload?.message ?? `Paystack request failed (${response.status}).`,
+      friendlyMsg,
       response.status,
     );
   }

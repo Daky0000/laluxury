@@ -229,7 +229,9 @@ function FieldRow({
         <input
           name={`${group}.${name}`}
           type={secret && !reveal ? "password" : "text"}
-          autoComplete="off"
+          autoComplete="new-password"
+          data-1p-ignore="true"
+          data-lpignore="true"
           spellCheck={false}
           defaultValue={secret ? "" : display}
           placeholder={

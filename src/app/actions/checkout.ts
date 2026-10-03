@@ -298,9 +298,13 @@ export async function placeOrderAction(
     if (error instanceof InsufficientStockError) {
       return { ok: false, message: error.message };
     }
+    const rawMsg = error instanceof Error ? error.message : "We could not start that payment.";
+    const friendlyMsg = rawMsg.toLowerCase().includes("invalid key")
+      ? "Payment gateway error: Paystack rejected the API key (Invalid key). Please select 'Pay on Delivery' or 'Direct MoMo', or check your API keys in Settings."
+      : rawMsg;
     return {
       ok: false,
-      message: error instanceof Error ? error.message : "We could not start that payment.",
+      message: friendlyMsg,
     };
   }
 

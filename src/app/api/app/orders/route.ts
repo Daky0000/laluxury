@@ -53,6 +53,8 @@ const checkoutSchema = z.object({
     postalCode: z.string().trim().optional().nullable(),
     country: z.string().trim().optional().default("GH"),
   }),
+  deliveryType: z.enum(["delivery", "pickup"]).optional().default("delivery"),
+  isPickup: z.boolean().optional(),
   shippingRateId: z.string().optional().nullable(),
   discountCode: z.string().trim().optional().nullable(),
   preorderDepositOption: z.enum(["full", "deposit_50"]).optional().nullable(),
@@ -152,8 +154,23 @@ export const POST = withApiAuth(async (request: Request) => {
       if (!cust.firstName || !cust.firstName.toString().trim()) cust.firstName = resolvedFirst;
       if (!ship.firstName || !ship.firstName.toString().trim()) ship.firstName = resolvedFirst;
     }
-    if (!cust.lastName || !cust.lastName.toString().trim()) cust.lastName = resolvedLast;
-    if (!ship.lastName || !ship.lastName.toString().trim()) ship.lastName = resolvedLast;
+    const isPickup =
+      raw.deliveryType === "pickup" ||
+      raw.isPickup === true ||
+      (ship.line1 && ship.line1.toString().toLowerCase().includes("pickup")) ||
+      (ship.line1 && ship.line1.toString().toLowerCase().includes("showroom"));
+
+    if (isPickup) {
+      if (!ship.line1 || !ship.line1.toString().trim()) {
+        ship.line1 = "Noble Enclave Showroom (Self-Pickup)";
+      }
+      if (!ship.city || !ship.city.toString().trim()) {
+        ship.city = "Accra";
+      }
+      if (!ship.region || !ship.region.toString().trim()) {
+        ship.region = "Greater Accra";
+      }
+    }
 
     raw.customer = cust;
     raw.shippingAddress = ship;
@@ -366,11 +383,18 @@ export const POST = withApiAuth(async (request: Request) => {
     storeFreeThreshold !== undefined &&
     subtotal >= storeFreeThreshold;
 
+  const isPickupOrder =
+    Boolean(data.isPickup) ||
+    data.deliveryType === "pickup" ||
+    data.shippingAddress.line1.toLowerCase().includes("pickup") ||
+    data.shippingAddress.line1.toLowerCase().includes("showroom");
+
   let shippingTotal = 0;
   let appliedShippingRateId: string | null = null;
 
-  if (storeFreeApplies) {
+  if (isPickupOrder || storeFreeApplies) {
     shippingTotal = 0;
+    appliedShippingRateId = null;
   } else if (data.shippingRateId) {
     const matched = shippingQuotes.find((q) => q.id === data.shippingRateId);
     if (matched) {
@@ -592,7 +616,18 @@ export const POST = withApiAuth(async (request: Request) => {
       data.momoProvider || detectGhanaMomoProvider(momoPhone);
     const providerLabel = MOMO_PROVIDER_LABELS[provider] || "Mobile Money";
 
-    if (isTestOrder || !paystackConfig?.secretKey) {
+    const hasValidKey = Boolean(paystackConfig?.secretKey && paystackConfig.secretKey.startsWith("sk_"));
+
+    if (isTestOrder || (!hasValidKey && !paystackReady)) {
+      if (!isTestOrder && !hasValidKey) {
+        return NextResponse.json(
+          {
+            error:
+              "Mobile Money online payment is currently not configured with live Paystack credentials. Please select 'Direct MoMo / Bank Transfer' or 'Pay on Delivery' to place your order immediately, or switch to Test Mode in Settings.",
+          },
+          { status: 400 },
+        );
+      }
       // Test simulation or sandbox mode without live keys
       await db.payment.create({
         data: {
@@ -713,12 +748,16 @@ export const POST = withApiAuth(async (request: Request) => {
           };
         }
       } catch (chargeErr) {
+        const rawErr =
+          chargeErr instanceof Error
+            ? chargeErr.message
+            : "Unable to initiate Mobile Money prompt. Please check your phone number or select another payment option.";
+        const friendlyErr = rawErr.toLowerCase().includes("invalid key")
+          ? "Payment gateway error: Paystack rejected the API key (Invalid key). Please choose 'Direct MoMo / Bank Transfer' or 'Pay on Delivery' to place your order now, or check your Paystack API keys in Admin Settings."
+          : rawErr;
         return NextResponse.json(
           {
-            error:
-              chargeErr instanceof Error
-                ? chargeErr.message
-                : "Unable to initiate Mobile Money prompt. Please check your phone number or select another payment option.",
+            error: friendlyErr,
           },
           { status: 400 },
         );
@@ -789,12 +828,16 @@ export const POST = withApiAuth(async (request: Request) => {
         console.error("[notify] order.placed hosted error:", err),
       );
     } catch (paystackErr) {
+      const rawErr =
+        paystackErr instanceof Error
+          ? paystackErr.message
+          : "Unable to initialize Paystack transaction.";
+      const friendlyErr = rawErr.toLowerCase().includes("invalid key")
+        ? "Payment gateway error: Paystack rejected the API key (Invalid key). Please choose 'Direct MoMo / Bank Transfer' or 'Pay on Delivery' to place your order now, or check your Paystack API keys in Admin Settings."
+        : rawErr;
       return NextResponse.json(
         {
-          error:
-            paystackErr instanceof Error
-              ? paystackErr.message
-              : "Unable to initialize Paystack transaction.",
+          error: friendlyErr,
         },
         { status: 400 },
       );

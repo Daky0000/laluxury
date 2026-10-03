@@ -538,6 +538,8 @@ class ApiService {
       phone: string;
     };
     shippingAddress: ShippingAddress;
+    deliveryType?: "delivery" | "pickup";
+    isPickup?: boolean;
     shippingRateId?: string | null;
     discountCode?: string | null;
     preorderDepositOption?: "full" | "deposit_50" | null;
