@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
+import { apiOptionsResponse, withApiAuth, requireBearerUser } from "@/lib/auth/bearer";
+import { isStaff } from "@/lib/auth/rbac";
 import {
   initiateMomoPinPushAction,
   submitMomoPushOtpAction,
@@ -27,15 +28,22 @@ export const POST = withApiAuth(async (
     return NextResponse.json({ ok: false, error: "Order ID is required." }, { status: 400 });
   }
 
+  const user = await requireBearerUser();
+  const isStaffMember = isStaff(user.role);
+
   const order = await db.order.findFirst({
     where: {
       OR: [{ id }, { orderNumber: id.toUpperCase() }],
     },
-    select: { id: true, orderNumber: true, total: true, depositAmount: true, phone: true },
+    select: { id: true, orderNumber: true, total: true, depositAmount: true, phone: true, userId: true },
   });
 
   if (!order) {
     return NextResponse.json({ ok: false, error: "Order not found." }, { status: 404 });
+  }
+
+  if (!isStaffMember && order.userId !== user.id) {
+    return NextResponse.json({ ok: false, error: "Unauthorized access to order." }, { status: 403 });
   }
 
   const body = await request.json().catch(() => ({}));
@@ -46,6 +54,7 @@ export const POST = withApiAuth(async (
       orderId: order.id,
       reference: String(body.reference).trim(),
       otp: String(body.otp).trim(),
+      actor: user,
     });
     return NextResponse.json(otpRes);
   }
@@ -66,6 +75,7 @@ export const POST = withApiAuth(async (
     phone,
     provider,
     chargeScope,
+    actor: user,
   });
 
   return NextResponse.json(result);
@@ -85,15 +95,22 @@ export const GET = withApiAuth(async (
     return NextResponse.json({ ok: false, error: "Order ID is required." }, { status: 400 });
   }
 
+  const user = await requireBearerUser();
+  const isStaffMember = isStaff(user.role);
+
   const order = await db.order.findFirst({
     where: {
       OR: [{ id }, { orderNumber: id.toUpperCase() }],
     },
-    select: { id: true },
+    select: { id: true, userId: true },
   });
 
   if (!order) {
     return NextResponse.json({ ok: false, error: "Order not found." }, { status: 404 });
+  }
+
+  if (!isStaffMember && order.userId !== user.id) {
+    return NextResponse.json({ ok: false, error: "Unauthorized access to order." }, { status: 403 });
   }
 
   const url = new URL(request.url);
@@ -109,6 +126,7 @@ export const GET = withApiAuth(async (
     reference,
     chargeScope,
     simulateClientPinEntered: false,
+    actor: user,
   });
 
   return NextResponse.json({

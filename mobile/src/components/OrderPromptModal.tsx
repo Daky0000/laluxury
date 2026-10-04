@@ -178,7 +178,7 @@ export function OrderPromptModal({
         chargeScope,
       });
 
-      if (res.ok) {
+      if (res?.ok) {
         setPushReference(res.reference || null);
         setPushStatus(res.status || "pay_offline");
         setPushDisplayText(
@@ -191,7 +191,7 @@ export function OrderPromptModal({
           onSuccess(`Payment confirmed for Order #${order.orderNumber}!`);
         }
       } else {
-        onError(res.error || "Failed to initiate MoMo PIN push.");
+        onError(res?.error || "Failed to initiate MoMo PIN push.");
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to initiate MoMo PIN push.";
@@ -211,12 +211,12 @@ export function OrderPromptModal({
         chargeScope === "DEPOSIT_50" ? "DEPOSIT_50" : "FULL"
       );
 
-      if (check.paid) {
+      if (check?.paid) {
         setIsPaidConfirmed(true);
         setPushDisplayText("Payment confirmed! Order marked as PAID.");
         onSuccess(`Payment confirmed for Order #${order.orderNumber}!`);
       } else {
-        setPushDisplayText(check.message || "Still awaiting PIN entry from customer.");
+        setPushDisplayText(check?.message || "Still awaiting PIN entry from customer.");
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error checking payment status.";
@@ -235,7 +235,7 @@ export function OrderPromptModal({
         otp: otpCode.trim(),
       });
 
-      if (res.ok) {
+      if (res?.ok) {
         setOtpCode("");
         if (res.status === "success") {
           setIsPaidConfirmed(true);
@@ -245,7 +245,7 @@ export function OrderPromptModal({
           setPushDisplayText(res.displayText || "OTP submitted. Awaiting confirmation...");
         }
       } else {
-        onError(res.error || "Failed to submit OTP.");
+        onError(res?.error || "Failed to submit OTP.");
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to submit OTP.";

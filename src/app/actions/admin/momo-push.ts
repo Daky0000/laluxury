@@ -16,6 +16,12 @@ import { getIntegrations, activePaystack } from "@/lib/integrations";
 import { formatMoney } from "@/lib/money";
 import { logAudit } from "@/lib/audit";
 
+export type MomoActor = {
+  id: string;
+  email?: string | null;
+  role?: string | null;
+};
+
 export type MomoPushResult = {
   ok: boolean;
   reference?: string;
@@ -28,13 +34,19 @@ export type MomoPushResult = {
   error?: string;
 };
 
+async function getStaffOrActor(actor?: MomoActor): Promise<MomoActor> {
+  if (actor) return actor;
+  return await requirePermission("orders:write");
+}
+
 export async function initiateMomoPinPushAction(args: {
   orderId: string;
   phone: string;
   provider?: "auto" | MomoProvider;
   chargeScope?: "FULL" | "DEPOSIT_50" | "REMAINING_BALANCE";
+  actor?: MomoActor;
 }): Promise<MomoPushResult> {
-  const staff = await requirePermission("orders:write");
+  const staff = await getStaffOrActor(args.actor);
 
   const order = await db.order.findUnique({
     where: { id: args.orderId },
@@ -132,7 +144,11 @@ export async function initiateMomoPinPushAction(args: {
         });
       }
 
-      revalidatePath(`/admin/orders/${order.id}`);
+      try {
+        revalidatePath(`/admin/orders/${order.id}`);
+      } catch {
+        // Safe to ignore outside Next.js Server Action context
+      }
       return {
         ok: true,
         reference,
@@ -154,7 +170,11 @@ export async function initiateMomoPinPushAction(args: {
   }
 
   // Interactive Simulator Mode when Paystack Secret Key is not yet configured
-  revalidatePath(`/admin/orders/${order.id}`);
+  try {
+    revalidatePath(`/admin/orders/${order.id}`);
+  } catch {
+    // Safe to ignore outside Next.js Server Action context
+  }
   return {
     ok: true,
     reference,
@@ -171,8 +191,9 @@ export async function submitMomoPushOtpAction(args: {
   orderId: string;
   reference: string;
   otp: string;
+  actor?: MomoActor;
 }): Promise<MomoPushResult> {
-  await requirePermission("orders:write");
+  await getStaffOrActor(args.actor);
 
   try {
     const res = await submitMobileMoneyOtp({
@@ -201,8 +222,9 @@ export async function checkOrConfirmMomoPinAction(args: {
   reference: string;
   chargeScope?: "FULL" | "DEPOSIT_50" | "REMAINING_BALANCE";
   simulateClientPinEntered?: boolean;
+  actor?: MomoActor;
 }): Promise<{ ok: boolean; paid: boolean; message: string }> {
-  const staff = await requirePermission("orders:write");
+  const staff = await getStaffOrActor(args.actor);
 
   const payment = await db.payment.findUnique({
     where: { reference: args.reference },

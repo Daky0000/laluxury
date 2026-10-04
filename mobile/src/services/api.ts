@@ -148,7 +148,7 @@ class ApiService {
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
-      const errorMsg = data?.error || `Request failed with status ${response.status}`;
+      const errorMsg = data?.error || (response.status === 404 ? "Requested resource not found." : `Request failed with status ${response.status}`);
       const err = new Error(errorMsg) as Error & Record<string, unknown>;
       if (data && typeof data === "object") {
         Object.assign(err, data);
@@ -157,6 +157,10 @@ class ApiService {
         await this.clearSession();
       }
       throw err;
+    }
+
+    if (data === null || data === undefined || typeof data !== "object") {
+      throw new Error(`Server returned an invalid response (status ${response.status}).`);
     }
 
     return data as T;
@@ -812,13 +816,13 @@ class ApiService {
 
       // Safe resilient metadata so the user is NEVER blocked from updating
       return {
-        latestVersion: "1.3.4",
-        versionCode: 16,
+        latestVersion: "1.3.5",
+        versionCode: 17,
         appName: "Noble Enclave",
         downloadUrl: `${DEFAULT_URL}/app`,
         directUrl: `${DEFAULT_URL}/api/app/download`,
         releaseNotes:
-          "Noble Enclave v1.3.4 release: Interactive MoMo direct payment prompts, responsive in-app order management, delivery fees & zones customization, and instant SMS receipts.",
+          "Noble Enclave v1.3.5 release: Live MoMo PIN direct authorization with bearer auth integration, refined adaptive app icon with safe-zone breathing room, and stability improvements.",
       };
     }
   }

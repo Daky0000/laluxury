@@ -867,10 +867,11 @@ export function OrdersScreen({ user, onNotify }: Props) {
           fetchOrders();
         }}
         onError={(err) => {
+          const msg = typeof err === "string" ? err : ((err as any)?.message || "Failed to trigger MoMo prompt.");
           onNotify?.({
             type: "error",
-            title: "Prompt Error",
-            message: err,
+            title: "Prompt Notice",
+            message: msg,
           });
         }}
       />

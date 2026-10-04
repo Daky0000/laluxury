@@ -3,7 +3,7 @@
     "name": "Noble Enclave",
     "slug": "danny",
     "owner": "danny1999s-team",
-    "version": "1.3.4",
+    "version": "1.3.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,11 +13,11 @@
     },
     "android": {
       "package": "com.laluxury.management",
-      "versionCode": 16,
+      "versionCode": 17,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#7A2E3C",
-        "foregroundImage": "./assets/icon.png"
+        "foregroundImage": "./assets/android-icon-foreground.png"
       }
     },
     "plugins": [
