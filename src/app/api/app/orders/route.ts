@@ -84,8 +84,31 @@ export const GET = withApiAuth(async (request: Request) => {
   }
 
   const isStaffMember = isStaff(user.role);
+  const statusParam = url.searchParams.get("status")?.trim();
+  const paymentStatusParam = url.searchParams.get("paymentStatus")?.trim();
+  const fulfillmentStatusParam = url.searchParams.get("fulfillmentStatus")?.trim();
+  const q = url.searchParams.get("q")?.trim() || "";
 
-  const where = isStaffMember ? {} : { userId: user.id };
+  const where: any = isStaffMember ? {} : { userId: user.id };
+
+  if (statusParam && statusParam.toUpperCase() !== "ALL") {
+    where.status = statusParam.toUpperCase();
+  }
+  if (paymentStatusParam && paymentStatusParam.toUpperCase() !== "ALL") {
+    where.paymentStatus = paymentStatusParam.toUpperCase();
+  }
+  if (fulfillmentStatusParam && fulfillmentStatusParam.toUpperCase() !== "ALL") {
+    where.fulfillmentStatus = fulfillmentStatusParam.toUpperCase();
+  }
+  if (q) {
+    where.OR = [
+      { orderNumber: { contains: q.toUpperCase() } },
+      { email: { contains: q, mode: "insensitive" } },
+      { phone: { contains: q } },
+      { shippingAddress: { firstName: { contains: q, mode: "insensitive" } } },
+      { shippingAddress: { lastName: { contains: q, mode: "insensitive" } } },
+    ];
+  }
 
   const [total, orders] = await Promise.all([
     db.order.count({ where }),
@@ -97,7 +120,8 @@ export const GET = withApiAuth(async (request: Request) => {
       include: {
         items: true,
         shippingAddress: true,
-        payments: { take: 1, orderBy: { createdAt: "desc" } },
+        shippingRate: true,
+        payments: { orderBy: { createdAt: "desc" } },
       },
     }),
   ]);
@@ -108,13 +132,35 @@ export const GET = withApiAuth(async (request: Request) => {
       orderNumber: o.orderNumber,
       status: o.status,
       paymentStatus: o.paymentStatus,
+      fulfillmentStatus: o.fulfillmentStatus,
       paymentMethod: o.paymentMethod,
       currency: o.currency,
+      email: o.email,
+      phone: o.phone,
+      customerNote: o.customerNote,
+      staffNote: o.staffNote,
+      depositAmount: o.depositAmount,
+      balancePaidAt: o.balancePaidAt?.toISOString() || null,
       subtotal: o.subtotal,
       shippingTotal: o.shippingTotal,
+      discountTotal: o.discountTotal,
       total: o.total,
       placedAt: o.placedAt.toISOString(),
+      paidAt: o.paidAt?.toISOString() || null,
+      trackingNumber: o.trackingNumber,
+      trackingCompany: o.trackingCompany,
       shippingAddress: o.shippingAddress,
+      shippingRate: o.shippingRate,
+      payments: o.payments.map((p) => ({
+        id: p.id,
+        reference: p.reference,
+        amount: p.amount,
+        currency: p.currency,
+        status: p.status,
+        channel: p.channel,
+        mobileMoneyNumber: p.mobileMoneyNumber,
+        paidAt: p.paidAt?.toISOString() || null,
+      })),
       items: o.items.map((item) => ({
         id: item.id,
         variantId: item.variantId,
@@ -565,6 +611,28 @@ export const POST = withApiAuth(async (request: Request) => {
     );
   } catch (stockErr: unknown) {
     console.warn("Stock reservation warning:", stockErr);
+  }
+
+  // Convert and clear active cart so items are not left behind in customer's bag
+  if (userId) {
+    try {
+      const activeCarts = await db.cart.findMany({
+        where: { userId, convertedOrderId: null },
+        select: { id: true },
+      });
+      if (activeCarts.length > 0) {
+        const cartIds = activeCarts.map((c) => c.id);
+        await db.cartItem.deleteMany({
+          where: { cartId: { in: cartIds } },
+        });
+        await db.cart.updateMany({
+          where: { id: { in: cartIds } },
+          data: { convertedOrderId: order.id },
+        });
+      }
+    } catch (cartErr) {
+      console.warn("Cart conversion warning:", cartErr);
+    }
   }
 
   // Increment discount usage if promo code applied

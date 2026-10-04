@@ -12,6 +12,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import * as Notifications from "expo-notifications";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
 
@@ -32,6 +33,7 @@ export function CustomNotificationModal({
   const [phone, setPhone] = useState("");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [postToTray, setPostToTray] = useState(true);
   const [loading, setLoading] = useState(false);
 
   if (!visible) return null;
@@ -58,6 +60,31 @@ export function CustomNotificationModal({
       });
 
       if (res.ok) {
+        // Post local system notification to phone notification tray if enabled
+        if (postToTray) {
+          try {
+            const { status: existingStatus } = await Notifications.getPermissionsAsync();
+            let finalStatus = existingStatus;
+            if (existingStatus !== "granted") {
+              const { status } = await Notifications.requestPermissionsAsync();
+              finalStatus = status;
+            }
+            if (finalStatus === "granted") {
+              await Notifications.scheduleNotificationAsync({
+                content: {
+                  title: title.trim() || (target === "announcement" ? "Noble Enclave Store Announcement" : "Noble Enclave Notice"),
+                  body: trimmedMessage,
+                  data: { target, phone: phone.trim() },
+                  color: "#7A2E3C",
+                },
+                trigger: null,
+              });
+            }
+          } catch (notifErr) {
+            // Non-fatal if system notification tray fails
+          }
+        }
+
         onSuccess(res.message);
         setMessage("");
         setTitle("");
@@ -174,7 +201,7 @@ export function CustomNotificationModal({
               style={styles.input}
               value={title}
               onChangeText={setTitle}
-              placeholder={target === "phone" ? "e.g. Order Ready" : "e.g. FLASH SALE"}
+              placeholder={target === "phone" ? "e.g. Order Dispatch Notice" : "e.g. FLASH SALE"}
               placeholderTextColor="#999"
             />
 
@@ -196,6 +223,25 @@ export function CustomNotificationModal({
               numberOfLines={4}
               textAlignVertical="top"
             />
+
+            {/* Toggle Post Notification */}
+            <TouchableOpacity
+              style={styles.toggleRow}
+              onPress={() => setPostToTray(!postToTray)}
+              activeOpacity={0.8}
+            >
+              <Feather
+                name={postToTray ? "check-square" : "square"}
+                size={18}
+                color={postToTray ? colors.primary : colors.textSecondary}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.toggleTitle}>Display as Device System Notification</Text>
+                <Text style={styles.toggleSub}>
+                  Posts this notification into the phone&apos;s OS notification tray / lock screen.
+                </Text>
+              </View>
+            </TouchableOpacity>
 
             {/* Submit Button */}
             <TouchableOpacity
@@ -334,6 +380,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textSecondary,
     marginTop: 10,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: "#FAF8F5",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#EDE8DF",
+  },
+  toggleTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  toggleSub: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   submitBtn: {
     backgroundColor: colors.primary,

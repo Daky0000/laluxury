@@ -20,6 +20,7 @@ import { api } from "../services/api";
 import { User, Order } from "../types";
 import { formatCurrency, formatDate } from "../utils/format";
 import { AppUpdateModal } from "../components/AppUpdateModal";
+import { isNewerVersion } from "../utils/version";
 import appJson from "../../app.json";
 
 const CURRENT_APP_VERSION = appJson.expo.version;
@@ -104,7 +105,7 @@ export function AccountScreen({
     try {
       const res = await api.checkAppVersion();
       setUpdateInfo(res);
-      if (res.latestVersion === CURRENT_APP_VERSION) {
+      if (!isNewerVersion(CURRENT_APP_VERSION, res.latestVersion)) {
         setUpdateStatus(`You are running the latest version (v${CURRENT_APP_VERSION}).`);
         Alert.alert(
           `Noble Enclave v${CURRENT_APP_VERSION}`,

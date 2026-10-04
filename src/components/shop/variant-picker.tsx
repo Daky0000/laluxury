@@ -119,7 +119,6 @@ export function VariantPicker({
     }
     return {};
   });
-  const [showCustomPreorder, setShowCustomPreorder] = useState(false);
   const [pending, startTransition] = useTransition();
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -727,41 +726,17 @@ export function VariantPicker({
         ) : null}
       </div>
 
-      {/* 1-Click WhatsApp Concierge & Material Swatches */}
-      <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-        <a
-          href={`https://wa.me/233240000000?text=${encodeURIComponent(
-            `Hello Noble Enclave Concierge, I am interested in "${productTitle}"${activeVariant && activeVariant.title !== "Default" ? ` (${activeVariant.title})` : ""}${activeVariant ? ` — ${formatPrice(activeVariant.price)}` : ""}. ${isPreorder ? "I would like to confirm Pre-Order availability and lead time." : "Is this available for immediate dispatch?"}`,
-          )}`}
-          target="_blank"
-          rel="noreferrer"
-          className="flex min-h-11 items-center justify-center gap-2 border border-sage-600/40 bg-sage-600/10 px-4 py-2.5 text-center text-xs font-medium uppercase tracking-[0.12em] text-sage-600 transition-colors hover:bg-sage-600 hover:text-white"
-        >
-          Ask / Order on WhatsApp
-        </a>
-
-        <button
-          type="button"
-          onClick={() => setShowCustomPreorder((v) => !v)}
-          className="flex min-h-11 items-center justify-center gap-2 border border-amber-800/35 bg-amber-950/10 px-4 py-2.5 text-center text-xs font-medium uppercase tracking-[0.12em] text-[#8C6528] transition-colors hover:bg-amber-950/20"
-        >
-          {showCustomPreorder ? "Hide Swatch & Custom Form" : "Request Swatches / Custom Size"}
-        </button>
-      </div>
-
-      {/* Custom Pre-Order / Out-of-stock Sourcing Drawer */}
-      <div className="mt-3">
-        {showCustomPreorder || soldOut ? (
-          <div className="mt-2">
-            <PreorderRequestForm
-              compact
-              defaultProductId={productId}
-              defaultProductTitle={productTitle}
-              defaultVariantTitle={activeVariant?.title ?? ""}
-            />
-          </div>
-        ) : null}
-      </div>
+      {/* Out-of-stock Sourcing Drawer */}
+      {soldOut ? (
+        <div className="mt-3">
+          <PreorderRequestForm
+            compact
+            defaultProductId={productId}
+            defaultProductTitle={productTitle}
+            defaultVariantTitle={activeVariant?.title ?? ""}
+          />
+        </div>
+      ) : null}
 
       {activeVariant ? (
         <p className="mt-3 text-sm text-[var(--text-muted)]">SKU {activeVariant.sku}</p>

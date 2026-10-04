@@ -138,29 +138,89 @@ export type ShippingAddress = {
   country: string;
 };
 
+export type OrderItemDetail = {
+  id: string;
+  variantId?: string | null;
+  productId?: string | null;
+  productTitle: string;
+  variantTitle: string;
+  sku: string;
+  imageUrl?: string | null;
+  quantity: number;
+  unitPrice: number;
+  discountAllocated?: number;
+  total: number;
+  quantityFulfilled?: number;
+};
+
+export type OrderPaymentDetail = {
+  id: string;
+  reference: string;
+  amount: number;
+  currency: string;
+  status: string;
+  channel?: string | null;
+  mobileMoneyNumber?: string | null;
+  cardBrand?: string | null;
+  cardLast4?: string | null;
+  paidAt?: string | null;
+};
+
+export type OrderEventDetail = {
+  id: string;
+  type: string;
+  message: string;
+  createdAt: string;
+};
+
 export type Order = {
   id: string;
   orderNumber: string;
   status: string;
   paymentStatus: string;
+  fulfillmentStatus?: string;
   paymentMethod: string;
   currency: string;
+  email?: string;
+  phone?: string | null;
   subtotal: number;
+  discountTotal?: number;
   shippingTotal: number;
   total: number;
+  depositAmount?: number | null;
+  balancePaidAt?: string | null;
+  hasPreorderItems?: boolean;
+  preorderStage?: string;
+  customerNote?: string | null;
+  staffNote?: string | null;
+  trackingNumber?: string | null;
+  trackingCompany?: string | null;
   placedAt: string;
+  paidAt?: string | null;
+  shippedAt?: string | null;
+  deliveredAt?: string | null;
+  cancelledAt?: string | null;
   shippingAddress?: ShippingAddress | null;
-  items: {
+  shippingRate?: { id: string; name: string } | null;
+  items: OrderItemDetail[];
+  payments?: OrderPaymentDetail[];
+  events?: OrderEventDetail[];
+};
+
+export type ShippingZoneDetail = {
+  id: string;
+  name: string;
+  regions: string[];
+  isActive: boolean;
+  rates: {
     id: string;
-    variantId: string;
-    productId: string;
-    productTitle: string;
-    variantTitle: string;
-    sku: string;
-    imageUrl?: string | null;
-    quantity: number;
-    unitPrice: number;
-    total: number;
+    name: string;
+    price: number;
+    freeAboveSubtotal?: number | null;
+    estimatedDaysMin?: number | null;
+    estimatedDaysMax?: number | null;
+    isActive: boolean;
+    position: number;
   }[];
 };
 

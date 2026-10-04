@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../theme/colors";
 
 export type StorefrontTab = "HOME" | "SHOP" | "BAG" | "ACCOUNT";
-export type BackendTab = "DASHBOARD" | "PRODUCTS" | "ADD" | "SETTINGS";
+export type BackendTab = "DASHBOARD" | "ORDERS" | "PRODUCTS" | "ADD" | "SETTINGS";
 
 type Props = {
   mode: "STOREFRONT" | "BACKEND";
@@ -27,9 +27,10 @@ export function BottomNav({
 
   if (mode === "BACKEND") {
     const backendTabs = [
-      { key: "DASHBOARD" as BackendTab, label: "Dashboard", icon: "bar-chart-2" as const },
+      { key: "DASHBOARD" as BackendTab, label: "Home", icon: "bar-chart-2" as const },
+      { key: "ORDERS" as BackendTab, label: "Orders", icon: "shopping-bag" as const },
       { key: "PRODUCTS" as BackendTab, label: "Products", icon: "box" as const },
-      { key: "ADD" as BackendTab, label: "Add Piece", icon: "plus-circle" as const },
+      { key: "ADD" as BackendTab, label: "Add", icon: "plus-circle" as const },
       { key: "SETTINGS" as BackendTab, label: "Settings", icon: "sliders" as const },
     ];
 

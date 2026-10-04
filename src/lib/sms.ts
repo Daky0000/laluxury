@@ -357,8 +357,18 @@ export async function verifyOtp(phone: string, code: string): Promise<SmsResult>
   return { ok: false, ...error };
 }
 
+function cleanSmsText(text: string): string {
+  return text
+    .replace(/[₵]/g, "GHS ")
+    .replace(/[—–]/g, "-")
+    .replace(/[•]/g, "*")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\r\n/g, "\n");
+}
+
 /**
- * A plain text message — order confirmations, delivery notices.
+ * A plain text message — order confirmations, delivery notices, receipts.
  *
  * Failure is returned rather than thrown: a text that does not go out should
  * never be the reason an order fails to save.
@@ -377,17 +387,39 @@ export async function sendSms(phone: string, message: string): Promise<SmsResult
     return { ok: false, code: "NOT_CONFIGURED", fatal: true, message: "SMS is not configured." };
   }
 
-  console.log(`[sms:dispatching] Sending SMS to ${number} via Vynfy (${config.senderId})...`);
-  const { status, data } = await call("/api/v1/send", config.apiKey, {
-    sender: config.senderId,
-    recipients: [forGateway(number)],
-    message: message.slice(0, 650),
-  });
+  const cleanedMessage = cleanSmsText(message).slice(0, 650);
+  const gatewayPhone = forGateway(number);
 
-  if (status === 200 && data.success) {
+  console.log(`[sms:dispatching] Sending SMS to ${number} (${gatewayPhone}) via Vynfy (${config.senderId})...`);
+
+  const payload = {
+    sender: config.senderId,
+    sender_id: config.senderId,
+    recipients: [gatewayPhone],
+    recipient: gatewayPhone,
+    number: gatewayPhone,
+    phone: gatewayPhone,
+    message: cleanedMessage,
+  };
+
+  let res = await call("/api/v1/send", config.apiKey, payload);
+  if (res.status === 404 || res.status === 405) {
+    res = await call("/api/v1/sms/send", config.apiKey, payload);
+  }
+
+  const { status, data } = res;
+  const isSuccess =
+    status >= 200 &&
+    status < 300 &&
+    (data.success === true ||
+      (typeof (data as any).status === "string" && (data as any).status.toLowerCase() === "success") ||
+      (typeof data.message === "string" && /success|queued|sent|delivered/i.test(data.message)));
+
+  if (isSuccess) {
     console.log(`[sms:success] SMS delivered to ${number}`);
     return { ok: true };
   }
+
   console.error(`[sms:error] SMS to ${number} failed with status ${status}:`, data);
   return { ok: false, ...readableError("/api/v1/send", status, data) };
 }

@@ -13,6 +13,7 @@ import {
   ShippingRate,
   AppConfig,
   ServerCart,
+  ShippingZoneDetail,
 } from "../types";
 
 
@@ -489,10 +490,6 @@ class ApiService {
 
   // --- Orders & Checkout ----------------------------------------------------
 
-  async getOrders(): Promise<{ orders: Order[] }> {
-    return this.request<{ orders: Order[] }>("/api/app/orders");
-  }
-
   async checkout(orderData: {
     items: { variantId: string; quantity: number }[];
     customer: {
@@ -572,9 +569,143 @@ class ApiService {
     });
   }
 
-  async resendOrderReceipt(orderNumber: string): Promise<{ ok: boolean; message: string }> {
+  async resendOrderReceipt(
+    orderNumber: string,
+    phone?: string,
+    email?: string,
+  ): Promise<{ ok: boolean; message: string; outcomes?: string[] }> {
     return this.request(`/api/app/orders/${encodeURIComponent(orderNumber)}/receipt`, {
       method: "POST",
+      body: JSON.stringify({ phone, email }),
+    });
+  }
+
+  async getOrders(filters?: {
+    status?: string;
+    paymentStatus?: string;
+    fulfillmentStatus?: string;
+    q?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    orders: Order[];
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append("status", filters.status);
+    if (filters?.paymentStatus) params.append("paymentStatus", filters.paymentStatus);
+    if (filters?.fulfillmentStatus) params.append("fulfillmentStatus", filters.fulfillmentStatus);
+    if (filters?.q) params.append("q", filters.q);
+    if (filters?.page) params.append("page", String(filters.page));
+    if (filters?.limit) params.append("limit", String(filters.limit));
+    const qs = params.toString();
+    return this.request(`/api/app/orders${qs ? `?${qs}` : ""}`);
+  }
+
+  async getOrder(orderId: string): Promise<{ ok: boolean; order: Order }> {
+    return this.request(`/api/app/orders/${encodeURIComponent(orderId)}`);
+  }
+
+  async updateOrderStatus(
+    orderId: string,
+    data: {
+      status?: string;
+      fulfillmentStatus?: string;
+      staffNote?: string;
+      customerNote?: string;
+      trackingNumber?: string;
+      trackingCompany?: string;
+      reason?: string;
+    },
+  ): Promise<{ ok: boolean; message: string; order: Order }> {
+    return this.request(`/api/app/orders/${encodeURIComponent(orderId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async pushMomoPin(
+    orderId: string,
+    data: {
+      phone?: string;
+      provider?: string;
+      chargeScope?: "FULL" | "DEPOSIT_50" | "REMAINING_BALANCE";
+      otp?: string;
+      reference?: string;
+    },
+  ): Promise<{
+    ok: boolean;
+    reference?: string;
+    status?: string;
+    providerLabel?: string;
+    phone?: string;
+    amountFormatted?: string;
+    displayText?: string;
+    simulated?: boolean;
+    error?: string;
+  }> {
+    return this.request(`/api/app/orders/${encodeURIComponent(orderId)}/momo-push`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async checkMomoPinStatus(
+    orderId: string,
+    reference: string,
+    chargeScope: "FULL" | "DEPOSIT_50" = "FULL",
+  ): Promise<{ ok: boolean; paid: boolean; status?: string; message: string }> {
+    return this.request(
+      `/api/app/orders/${encodeURIComponent(orderId)}/momo-push?reference=${encodeURIComponent(reference)}&chargeScope=${chargeScope}`,
+    );
+  }
+
+  async getShippingZones(): Promise<{
+    ok: boolean;
+    availableRegions: readonly string[];
+    zones: ShippingZoneDetail[];
+  }> {
+    return this.request("/api/app/shipping/zones");
+  }
+
+  async saveShippingZone(data: {
+    id?: string;
+    name: string;
+    regions: string[];
+    isActive?: boolean;
+  }): Promise<{ ok: boolean; message: string; zone: any }> {
+    return this.request("/api/app/shipping/zones", {
+      method: "POST",
+      body: JSON.stringify({ action: "save_zone", ...data }),
+    });
+  }
+
+  async saveShippingRate(data: {
+    id?: string;
+    zoneId: string;
+    name: string;
+    price: number;
+    freeAboveSubtotal?: number | null;
+    estimatedDaysMin?: number | null;
+    estimatedDaysMax?: number | null;
+    isActive?: boolean;
+    position?: number;
+  }): Promise<{ ok: boolean; message: string; rate: any }> {
+    return this.request("/api/app/shipping/zones", {
+      method: "POST",
+      body: JSON.stringify({ action: "save_rate", ...data }),
+    });
+  }
+
+  async deleteShippingZone(id: string): Promise<{ ok: boolean; message: string }> {
+    return this.request(`/api/app/shipping/zones?action=zone&id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async deleteShippingRate(id: string): Promise<{ ok: boolean; message: string }> {
+    return this.request(`/api/app/shipping/zones?action=rate&id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
     });
   }
 
@@ -592,6 +723,14 @@ class ApiService {
   async saveCart(items: CartItem[]): Promise<void> {
     try {
       await AsyncStorage.setItem(STORAGE_KEY_CART, JSON.stringify(items));
+    } catch {
+      // Ignore storage error
+    }
+  }
+
+  async clearLocalCart(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEY_CART);
     } catch {
       // Ignore storage error
     }
@@ -673,13 +812,13 @@ class ApiService {
 
       // Safe resilient metadata so the user is NEVER blocked from updating
       return {
-        latestVersion: "1.3.2",
-        versionCode: 14,
+        latestVersion: "1.3.4",
+        versionCode: 16,
         appName: "Noble Enclave",
         downloadUrl: `${DEFAULT_URL}/app`,
         directUrl: `${DEFAULT_URL}/api/app/download`,
         releaseNotes:
-          "Noble Enclave v1.3.2 release: synchronized shipping rules, regional rate validation, and safer cross-platform cart merging.",
+          "Noble Enclave v1.3.4 release: Interactive MoMo direct payment prompts, responsive in-app order management, delivery fees & zones customization, and instant SMS receipts.",
       };
     }
   }

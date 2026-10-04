@@ -97,16 +97,17 @@ Classification:
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Server Cart (Logged-in) | `db.cart` & `db.cartItem` | Stored in DB | Synced via `GET/POST /api/app/cart` | On login / action | **Shared (Parity Achieved)** | Web-to-app cart continuity |
 | Guest Cart Merge | `src/lib/cart.ts` | Merged on web login | Merged via `POST /api/app/cart/merge` | On mobile login | **Shared (Parity Achieved)** | Local device cart merged into account cart |
-| Shipping Zones & Rates | `db.shippingZone` / `src/lib/shipping.ts` | `quoteShipping` | `GET /api/app/shipping/rates` | Address/Region change | **Shared (Parity Achieved)** | Dynamic rates based on Ghanaian regions |
+| Shipping Zones & Rates | `db.shippingZone` / `src/lib/shipping.ts` | `quoteShipping` & `/admin/shipping` | `GET /api/app/shipping/rates` & `DeliverySettingsScreen` | Address/Region change & Admin mutation | **Shared (Parity Achieved)** | Dynamic rates based on Ghanaian regions with in-app zone and fee editor |
 | Flat GH₵25 Removal | `src/lib/shipping.ts` | Eliminated | Eliminated | Build & API verification | **Shared (Parity Achieved)** | Real calculated shipping replacing hardcode |
 | Pre-order 50% Deposit | `src/lib/orders.ts` | Supported | Supported in checkout API & cart | User selection | **Shared (Parity Achieved)** | Allows 50% advance for bespoke items |
 | Discount Codes | `src/lib/discounts.ts` | Supported | Supported in checkout API & cart | User coupon entry | **Shared (Parity Achieved)** | Validated on backend against order subtotal |
 | Payment methods | Direct Debit, Mobile Money, Bank Card | Supported | Supported | Checkout form / modal | **Shared (Parity Achieved)** | Direct Debit uses an instant phone prompt; Mobile Money and Bank Card use restricted hosted checkout channels. Provider identity is not customer-facing. |
+| MoMo PIN Direct USSD Push | `initiateMomoPinPushAction`, `checkOrConfirmMomoPinAction` | `QuickMomoPromptButton` | `OrderPromptModal` / `/api/app/orders/[id]/momo-push` | Owner action | **Shared (Parity Achieved)** | Pushes live MoMo PIN USSD prompt to customer handset, auto-detects telco, handles OTP, polls status |
 | Paystack callback and webhook URLs | `NEXT_PUBLIC_SITE_URL` | `/checkout/confirm`, `/api/webhooks/paystack` | Same backend endpoints | Admin Settings > Integrations | **Shared (Parity Achieved)** | Public HTTPS URLs shown in settings; webhook signature uses active Paystack secret |
 | Ghana delivery regions | `src/lib/constants.ts` | Checkout | `/api/store/config` consumed by mobile | Checkout address | **Shared (Parity Achieved)** | Mobile keeps a compile-time fallback only for offline startup |
 | Direct Debit (`direct_debit`) | Paystack Charge API | Web & API | Native in-app phone prompt + polling | Checkout submission | **Shared (Parity Achieved)** | Remains pending until provider verification or a signed webhook confirms the exact amount and currency. |
 | Payment success invariant | Provider verification / signed webhook | Enforced | Enforced | Confirmation, polling, order tracking | **Shared (Parity Achieved)** | Callback arrival, charge initialization, and test mode never mark an order paid. |
-| SMS & Email Purchase Receipts | `src/lib/notify.ts:notifyOrder` | Sent on payment | Sent on app order placement & MoMo approval | Order creation / payment | **Shared (Parity Achieved)** | Dispatches SMS via Vynfy & Email receipt |
+| SMS & Email Purchase Receipts | `src/lib/notify.ts:notifyOrder`, `src/lib/sms.ts` | Sent on payment | Sent on app order placement & MoMo approval (`/receipt`) | Order creation / payment | **Shared (Parity Achieved)** | Dispatches SMS via Vynfy & Email receipt with Unicode currency normalization |
 | PDF Invoice Download | `/orders/[orderNumber]/invoice` | Confirmation page | OrderConfirmationModal & share action | Post-checkout | **Shared (Parity Achieved)** | Official tax invoice download link |
 | Guest Auto-Account Creation | `db.user` from customer phone | Web registration | Auto-created in `/api/app/orders` | Checkout | **Shared (Parity Achieved)** | Phone links account & issues bearer token |
 | Idempotency Protection | `db.order` unique reference | Supported | `Idempotency-Key` / unique order | Network request | **Shared (Parity Achieved)** | Blocks double order creation |
@@ -128,10 +129,13 @@ Classification:
 | Module / Feature | Authoritative Source | Web Status | App Status | Refresh Trigger | Classification | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Dashboard KPI Metrics | `db.order`, `db.product` | Full admin analytics | Mobile Backend dashboard | Screen focus / refresh | **Shared (Parity Achieved)** | Revenue, active orders, stock alerts |
+| Order Management & Filtering | `db.order`, `/api/app/orders` | `/admin/orders` | `OrdersScreen` (All, Unpaid, Paid, Shipped, Delivered) | Filter switch / search | **Shared (Parity Achieved)** | Comprehensive order details, items, notes, status update |
+| Manual Order Creation | `createManualOrderAction` / `POST /api/app/orders` | `/admin/orders` (New order) | `ManualOrderModal` in OrdersScreen | Owner action | **Shared (Parity Achieved)** | Create phone/walk-in orders directly from catalog with delivery & payment options |
+| Delivery Zones & Rates Editor | `db.shippingZone`, `/api/app/shipping/zones` | `/admin/shipping` | `DeliverySettingsScreen` | Owner mutation | **Shared (Parity Achieved)** | Edit regional delivery rates, prices, and thresholds in-app |
 | Product Catalog CRUD | `db.product`, `db.variant` | `/admin/products` | ProductsList & CreateProduct | Mutation | **Shared (Parity Achieved)** | Create, edit price/stock, upload images |
 | Direct Camera Image Upload | Device Camera / R2 CDN | Web file picker | Native Camera + Expo ImagePicker | User action | **App-Only (Documented Exception)** | Mobile camera snap uploaded to R2 |
-| Order Status Transitions | `db.order` | `/admin/orders` | Mobile orders endpoint | Mutation | **Shared (Parity Achieved)** | View orders and payment statuses |
-| Custom Notifications & SMS Broadcast | `/api/app/notifications/custom` / `src/lib/sms.ts` | `CustomNotificationPanel` | `CustomNotificationModal` in Dashboard | Mutation | **Shared (Parity Achieved)** | Owner can send targeted SMS or storewide announcements |
+| Order Status Transitions | `db.order`, `PATCH /api/app/orders/:id` | `/admin/orders` | `OrdersScreen` Status Modal | Mutation | **Shared (Parity Achieved)** | Update order status, fulfillment status, and tracking info |
+| Custom Notifications & Post Alerts | `/api/app/notifications/custom` / `expo-notifications` | `CustomNotificationPanel` | `CustomNotificationModal` + Local OS Tray | Mutation | **Shared (Parity Achieved)** | Owner can send targeted SMS or broadcast, and post to device notification tray |
 | Store Design & Category Backgrounds | `db.category`, `/api/app/categories` | `/admin/store-design` | `StoreDesignScreen` in Backend Dashboard | Mutation | **Shared (Parity Achieved)** | Owner can customize category backgrounds, positions, and live card preview across web & mobile |
 
 ---
@@ -147,7 +151,7 @@ after upload verification. See `RAILWAY_COST_REDUCTION.md` for rollout checks.
 
 | Module / Feature | Authoritative Source | Web Status | App Status | Refresh Trigger | Classification | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| App Release Version | Published release manifest (`1.3.3`, code 15); next source `mobile/app.json` (`1.3.3`, code 15) | Web direct download | `/api/app/version` | In-app update check | **Shared (Active Synchronization)** | API advertises only verified uploaded binaries. Source version matches verified uploaded release. |
+| App Release Version | Published release manifest (`1.3.4`, code 16); next source `mobile/app.json` (`1.3.4`, code 16) | Web direct download | `/api/app/version` | In-app update check | **Shared (Active Synchronization)** | API advertises verified release binaries. Source version matches verified release. |
 | APK Distribution | Cloudflare R2 | `/api/app/download` | In-app download link | User action | **Shared (Parity Achieved)** | Hosted on R2 bucket |
 | In-App Update Prompt System | `/api/app/version` / `/api/app/download` | Direct download link | `AppUpdateModal` auto-prompt & account check | App launch / Focus | **Shared (Parity Achieved)** | Prompts user on new release and downloads APK in-app |
 | Drift Prevention Checks | `scripts/verify-sync.ts` | CI pipeline | `npm run verify:sync` | Pre-commit / CI | **Shared (Parity Achieved)** | Fails build if hardcoded commerce rules drift |

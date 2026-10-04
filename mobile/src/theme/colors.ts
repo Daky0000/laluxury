@@ -50,4 +50,6 @@ export const colors = {
   darkSurface: "#1F1E1B",
   darkCard: "#2B2925",
   darkBorder: "#3D3A35",
+  darkText: "#EDE9E1",
+  darkTextMuted: "#A39E93",
 };

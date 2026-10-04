@@ -25,6 +25,8 @@ type Props = {
   onSelectProduct: (productId: string) => void;
   onSwitchToStorefront: () => void;
   onNavigateToStoreDesign?: () => void;
+  onNavigateToOrders?: () => void;
+  onNavigateToDeliverySettings?: () => void;
   onLogout: () => void;
   onNotify?: (data: PopNotificationData) => void;
 };
@@ -36,6 +38,8 @@ export function BackendDashboardScreen({
   onSelectProduct,
   onSwitchToStorefront,
   onNavigateToStoreDesign,
+  onNavigateToOrders,
+  onNavigateToDeliverySettings,
   onLogout,
   onNotify,
 }: Props) {
@@ -239,6 +243,24 @@ export function BackendDashboardScreen({
           </TouchableOpacity>
         )}
 
+        {/* Delivery Zones & Shipping Rates Quick Action */}
+        {onNavigateToDeliverySettings && (
+          <TouchableOpacity
+            style={[styles.actionBtnNotif, { marginTop: 10 }]}
+            onPress={onNavigateToDeliverySettings}
+            activeOpacity={0.8}
+          >
+            <View style={styles.notifIconCircle}>
+              <Feather name="truck" size={16} color={colors.gold} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.notifActionTitle}>DELIVERY ZONES & RATES</Text>
+              <Text style={styles.notifActionSub}>Manage delivery fees and regional shipping</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={colors.gold} />
+          </TouchableOpacity>
+        )}
+
         {/* Low Stock Alerts */}
         {data?.lowStockItems && data.lowStockItems.length > 0 && (
           <View style={styles.sectionContainer}>
@@ -295,13 +317,24 @@ export function BackendDashboardScreen({
               <Text style={styles.sectionTitle}>STORE ORDERS & PROMPTS</Text>
               <Text style={styles.sectionSub}>Tap any order to send direct prompt</Text>
             </View>
-            {pendingOrders.length > 0 && (
-              <View style={styles.pendingBadgeHeader}>
-                <Text style={styles.pendingBadgeHeaderText}>
-                  {pendingOrders.length} TO PACK
-                </Text>
-              </View>
-            )}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              {pendingOrders.length > 0 && (
+                <View style={styles.pendingBadgeHeader}>
+                  <Text style={styles.pendingBadgeHeaderText}>
+                    {pendingOrders.length} TO PACK
+                  </Text>
+                </View>
+              )}
+              {onNavigateToOrders && (
+                <TouchableOpacity
+                  onPress={onNavigateToOrders}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 3 }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: colors.gold }}>All Orders</Text>
+                  <Feather name="arrow-right" size={13} color={colors.gold} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
           {/* Filter Pills */}

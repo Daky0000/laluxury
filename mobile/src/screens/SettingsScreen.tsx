@@ -14,6 +14,7 @@ import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { User } from "../types";
 import { AppUpdateModal, AppUpdateInfo } from "../components/AppUpdateModal";
+import { isNewerVersion } from "../utils/version";
 import appJson from "../../app.json";
 
 const CURRENT_APP_VERSION = appJson.expo.version;
@@ -22,9 +23,10 @@ const CURRENT_APP_BUILD = appJson.expo.android.versionCode;
 type Props = {
   user: User;
   onLogout: () => void;
+  onNavigateToDeliverySettings?: () => void;
 };
 
-export function SettingsScreen({ user, onLogout }: Props) {
+export function SettingsScreen({ user, onLogout, onNavigateToDeliverySettings }: Props) {
   const [serverUrl, setServerUrl] = useState(api.getBaseUrl());
   const [testing, setTesting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export function SettingsScreen({ user, onLogout }: Props) {
     try {
       const res = await api.checkAppVersion();
       setUpdateInfo(res);
-      if (res.latestVersion === CURRENT_APP_VERSION) {
+      if (!isNewerVersion(CURRENT_APP_VERSION, res.latestVersion)) {
         Alert.alert(
           `Noble Enclave v${CURRENT_APP_VERSION}`,
           `Your app is running the latest version (v${CURRENT_APP_VERSION}). If you would like to re-download or update your install, tap below.`,
@@ -144,6 +146,26 @@ export function SettingsScreen({ user, onLogout }: Props) {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Shipping & Delivery Fees */}
+        {onNavigateToDeliverySettings && (
+          <View style={styles.card}>
+            <Text style={styles.sectionLabel}>DELIVERY & SHIPPING</Text>
+            <Text style={styles.subText}>
+              Manage regional shipping zones, delivery fees, and free delivery thresholds across Ghana.
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.testBtn, { marginTop: 10, backgroundColor: colors.gold }]}
+              onPress={onNavigateToDeliverySettings}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.testBtnText, { color: "#182216", fontWeight: "800" }]}>
+                Configure Delivery Zones & Rates
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Seamless Web Sync Shortcuts */}
         <View style={styles.card}>

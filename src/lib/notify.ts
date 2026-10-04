@@ -262,20 +262,23 @@ function recipientPhone(order: NoticeOrder): string | null {
  * Texts and emails the customer about their order using active templates.
  * Never throws.
  */
-export async function notifyOrder(orderId: string, notice: OrderNotice): Promise<void> {
+export async function notifyOrder(orderId: string, notice: OrderNotice): Promise<{ ok: boolean; outcomes: string[] }> {
   try {
     const order = await db.order.findUnique({ where: { id: orderId }, select: noticeSelect });
-    if (!order) return;
+    if (!order) return { ok: false, outcomes: ["order not found"] };
 
     const settings = await getSettings();
     const written = await composeOrderNotice(order, notice, settings.storeName);
     const phone = recipientPhone(order);
 
     const outcomes: string[] = [];
+    let smsSuccess = false;
+    let emailSuccess = false;
 
     if (phone && written.smsEnabled) {
       const sent = await sendSms(phone, written.sms);
-      outcomes.push(sent.ok ? "texted" : `text failed (${sent.code})`);
+      smsSuccess = sent.ok;
+      outcomes.push(sent.ok ? "texted" : `text failed (${sent.code || (sent as any).message})`);
     } else if (!phone && written.smsEnabled) {
       outcomes.push("no phone number on order");
     } else if (!written.smsEnabled) {
@@ -288,6 +291,7 @@ export async function notifyOrder(orderId: string, notice: OrderNotice): Promise
         subject: `${settings.storeName} — ${written.subject}`,
         text: `${written.body}\n\n— ${settings.storeName}`,
       });
+      emailSuccess = !mailed.skipped && mailed.ok;
       if (!mailed.skipped) outcomes.push(mailed.ok ? "emailed" : "email failed");
     } else if (!order.email && written.emailEnabled) {
       outcomes.push("no email on order");
@@ -300,16 +304,23 @@ export async function notifyOrder(orderId: string, notice: OrderNotice): Promise
         message: `Customer notice (${notice.kind}): ${outcomes.join(", ")}.`,
       },
     });
+
+    return { ok: smsSuccess || emailSuccess, outcomes };
   } catch (error) {
     console.error(`[notify] ${notice.kind} for order ${orderId} failed:`, error);
+    return { ok: false, outcomes: [error instanceof Error ? error.message : "unknown error"] };
   }
 }
 
 /** Sends official receipt via SMS and Email */
-export async function sendOrderReceipt(orderId: string): Promise<{ ok: boolean; message: string }> {
+export async function sendOrderReceipt(orderId: string): Promise<{ ok: boolean; message: string; outcomes?: string[] }> {
   try {
-    await notifyOrder(orderId, { kind: "order.receipt" });
-    return { ok: true, message: "Receipt sent via SMS and Email." };
+    const res = await notifyOrder(orderId, { kind: "order.receipt" });
+    return {
+      ok: res.ok,
+      message: `Receipt dispatched: ${res.outcomes.join(", ")}.`,
+      outcomes: res.outcomes,
+    };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Failed to send receipt." };
   }

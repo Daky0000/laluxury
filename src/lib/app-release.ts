@@ -1,15 +1,15 @@
 export const APP_BASE_RELEASE = {
-  version: "1.3.3",
-  versionCode: 15,
+  version: "1.3.4",
+  versionCode: 16,
   appName: "Noble Enclave",
-  publishedAt: "2026-10-04T00:35:00.000Z",
+  publishedAt: "2026-10-04T15:15:00.000Z",
   minSupportedVersion: "1.0.0",
   releaseNotes:
-    "Noble Enclave v1.3.3 release: Reliable single-source payment gateway live/test switching, synchronized checkout error recovery and alerts, and unified Android application package identification.",
+    "Noble Enclave v1.3.4 release: Interactive MoMo direct payment prompts, responsive in-app order management, delivery fees & zones customization, and instant SMS receipts.",
 };
 
 export const FALLBACK_APK_URL =
-  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.3.3.apk";
+  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.3.4.apk";
 
 /** Release metadata is compile-time data so server tracing stays bounded. */
 export function resolveAppVersion(): { version: string; versionCode: number } {

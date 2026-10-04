@@ -263,9 +263,9 @@ export function StorefrontCartScreen({
 
     setMomoPolling(true);
     let attempts = 0;
-    const maxAttempts = 35; // ~105 seconds
+    const maxAttempts = 60; // ~90 seconds with 1.5s interval
 
-    pollingIntervalRef.current = setInterval(async () => {
+    const checkPayment = async () => {
       attempts++;
       try {
         const verifyRes = await api.verifyOrderPayment(reference);
@@ -282,15 +282,18 @@ export function StorefrontCartScreen({
             onAuthSuccess?.(loggedUser, token);
           }
 
+          // Clear local and server cart immediately
+          api.clearLocalCart().catch(() => {});
+          onClearCart();
+
           setTimeout(() => {
             setShowMoMoPromptModal(false);
-            onClearCart();
             onOrderSuccess(
               orderNum,
               phone,
               customerEmail.trim() || user?.email || undefined
             );
-          }, 1500);
+          }, 400);
         } else if (attempts >= maxAttempts) {
           if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current);
@@ -301,7 +304,13 @@ export function StorefrontCartScreen({
       } catch {
         // Continue polling silently
       }
-    }, 3000);
+    };
+
+    // Run first verification immediately after small initial handoff
+    setTimeout(checkPayment, 600);
+
+    // Fast 1.5s polling loop
+    pollingIntervalRef.current = setInterval(checkPayment, 1500);
   };
 
   const handleManualVerifyMoMo = async () => {
@@ -319,15 +328,17 @@ export function StorefrontCartScreen({
         setMomoPolling(false);
         setMomoVerified(true);
 
+        api.clearLocalCart().catch(() => {});
+        onClearCart();
+
         setTimeout(() => {
           setShowMoMoPromptModal(false);
-          onClearCart();
           onOrderSuccess(
             pendingOrderNumber,
             momoPushData.phone,
             customerEmail.trim() || user?.email || undefined
           );
-        }, 1200);
+        }, 400);
       } else if (verifyRes.status === "failed") {
         setMomoErrorMessage(verifyRes.error || "Payment was declined or cancelled on your handset.");
       } else {
@@ -362,15 +373,18 @@ export function StorefrontCartScreen({
         }
         setMomoPolling(false);
         setMomoVerified(true);
+
+        api.clearLocalCart().catch(() => {});
+        onClearCart();
+
         setTimeout(() => {
           setShowMoMoPromptModal(false);
-          onClearCart();
           onOrderSuccess(
             pendingOrderNumber || "ORDER",
             momoPushData.phone,
             customerEmail.trim() || user?.email || undefined
           );
-        }, 1200);
+        }, 400);
       } else {
         handleManualVerifyMoMo();
       }
@@ -599,6 +613,8 @@ export function StorefrontCartScreen({
             });
           }
           setPendingOrderNumber(res.order.orderNumber);
+          api.clearLocalCart().catch(() => {});
+          onClearCart();
           startMoMoPolling(
             res.order.reference,
             res.order.orderNumber,

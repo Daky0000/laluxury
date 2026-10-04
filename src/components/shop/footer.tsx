@@ -19,7 +19,6 @@ export async function Footer() {
   ]);
 
   const year = new Date().getFullYear();
-  const whatsapp = settings.whatsappNumber.replace(/[^\d]/g, "");
   const hiddenStorefrontNav = new Set(settings.hiddenStorefrontNavItems ?? []);
   const preOrderVisible = !hiddenStorefrontNav.has("pre-order");
   // Footer copy is independently editable in the visual website editor.
@@ -44,7 +43,6 @@ export async function Footer() {
       head: "Help",
       links: [
         { label: "Track order", href: "/orders/track" },
-        { label: "Delivery & returns", href: "/contact" },
         { label: "Your account", href: "/account" },
         { label: "Contact", href: "/contact" },
       ],
@@ -52,14 +50,7 @@ export async function Footer() {
     {
       head: "Studio",
       links: [
-        { label: `About ${settings.storeName}`, href: "/contact" },
-        { label: "Lookbook", href: "/lookbook" },
-        { label: "Trade Program", href: "/trade" },
         { label: "Mobile App", href: "/app" },
-        {
-          label: "WhatsApp us",
-          href: whatsapp ? `https://wa.me/${whatsapp}` : "/contact",
-        },
         ...(settings.instagramUrl
           ? [{ label: "Instagram", href: settings.instagramUrl }]
           : []),

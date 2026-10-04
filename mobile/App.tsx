@@ -22,6 +22,9 @@ import { ProductDetailScreen } from "./src/screens/ProductDetailScreen";
 import { CreateProductScreen } from "./src/screens/CreateProductScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { StoreDesignScreen } from "./src/screens/StoreDesignScreen";
+import { OrdersScreen } from "./src/screens/OrdersScreen";
+import { DeliverySettingsScreen } from "./src/screens/DeliverySettingsScreen";
+import { isNewerVersion } from "./src/utils/version";
 
 // Components
 import { BottomNav, StorefrontTab, BackendTab } from "./src/components/BottomNav";
@@ -86,18 +89,6 @@ Notifications.setNotificationHandler({
 
 const CURRENT_APP_VERSION = appJson.expo.version;
 
-function isNewerVersion(current: string, latest: string): boolean {
-  const cParts = current.split(".").map((n) => parseInt(n, 10) || 0);
-  const lParts = latest.split(".").map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < Math.max(cParts.length, lParts.length); i++) {
-    const c = cParts[i] || 0;
-    const l = lParts[i] || 0;
-    if (l > c) return true;
-    if (l < c) return false;
-  }
-  return false;
-}
-
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -123,9 +114,24 @@ function MainApp() {
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showStoreDesign, setShowStoreDesign] = useState(false);
+  const [showDeliverySettings, setShowDeliverySettings] = useState(false);
 
-  const notify = (data: PopNotificationData) => {
+  const notify = async (data: PopNotificationData) => {
     setNotification(data);
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status === "granted") {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: data.title || "Noble Enclave",
+            body: data.message,
+            data: data,
+            color: "#7A2E3C",
+          },
+          trigger: null,
+        });
+      }
+    } catch {}
   };
 
   // Configure Android notification channel & interaction listeners
@@ -503,12 +509,13 @@ function MainApp() {
 
   const handleClearCart = () => {
     updateCartState([]);
+    api.clearLocalCart().catch(() => {});
 
     if (user) {
       api
         .removeServerCartItem()
-        .then((res) => applyServerCart(res.cart.items))
-        .catch(() => api.getServerCart().then((res) => applyServerCart(res.cart.items)).catch(() => null));
+        .then(() => updateCartState([]))
+        .catch(() => null);
     }
 
     notify({
@@ -738,6 +745,7 @@ function MainApp() {
                 onRemoveItem={handleRemoveCartItem}
                 onClearCart={handleClearCart}
                 onOrderSuccess={(orderNum, phone, email) => {
+                  handleClearCart();
                   setConfirmedOrderNumber(orderNum);
                   setConfirmedOrderPhone(phone || null);
                   setConfirmedOrderEmail(email || null);
@@ -781,48 +789,67 @@ function MainApp() {
         {/* ================================================================ */}
         {mode === "BACKEND" && user && (
           <>
-            {backendTab === "DASHBOARD" && (
-              <BackendDashboardScreen
-                user={user}
-                onNavigateToProducts={() => setBackendTab("PRODUCTS")}
-                onNavigateToCreate={() => setBackendTab("ADD")}
-                onNavigateToStoreDesign={() => setShowStoreDesign(true)}
-                onSelectProduct={(id) => setSelectedProductId(id)}
-                onSwitchToStorefront={() => {
-                  setMode("STOREFRONT");
-                  setStorefrontTab("HOME");
-                  notify({
-                    title: "Storefront View",
-                    message: "Viewing catalog as a customer.",
-                    type: "info",
-                    icon: "shopping-bag",
-                  });
-                }}
-                onLogout={handleLogout}
+            {showDeliverySettings ? (
+              <DeliverySettingsScreen
+                onBack={() => setShowDeliverySettings(false)}
                 onNotify={notify}
               />
-            )}
+            ) : (
+              <>
+                {backendTab === "DASHBOARD" && (
+                  <BackendDashboardScreen
+                    user={user}
+                    onNavigateToProducts={() => setBackendTab("PRODUCTS")}
+                    onNavigateToCreate={() => setBackendTab("ADD")}
+                    onNavigateToOrders={() => setBackendTab("ORDERS")}
+                    onNavigateToDeliverySettings={() => setShowDeliverySettings(true)}
+                    onNavigateToStoreDesign={() => setShowStoreDesign(true)}
+                    onSelectProduct={(id) => setSelectedProductId(id)}
+                    onSwitchToStorefront={() => {
+                      setMode("STOREFRONT");
+                      setStorefrontTab("HOME");
+                      notify({
+                        title: "Storefront View",
+                        message: "Viewing catalog as a customer.",
+                        type: "info",
+                        icon: "shopping-bag",
+                      });
+                    }}
+                    onLogout={handleLogout}
+                    onNotify={notify}
+                  />
+                )}
 
-            {backendTab === "PRODUCTS" && (
-              <ProductsListScreen
-                user={user}
-                onSelectProduct={(id) => setSelectedProductId(id)}
-                onCreateProduct={() => setBackendTab("ADD")}
-                onLogout={handleLogout}
-              />
-            )}
+                {backendTab === "ORDERS" && (
+                  <OrdersScreen user={user} onNotify={notify} />
+                )}
 
-            {backendTab === "ADD" && (
-              <CreateProductScreen
-                onBack={() => setBackendTab("PRODUCTS")}
-                onCreated={(newId) => {
-                  setSelectedProductId(newId);
-                }}
-              />
-            )}
+                {backendTab === "PRODUCTS" && (
+                  <ProductsListScreen
+                    user={user}
+                    onSelectProduct={(id) => setSelectedProductId(id)}
+                    onCreateProduct={() => setBackendTab("ADD")}
+                    onLogout={handleLogout}
+                  />
+                )}
 
-            {backendTab === "SETTINGS" && (
-              <SettingsScreen user={user} onLogout={handleLogout} />
+                {backendTab === "ADD" && (
+                  <CreateProductScreen
+                    onBack={() => setBackendTab("PRODUCTS")}
+                    onCreated={(newId) => {
+                      setSelectedProductId(newId);
+                    }}
+                  />
+                )}
+
+                {backendTab === "SETTINGS" && (
+                  <SettingsScreen
+                    user={user}
+                    onLogout={handleLogout}
+                    onNavigateToDeliverySettings={() => setShowDeliverySettings(true)}
+                  />
+                )}
+              </>
             )}
           </>
         )}
