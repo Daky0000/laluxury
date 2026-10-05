@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2, Clock, FileText, Package, Search, Truck } from "lucide-react";
 import { db } from "@/lib/db";
+import { canViewOrder, orderAccessToken } from "@/lib/order-access";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
@@ -31,7 +32,9 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
   const orderNumber = typeof params.order === "string" ? params.order.trim().toUpperCase() : "";
   const email = typeof params.email === "string" ? params.email.trim().toLowerCase() : "";
 
-  const order = orderNumber
+  const token = typeof params.t === "string" ? params.t : "";
+
+  const found = orderNumber
     ? await db.order.findFirst({
         where: email
           ? { orderNumber, email: { equals: email, mode: "insensitive" } }
@@ -39,6 +42,9 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
         include: { items: true, shippingRate: true },
       })
     : null;
+  // Without the order email, a signed link or an owner/staff session is needed.
+  const order = found && (await canViewOrder(found, { token, email })) ? found : null;
+  const accessToken = order ? orderAccessToken(order.orderNumber) : "";
 
   const searched = Boolean(orderNumber);
   const currentStep = order ? STEPS.indexOf(order.status as (typeof STEPS)[number]) : -1;
@@ -302,14 +308,14 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
           {/* Printable Invoices & Waybill Links */}
           <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-[var(--border-subtle)] pt-5">
             <Link
-              href={`/orders/${order.orderNumber}/invoice?type=invoice`}
+              href={`/orders/${order.orderNumber}/invoice?type=invoice&t=${accessToken}`}
               className="inline-flex items-center gap-2 border border-[var(--border-strong)] px-4 py-2.5 text-xs font-medium uppercase tracking-[0.12em] transition-colors hover:bg-[var(--surface-sunken)]"
             >
               <FileText className="h-3.5 w-3.5" aria-hidden />
               Tax / Pro-Forma Invoice (PDF)
             </Link>
             <Link
-              href={`/orders/${order.orderNumber}/invoice?type=waybill`}
+              href={`/orders/${order.orderNumber}/invoice?type=waybill&t=${accessToken}`}
               className="inline-flex items-center gap-2 border border-[var(--border-subtle)] px-4 py-2.5 text-xs font-medium uppercase tracking-[0.12em] text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
             >
               <Truck className="h-3.5 w-3.5" aria-hidden />

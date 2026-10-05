@@ -542,7 +542,7 @@ export function AccountScreen({
                   <TouchableOpacity
                     style={styles.downloadReceiptBtn}
                     onPress={() => {
-                      const invoiceUrl = `${api.getBaseUrl()}/orders/${selectedOrder.orderNumber}/invoice`;
+                      const invoiceUrl = `${api.getBaseUrl()}${selectedOrder.invoicePath ?? `/orders/${selectedOrder.orderNumber}/invoice`}`;
                       Linking.openURL(invoiceUrl).catch(() => {});
                     }}
                     activeOpacity={0.85}
@@ -556,7 +556,7 @@ export function AccountScreen({
                     <TouchableOpacity
                       style={styles.orderModalSubBtn}
                       onPress={() => {
-                        const invoiceUrl = `${api.getBaseUrl()}/orders/${selectedOrder.orderNumber}/invoice`;
+                        const invoiceUrl = `${api.getBaseUrl()}${selectedOrder.invoicePath ?? `/orders/${selectedOrder.orderNumber}/invoice`}`;
                         Share.share({
                           title: `Noble Enclave Receipt #${selectedOrder.orderNumber}`,
                           message: `Official Noble Enclave Receipt for Order #${selectedOrder.orderNumber}:\n${invoiceUrl}`,

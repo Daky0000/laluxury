@@ -80,7 +80,7 @@ export function CustomNotificationModal({
                 trigger: null,
               });
             }
-          } catch (notifErr) {
+          } catch {
             // Non-fatal if system notification tray fails
           }
         }

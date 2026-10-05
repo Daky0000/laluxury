@@ -13,12 +13,11 @@ import {
   ScrollView,
   Linking,
   Platform,
-  Alert,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
-import { Order, OrderItemDetail, User } from "../types";
+import { Order, User } from "../types";
 import { formatCurrency, formatDate } from "../utils/format";
 import { OrderPromptModal, OrderPromptData } from "../components/OrderPromptModal";
 import { ManualOrderModal } from "../components/ManualOrderModal";

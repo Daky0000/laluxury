@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
-import { isStaff } from "@/lib/auth/rbac";
-import { orderInclude } from "@/lib/orders";
-import { notifyOrder } from "@/lib/notify";
+import {
+  ApiAuthError,
+  apiOptionsResponse,
+  requireBearerPermission,
+  requireBearerUser,
+  withApiAuth,
+} from "@/lib/auth/bearer";
+import { can, isStaff } from "@/lib/auth/rbac";
+import { cancelOrder, logOrderEvent, markOrderPaid, orderInclude, updateOrderStatus } from "@/lib/orders";
+import type { OrderStatus } from "@/generated/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +37,12 @@ export const GET = withApiAuth(async (
     include: orderInclude,
   });
 
-  if (!order) {
+  // Staff with order access see any order; customers only their own. A
+  // missing and a foreign order answer the same, so IDs cannot be probed.
+  const viewer = await requireBearerUser();
+  const allowed =
+    order && ((isStaff(viewer.role) && can(viewer.role, "orders:read")) || order.userId === viewer.id);
+  if (!order || !allowed) {
     return NextResponse.json({ ok: false, error: "Order not found." }, { status: 404 });
   }
 
@@ -111,6 +122,7 @@ export const PATCH = withApiAuth(async (
   request: Request,
   context?: { params: Promise<{ id: string }> },
 ) => {
+  const actor = await requireBearerPermission("orders:write");
   const params = await context?.params;
   const id = params?.id;
   if (!id) {
@@ -130,36 +142,42 @@ export const PATCH = withApiAuth(async (
   const body = await request.json().catch(() => ({}));
   const updateData: Record<string, unknown> = {};
   const events: string[] = [];
+  const trackingNumber =
+    body.trackingNumber !== undefined ? (body.trackingNumber ? String(body.trackingNumber).trim() : null) : undefined;
+  const trackingCompany =
+    body.trackingCompany !== undefined ? (body.trackingCompany ? String(body.trackingCompany).trim() : null) : undefined;
 
-  // Update Order Status
+  // Status changes go through the shared services so transitions, stock and
+  // customer notices behave exactly as they do from the web admin.
   if (body.status && body.status !== order.status) {
-    const validStatuses = [
-      "PENDING",
-      "PAID",
-      "PROCESSING",
-      "SHIPPED",
-      "DELIVERED",
-      "CANCELLED",
-      "REFUNDED",
-    ];
-    if (validStatuses.includes(body.status)) {
-      updateData.status = body.status;
-      events.push(`Status changed from ${order.status} to ${body.status}`);
-
-      if (body.status === "PAID" && !order.paidAt) {
-        updateData.paidAt = new Date();
-        updateData.paymentStatus = "SUCCESS";
-      } else if (body.status === "SHIPPED") {
-        updateData.shippedAt = new Date();
-      } else if (body.status === "DELIVERED") {
-        updateData.deliveredAt = new Date();
-      } else if (body.status === "CANCELLED") {
-        updateData.cancelledAt = new Date();
+    const status = String(body.status) as OrderStatus;
+    try {
+      if (status === "PAID") {
+        // Staff recording an offline payment (cash, manual transfer).
+        if (order.status !== "PENDING") throw new Error(`Cannot move an order from ${order.status} to PAID.`);
+        await markOrderPaid({
+          orderId: order.id,
+          reference: `MANUAL-${order.orderNumber}-${Date.now()}`,
+          amount: order.total,
+          channel: "manual",
+          raw: { recordedBy: actor.id },
+        });
+      } else if (status === "CANCELLED") {
+        await cancelOrder(order.id, body.reason ? String(body.reason) : "Cancelled by staff.", actor.id);
+      } else if (status === "REFUNDED") {
+        throw new Error("Use the refund flow to refund an order.");
+      } else {
+        await updateOrderStatus({ orderId: order.id, status, actorId: actor.id, trackingNumber, trackingCompany });
       }
+    } catch (error) {
+      if (error instanceof ApiAuthError) throw error;
+      return NextResponse.json(
+        { ok: false, error: error instanceof Error ? error.message : "Could not update status." },
+        { status: 400 },
+      );
     }
   }
 
-  // Update Fulfillment Status
   if (body.fulfillmentStatus && body.fulfillmentStatus !== order.fulfillmentStatus) {
     const validFulfillment = ["UNFULFILLED", "PARTIALLY_FULFILLED", "FULFILLED"];
     if (validFulfillment.includes(body.fulfillmentStatus)) {
@@ -168,15 +186,8 @@ export const PATCH = withApiAuth(async (
     }
   }
 
-  // Update Tracking info
-  if (body.trackingNumber !== undefined) {
-    updateData.trackingNumber = body.trackingNumber ? String(body.trackingNumber).trim() : null;
-  }
-  if (body.trackingCompany !== undefined) {
-    updateData.trackingCompany = body.trackingCompany ? String(body.trackingCompany).trim() : null;
-  }
-
-  // Update Notes
+  if (trackingNumber !== undefined) updateData.trackingNumber = trackingNumber;
+  if (trackingCompany !== undefined) updateData.trackingCompany = trackingCompany;
   if (body.staffNote !== undefined) {
     updateData.staffNote = body.staffNote ? String(body.staffNote).trim() : null;
   }
@@ -184,37 +195,19 @@ export const PATCH = withApiAuth(async (
     updateData.customerNote = body.customerNote ? String(body.customerNote).trim() : null;
   }
 
-  if (Object.keys(updateData).length === 0) {
-    return NextResponse.json({ ok: true, order, message: "No changes provided." });
+  if (Object.keys(updateData).length > 0) {
+    await db.order.update({ where: { id: order.id }, data: updateData });
   }
-
-  const updated = await db.order.update({
-    where: { id: order.id },
-    data: updateData,
-    include: orderInclude,
-  });
-
-  // Log timeline event
   if (events.length > 0) {
-    await db.orderEvent.create({
-      data: {
-        orderId: order.id,
-        type: "order.updated",
-        message: events.join("; "),
-      },
+    await logOrderEvent({
+      orderId: order.id,
+      type: "order.updated",
+      message: events.join("; "),
+      actorId: actor.id,
     }).catch(() => {});
   }
 
-  // Fire notifications when applicable
-  if (body.status === "PROCESSING") {
-    notifyOrder(order.id, { kind: "order.processing" }).catch(() => {});
-  } else if (body.status === "SHIPPED") {
-    notifyOrder(order.id, { kind: "order.shipped" }).catch(() => {});
-  } else if (body.status === "DELIVERED") {
-    notifyOrder(order.id, { kind: "order.delivered" }).catch(() => {});
-  } else if (body.status === "CANCELLED") {
-    notifyOrder(order.id, { kind: "order.cancelled", reason: body.reason || null }).catch(() => {});
-  }
+  const updated = await db.order.findUniqueOrThrow({ where: { id: order.id } });
 
   return NextResponse.json({
     ok: true,

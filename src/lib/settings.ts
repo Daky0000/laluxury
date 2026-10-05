@@ -198,19 +198,45 @@ async function fetchSettings(): Promise<StoreSettings> {
 
 export const getSettings = cache(fetchSettings);
 
+/**
+ * Settings for pricing decisions (checkout, shipping thresholds). Unlike
+ * `getSettings`, this never falls back to defaults: charging the wrong
+ * delivery fee is worse than asking the shopper to try again.
+ */
+export async function getCommerceSettings(): Promise<StoreSettings> {
+  if (cachedSettings && cachedSettings.expiresAt > Date.now() && cachedSettings.data !== DEFAULT_SETTINGS) {
+    return cachedSettings.data;
+  }
+  const row = await db.setting.findUnique({ where: { key: SETTINGS_KEY } });
+  if (!row) return DEFAULT_SETTINGS;
+  return fetchSettings();
+}
+
+/**
+ * Applies a partial change to the stored settings.
+ *
+ * The merge starts from what is actually in the database, read under a row
+ * lock, never from the cached or default copy, so a read that failed a moment
+ * ago cannot write defaults over real configuration, and two admins saving at
+ * once cannot drop each other's changes. A database error throws.
+ */
 export async function updateSettings(patch: Partial<StoreSettings>): Promise<StoreSettings> {
   invalidateSettingsCache();
-  const current = await fetchSettings();
-  const next = { ...current, ...patch };
 
-  await db.setting.upsert({
-    where: { key: SETTINGS_KEY },
-    create: { key: SETTINGS_KEY, value: next },
-    update: { value: next },
+  await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT key FROM "Setting" WHERE key = ${SETTINGS_KEY} FOR UPDATE`;
+    const row = await tx.setting.findUnique({ where: { key: SETTINGS_KEY } });
+    const stored = (row?.value ?? {}) as Partial<StoreSettings>;
+    const next = { ...DEFAULT_SETTINGS, ...stored, ...patch };
+    await tx.setting.upsert({
+      where: { key: SETTINGS_KEY },
+      create: { key: SETTINGS_KEY, value: next },
+      update: { value: next },
+    });
   });
 
-  cachedSettings = { data: next, expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS };
-  return next;
+  invalidateSettingsCache();
+  return fetchSettings();
 }
 
 /**

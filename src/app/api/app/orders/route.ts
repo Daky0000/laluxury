@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { FulfillmentStatus, OrderStatus, PaymentStatus, type Prisma } from "@/generated/prisma";
 import { getOptionalBearerUser, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
-import { isStaff } from "@/lib/auth/rbac";
-import { generateOrderNumber } from "@/lib/slug";
-import { reserveStock } from "@/lib/inventory";
-import { logOrderEvent } from "@/lib/orders";
+import { can, isStaff } from "@/lib/auth/rbac";
+import { orderPath } from "@/lib/order-access";
+import { availableOf, InsufficientStockError, reserveStock } from "@/lib/inventory";
+import { logOrderEvent, sweepStalePendingOrdersSoon, uniqueOrderNumber } from "@/lib/orders";
 import { normalisePhone } from "@/lib/phone";
 import { quoteShipping } from "@/lib/shipping";
-import { validateDiscount, type DiscountLine } from "@/lib/discounts";
-import { getSettings } from "@/lib/settings";
+import { recordRedemption, validateDiscount, type DiscountLine } from "@/lib/discounts";
+import { getCommerceSettings } from "@/lib/settings";
 import { getIntegrations, activePaystack } from "@/lib/integrations";
 import { notifyOrder } from "@/lib/notify";
 import {
@@ -83,23 +84,25 @@ export const GET = withApiAuth(async (request: Request) => {
     return NextResponse.json({ orders: [], pagination: { page: 1, limit, total: 0, totalPages: 0 } });
   }
 
-  const isStaffMember = isStaff(user.role);
+  const isStaffMember = isStaff(user.role) && can(user.role, "orders:read");
   const statusParam = url.searchParams.get("status")?.trim();
   const paymentStatusParam = url.searchParams.get("paymentStatus")?.trim();
   const fulfillmentStatusParam = url.searchParams.get("fulfillmentStatus")?.trim();
   const q = url.searchParams.get("q")?.trim() || "";
 
-  const where: any = isStaffMember ? {} : { userId: user.id };
+  const where: Prisma.OrderWhereInput = isStaffMember ? {} : { userId: user.id };
 
-  if (statusParam && statusParam.toUpperCase() !== "ALL") {
-    where.status = statusParam.toUpperCase();
-  }
-  if (paymentStatusParam && paymentStatusParam.toUpperCase() !== "ALL") {
-    where.paymentStatus = paymentStatusParam.toUpperCase();
-  }
-  if (fulfillmentStatusParam && fulfillmentStatusParam.toUpperCase() !== "ALL") {
-    where.fulfillmentStatus = fulfillmentStatusParam.toUpperCase();
-  }
+  // Unknown filter values are ignored rather than handed to the database.
+  const pick = <T extends string>(values: Record<string, T>, raw?: string): T | undefined => {
+    const upper = raw?.toUpperCase();
+    return upper && (Object.values(values) as string[]).includes(upper) ? (upper as T) : undefined;
+  };
+  const statusFilter = pick(OrderStatus, statusParam);
+  const paymentFilter = pick(PaymentStatus, paymentStatusParam);
+  const fulfillmentFilter = pick(FulfillmentStatus, fulfillmentStatusParam);
+  if (statusFilter) where.status = statusFilter;
+  if (paymentFilter) where.paymentStatus = paymentFilter;
+  if (fulfillmentFilter) where.fulfillmentStatus = fulfillmentFilter;
   if (q) {
     where.OR = [
       { orderNumber: { contains: q.toUpperCase() } },
@@ -130,6 +133,7 @@ export const GET = withApiAuth(async (request: Request) => {
     orders: orders.map((o) => ({
       id: o.id,
       orderNumber: o.orderNumber,
+      invoicePath: orderPath(o.orderNumber, "invoice"),
       status: o.status,
       paymentStatus: o.paymentStatus,
       fulfillmentStatus: o.fulfillmentStatus,
@@ -244,6 +248,7 @@ export const POST = withApiAuth(async (request: Request) => {
   }
 
   const data = parsed.data;
+  sweepStalePendingOrdersSoon();
   const cleanPhone = normalisePhone(data.customer.phone) || data.customer.phone;
 
   // Determine user id if authenticated or matching customer email/phone
@@ -260,46 +265,50 @@ export const POST = withApiAuth(async (request: Request) => {
   } | null = null;
 
   if (!userId) {
-    let customerUser = await db.user.findFirst({
+    const existing = await db.user.findFirst({
       where: {
         OR: [
           { email: { equals: data.customer.email.toLowerCase().trim(), mode: "insensitive" } },
           ...(cleanPhone ? [{ phone: cleanPhone }] : []),
         ],
       },
+      select: { id: true, role: true },
     });
 
-    if (!customerUser) {
-      // Auto-create customer account using their phone and name
-      customerUser = await db.user.create({
+    if (existing) {
+      // Contact details typed at checkout prove nothing about who is typing
+      // them, so an existing account is never signed in from here. The order
+      // is filed under a matching customer account, but never a staff one.
+      if (existing.role === "CUSTOMER") userId = existing.id;
+    } else {
+      // A brand-new account belongs to whoever just created it, so it is
+      // safe to sign them straight in. The phone stays unverified.
+      const customerUser = await db.user.create({
         data: {
           email: data.customer.email.toLowerCase().trim(),
           phone: cleanPhone,
           firstName: data.customer.firstName.trim() || "Customer",
           lastName: data.customer.lastName.trim() || data.customer.firstName.trim() || "Customer",
           role: "CUSTOMER",
-          phoneVerified: new Date(),
         },
       });
+      userId = customerUser.id;
+
+      const { signSession } = await import("@/lib/auth/session");
+      newAuthToken = await signSession({
+        userId: customerUser.id,
+        role: customerUser.role,
+      });
+      newAuthUser = {
+        id: customerUser.id,
+        email: customerUser.email,
+        phone: customerUser.phone,
+        firstName: customerUser.firstName,
+        lastName: customerUser.lastName,
+        role: customerUser.role,
+        permissions: [],
+      };
     }
-
-    userId = customerUser.id;
-
-    // Issue bearer session token so the app can automatically sign them in
-    const { signSession } = await import("@/lib/auth/session");
-    newAuthToken = await signSession({
-      userId: customerUser.id,
-      role: customerUser.role,
-    });
-    newAuthUser = {
-      id: customerUser.id,
-      email: customerUser.email,
-      phone: customerUser.phone,
-      firstName: customerUser.firstName,
-      lastName: customerUser.lastName,
-      role: customerUser.role,
-      permissions: [],
-    };
   }
 
   // Idempotency protection: prevent duplicate orders if client retries
@@ -308,35 +317,35 @@ export const POST = withApiAuth(async (request: Request) => {
     data.idempotencyKey ||
     null;
 
-  if (idempotencyKey) {
-    const recentDuplicate = await db.order.findFirst({
-      where: {
-        email: data.customer.email.toLowerCase().trim(),
-        customerNote: { contains: `[idempotency:${idempotencyKey}]` },
-        createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
-      },
-      include: {
-        items: true,
-        payments: { take: 1, orderBy: { createdAt: "desc" } },
-      },
-    });
+  // Scoped to the buyer so one shopper's key can never replay another's order.
+  const scopedIdempotencyKey = idempotencyKey
+    ? `app:${data.customer.email.toLowerCase().trim()}:${idempotencyKey}`.slice(0, 200)
+    : null;
 
-    if (recentDuplicate) {
-      return NextResponse.json({
-        ok: true,
-        order: {
-          id: recentDuplicate.id,
-          orderNumber: recentDuplicate.orderNumber,
-          total: recentDuplicate.total,
-          currency: recentDuplicate.currency,
-          status: recentDuplicate.status,
-          placedAt: recentDuplicate.createdAt.toISOString(),
-          reference: recentDuplicate.payments[0]?.reference || `${recentDuplicate.orderNumber}-REF`,
-        },
-        message: "Order already placed (idempotent replay).",
-      });
-    }
-  }
+  const replayOrder = async () => {
+    if (!scopedIdempotencyKey) return null;
+    const existing = await db.order.findUnique({
+      where: { idempotencyKey: scopedIdempotencyKey },
+      include: { payments: { take: 1, orderBy: { createdAt: "desc" } } },
+    });
+    if (!existing) return null;
+    return NextResponse.json({
+      ok: true,
+      order: {
+        id: existing.id,
+        orderNumber: existing.orderNumber,
+        total: existing.total,
+        currency: existing.currency,
+        status: existing.status,
+        placedAt: existing.createdAt.toISOString(),
+        reference: existing.payments[0]?.reference || `${existing.orderNumber}-REF`,
+      },
+      message: "Order already placed (idempotent replay).",
+    });
+  };
+
+  const replay = await replayOrder();
+  if (replay) return replay;
 
   // Resolve variants from database (handling deduplicated IDs and product-level fallbacks)
   const uniqueVariantIds = Array.from(new Set(data.items.map((i) => i.variantId)));
@@ -405,15 +414,31 @@ export const POST = withApiAuth(async (request: Request) => {
     );
   }
 
-  // Check inventory stock
+  // Only live products can be bought, exactly as on the web storefront.
+  const unsellable = data.items.filter((item) => {
+    const v = variantMap.get(item.variantId)!;
+    return !v.isActive || v.product.status !== "ACTIVE";
+  });
+  if (unsellable.length > 0) {
+    return NextResponse.json(
+      {
+        error: "One or more products in your bag are no longer available.",
+        unavailableVariantIds: Array.from(new Set(unsellable.map((i) => i.variantId))),
+      },
+      { status: 400 },
+    );
+  }
+
+  // Check inventory stock against what is free to sell (on hand minus held).
   for (const item of data.items) {
     const v = variantMap.get(item.variantId);
     if (!v) continue;
-    const onHand = v.inventory?.onHand ?? 0;
-    const allowBackorder = Boolean(v.inventory?.allowBackorder || v.product.isPreorder);
-    if (onHand < item.quantity && !allowBackorder) {
+    const inv = v.inventory;
+    const tracked = Boolean(inv && inv.trackInventory && !inv.allowBackorder && !v.product.isPreorder);
+    const available = inv ? Math.max(0, availableOf(inv)) : 0;
+    if (tracked && available < item.quantity) {
       return NextResponse.json(
-        { error: `Insufficient stock for "${v.product.title}". Only ${onHand} available.` },
+        { error: `Insufficient stock for "${v.product.title}". Only ${available} available.` },
         { status: 400 },
       );
     }
@@ -429,8 +454,15 @@ export const POST = withApiAuth(async (request: Request) => {
   // Authoritative shipping calculation via unified shipping engine
   const region = data.shippingAddress.region || "Greater Accra";
   const [shippingQuotes, settings, integrations] = await Promise.all([
-    quoteShipping({ region, subtotal, totalWeightGrams: 0 }),
-    getSettings().catch(() => null),
+    quoteShipping({
+      region,
+      subtotal,
+      totalWeightGrams: data.items.reduce(
+        (sum, item) => sum + (variantMap.get(item.variantId)!.weightGrams ?? 0) * item.quantity,
+        0,
+      ),
+    }),
+    getCommerceSettings(),
     getIntegrations().catch(() => null),
   ]);
 
@@ -479,7 +511,11 @@ export const POST = withApiAuth(async (request: Request) => {
     shippingTotal = shippingQuotes[0].price;
     appliedShippingRateId = shippingQuotes[0].id;
   } else {
-    shippingTotal = 0;
+    // No configured rate covers this address: refuse rather than ship free.
+    return NextResponse.json(
+      { error: "We don't deliver to that region yet. Choose showroom pickup or another address." },
+      { status: 400 },
+    );
   }
 
   // Calculate discount if promo code was provided
@@ -546,14 +582,12 @@ export const POST = withApiAuth(async (request: Request) => {
   const depositAmount = is50PercentDeposit ? Math.round(grandTotal * 0.5) : null;
   const chargeAmount = depositAmount ?? grandTotal;
 
-  const orderNumber = generateOrderNumber();
-  const noteParts = [data.customerNote?.trim()];
-  if (idempotencyKey) {
-    noteParts.push(`[idempotency:${idempotencyKey}]`);
-  }
-  const combinedCustomerNote = noteParts.filter(Boolean).join(" ") || null;
+  const orderNumber = await uniqueOrderNumber();
+  const combinedCustomerNote = data.customerNote?.trim() || null;
 
-  const order = await db.$transaction(async (tx) => {
+  let order;
+  try {
+  order = await db.$transaction(async (tx) => {
     const shipping = await tx.address.create({
       data: {
         userId,
@@ -572,6 +606,7 @@ export const POST = withApiAuth(async (request: Request) => {
     const createdOrder = await tx.order.create({
       data: {
         orderNumber,
+        idempotencyKey: scopedIdempotencyKey,
         userId,
         email: data.customer.email.toLowerCase().trim(),
         phone: cleanPhone,
@@ -601,16 +636,43 @@ export const POST = withApiAuth(async (request: Request) => {
 
     return createdOrder;
   });
+  } catch (error) {
+    // A concurrent retry with the same key won the insert; answer with its order.
+    if ((error as { code?: string }).code === "P2002") {
+      const winner = await replayOrder();
+      if (winner) return winner;
+    }
+    throw error;
+  }
 
   // Reserve stock for the items
+  // Hold the goods for this attempt. If they cannot be held the order cannot
+  // be honoured, so it is cancelled before anyone is asked to pay for it.
   try {
     await reserveStock(
-      data.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
+      data.items.map((i) => ({ variantId: variantMap.get(i.variantId)!.id, quantity: i.quantity })),
       order.orderNumber,
       userId,
     );
   } catch (stockErr: unknown) {
-    console.warn("Stock reservation warning:", stockErr);
+    await db.order.update({
+      where: { id: order.id },
+      data: { status: "CANCELLED", cancelledAt: new Date() },
+    });
+    await logOrderEvent({
+      orderId: order.id,
+      type: "order.cancelled",
+      message: "Stock could not be reserved at checkout.",
+    }).catch(() => {});
+    return NextResponse.json(
+      {
+        error:
+          stockErr instanceof InsufficientStockError
+            ? stockErr.message
+            : "Some items just sold out. Please review your bag and try again.",
+      },
+      { status: 409 },
+    );
   }
 
   // Convert and clear active cart so items are not left behind in customer's bag
@@ -635,23 +697,16 @@ export const POST = withApiAuth(async (request: Request) => {
     }
   }
 
-  // Increment discount usage if promo code applied
+  // Same idempotent, transactional redemption the web uses. An order that
+  // expires unpaid gives the use back (see cancelOrder).
   if (discountRecordId) {
-    await db.discount.update({
-      where: { id: discountRecordId },
-      data: { timesUsed: { increment: 1 } },
-    }).catch(() => {});
-
-    await db.discountRedemption.create({
-      data: {
-        discountId: discountRecordId,
-        orderId: order.id,
-        userId,
-        amount: discountTotal,
-      },
-    }).catch(() => {});
+    await recordRedemption({
+      discountId: discountRecordId,
+      orderId: order.id,
+      userId,
+      amount: discountTotal,
+    }).catch((error) => console.error("[app.checkout] redemption", error));
   }
-
 
   const reference = `${order.orderNumber}-${Date.now().toString(36).toUpperCase()}`;
 

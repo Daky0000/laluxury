@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getIntegrations } from "@/lib/integrations";
 import {
   verifySlackSignature,
@@ -85,7 +85,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  void respond(event.channel!, event.thread_ts ?? event.ts!, event.user!, cleanSlackText(event.text ?? ""));
+  // after() keeps the work alive past the response instead of a dangling promise.
+  after(() => respond(event.channel!, event.thread_ts ?? event.ts!, event.user!, cleanSlackText(event.text ?? "")));
 
   return NextResponse.json({ ok: true });
 }

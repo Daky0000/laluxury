@@ -1,3 +1,4 @@
+import { revalidateProductCatalog } from "@/lib/catalog-revalidate";
 import { db } from "./db";
 import { generateOrderNumber } from "./slug";
 import { allocateProportionally, formatMoney } from "./money";
@@ -88,6 +89,7 @@ export async function createOrderFromCart(args: {
 }): Promise<FullOrder> {
   const { cart } = args;
   if (cart.items.length === 0) throw new Error("Your bag is empty.");
+  sweepStalePendingOrdersSoon();
 
   const totals = await computeCartTotals(cart);
   if (totals.problems.length > 0) {
@@ -273,6 +275,50 @@ export async function uniqueOrderNumber(): Promise<string> {
 }
 
 /**
+ * Moves a paid order's reservations into sales, exactly once. Retries call
+ * this again, so a commit that failed part-way is completed by the next
+ * webhook or confirmation instead of being lost behind "already paid".
+ */
+async function applySoldStock(order: { id: string; orderNumber: string }): Promise<void> {
+  // Turn reservations into sales exactly once: claim the flag, then move the
+  // stock, and give the flag back if the move fails so a retry can try again.
+  const stockClaim = await db.order.updateMany({
+    where: { id: order.id, inventoryAppliedAt: null },
+    data: { inventoryAppliedAt: new Date() },
+  });
+  if (stockClaim.count === 1) {
+    try {
+      const lines = await stockLinesForOrder(order.id);
+      await commitStock(lines, order.orderNumber);
+      // Storefront stock counts change with every sale.
+      revalidateProductCatalog();
+
+      // The sale that empties a shelf is the moment to say so.
+      const low = await lowStockAfterSale(lines);
+      if (low.length > 0) {
+        await postAlert(
+          `:package: Low stock after ${order.orderNumber}:\n` +
+            low
+              .map(
+                (item) =>
+                  `- ${item.label} (${item.sku}): ${item.available} left` +
+                  (item.reorderQuantity ? `, reorder ${item.reorderQuantity}` : ""),
+              )
+              .join("\n"),
+        );
+      }
+    } catch (error) {
+      await db.order.update({
+        where: { id: order.id },
+        data: { inventoryAppliedAt: null },
+      });
+      throw error;
+    }
+  }
+
+}
+
+/**
  * Marks an order paid. Safe to call repeatedly, and safe to call twice at once.
  *
  * Paystack retries webhooks, and the confirmation page verifies too, so this
@@ -306,11 +352,26 @@ export async function markOrderPaid(args: {
   });
   if (!order) throw new Error("Order not found.");
 
-  if (order.paymentStatus === "SUCCESS") {
+  const now = new Date();
+
+  const existingPayment = await db.payment.findUnique({
+    where: { reference: args.reference },
+    select: { status: true },
+  });
+  if (existingPayment?.status === "SUCCESS") {
+    if (order.status !== "CANCELLED" && !order.inventoryAppliedAt) await applySoldStock(order);
     return { alreadyPaid: true };
   }
 
-  const now = new Date();
+  if (order.paymentStatus === "SUCCESS") {
+    // A new successful reference on a paid deposit order is the balance.
+    if (order.depositAmount && !order.balancePaidAt) {
+      await settleOrderBalance(order, args, now);
+      return { alreadyPaid: false };
+    }
+    if (order.status !== "CANCELLED" && !order.inventoryAppliedAt) await applySoldStock(order);
+    return { alreadyPaid: true };
+  }
 
   // The payment row first, so the money is on file whatever happens below.
   await db.payment.upsert({
@@ -351,7 +412,10 @@ export async function markOrderPaid(args: {
       ...(wasCancelled ? {} : { status: "PAID" }),
     },
   });
-  if (claimed.count === 0) return { alreadyPaid: true };
+  if (claimed.count === 0) {
+    if (!wasCancelled) await applySoldStock(order);
+    return { alreadyPaid: true };
+  }
 
   if (wasCancelled) {
     const message =
@@ -369,39 +433,7 @@ export async function markOrderPaid(args: {
     return { alreadyPaid: false };
   }
 
-  // Turn reservations into sales exactly once: claim the flag, then move the
-  // stock, and give the flag back if the move fails so a retry can try again.
-  const stockClaim = await db.order.updateMany({
-    where: { id: order.id, inventoryAppliedAt: null },
-    data: { inventoryAppliedAt: now },
-  });
-  if (stockClaim.count === 1) {
-    try {
-      const lines = await stockLinesForOrder(order.id);
-      await commitStock(lines, order.orderNumber);
-
-      // The sale that empties a shelf is the moment to say so.
-      const low = await lowStockAfterSale(lines);
-      if (low.length > 0) {
-        await postAlert(
-          `:package: Low stock after ${order.orderNumber}:\n` +
-            low
-              .map(
-                (item) =>
-                  `- ${item.label} (${item.sku}): ${item.available} left` +
-                  (item.reorderQuantity ? `, reorder ${item.reorderQuantity}` : ""),
-              )
-              .join("\n"),
-        );
-      }
-    } catch (error) {
-      await db.order.update({
-        where: { id: order.id },
-        data: { inventoryAppliedAt: null },
-      });
-      throw error;
-    }
-  }
+  await applySoldStock(order);
 
   // Count the discount only on a real sale.
   if (order.discountTotal > 0 && order.redemptions.length === 0) {
@@ -465,6 +497,52 @@ export async function markOrderPaid(args: {
   return { alreadyPaid: false };
 }
 
+/** Records the remaining balance on a deposit order, exactly once. */
+async function settleOrderBalance(
+  order: { id: string; orderNumber: string; currency: string },
+  args: Parameters<typeof markOrderPaid>[0],
+  now: Date,
+): Promise<void> {
+  await db.payment.upsert({
+    where: { reference: args.reference },
+    create: {
+      orderId: order.id,
+      reference: args.reference,
+      amount: args.amount,
+      currency: order.currency,
+      status: "SUCCESS",
+      channel: args.channel ?? null,
+      providerTransactionId: args.providerTransactionId ?? null,
+      mobileMoneyNumber: args.mobileMoneyNumber ?? null,
+      rawResponse: args.raw,
+      paidAt: now,
+    },
+    update: {
+      status: "SUCCESS",
+      channel: args.channel ?? null,
+      providerTransactionId: args.providerTransactionId ?? null,
+      rawResponse: args.raw,
+      paidAt: now,
+    },
+  });
+
+  const claimed = await db.order.updateMany({
+    where: { id: order.id, balancePaidAt: null },
+    data: { balancePaidAt: now },
+  });
+  if (claimed.count === 0) return;
+
+  await logOrderEvent({
+    orderId: order.id,
+    type: "order.balance_paid",
+    message: `Remaining balance (${formatMoney(args.amount, order.currency)}) received via ${describeChannel(args.channel ?? null)}.`,
+    meta: { reference: args.reference, amount: args.amount },
+  });
+  await postAlert(
+    `:moneybag: Balance paid on ${order.orderNumber} - ${formatMoney(args.amount, order.currency)}.`,
+  );
+}
+
 /**
  * Records a failed payment attempt. Like `markOrderPaid`, this runs more than
  * once for the same attempt — the webhook and the confirmation page both reach
@@ -481,14 +559,19 @@ export async function markPaymentFailed(args: {
   });
   const alreadyFailed = before?.status === "FAILED";
 
+  // A late failure report must never undo money that already arrived.
   await db.payment.updateMany({
-    where: { reference: args.reference },
+    where: { reference: args.reference, status: { not: "SUCCESS" } },
     data: { status: "FAILED" },
   });
-  await db.order.update({
-    where: { id: args.orderId },
+  await db.order.updateMany({
+    where: {
+      id: args.orderId,
+      paymentStatus: { notIn: ["SUCCESS", "REFUNDED", "PARTIALLY_REFUNDED"] },
+    },
     data: { paymentStatus: "FAILED" },
   });
+  if (before?.status === "SUCCESS") return;
 
   if (alreadyFailed) return;
 
@@ -506,6 +589,7 @@ export async function cancelOrder(
   orderId: string,
   reason: string,
   actorId?: string | null,
+  options: { notify?: boolean } = {},
 ): Promise<void> {
   const order = await db.order.findUnique({ where: { id: orderId } });
   if (!order) throw new Error("Order not found.");
@@ -525,6 +609,20 @@ export async function cancelOrder(
     data: { status: "CANCELLED", cancelledAt: new Date() },
   });
 
+  // A code used on an order that was never paid is given back.
+  if (!order.paidAt) {
+    const redemptions = await db.discountRedemption.findMany({ where: { orderId } });
+    for (const redemption of redemptions) {
+      await db.$transaction([
+        db.discountRedemption.delete({ where: { id: redemption.id } }),
+        db.discount.update({
+          where: { id: redemption.discountId },
+          data: { timesUsed: { decrement: 1 } },
+        }),
+      ]);
+    }
+  }
+
   await logOrderEvent({
     orderId,
     type: "order.cancelled",
@@ -532,7 +630,54 @@ export async function cancelOrder(
     actorId,
   });
 
-  await notifyOrder(orderId, { kind: "order.cancelled", reason });
+  if (options.notify !== false) {
+    await notifyOrder(orderId, { kind: "order.cancelled", reason });
+  }
+}
+
+/** How long an unpaid checkout holds its stock before it is released. */
+export const PENDING_ORDER_TTL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Cancels checkouts that were never paid and gives their reserved stock back.
+ * Safe to run often and from several places: each order is re-checked by
+ * `cancelOrder`, and money arriving later is still caught by `markOrderPaid`,
+ * which flags it for a refund or reinstatement.
+ */
+export async function expireStalePendingOrders(limit = 50): Promise<number> {
+  const cutoff = new Date(Date.now() - PENDING_ORDER_TTL_MS);
+  const stale = await db.order.findMany({
+    where: {
+      status: "PENDING",
+      paymentStatus: { in: ["PENDING", "FAILED", "ABANDONED"] },
+      placedAt: { lt: cutoff },
+      payments: { none: { status: "SUCCESS" } },
+    },
+    select: { id: true },
+    orderBy: { placedAt: "asc" },
+    take: limit,
+  });
+
+  let expired = 0;
+  for (const order of stale) {
+    try {
+      await cancelOrder(order.id, "Checkout expired without payment.", null, { notify: false });
+      expired += 1;
+    } catch (error) {
+      console.error("[orders.expire] could not expire", order.id, error);
+    }
+  }
+  return expired;
+}
+
+let lastSweep = 0;
+
+/** Runs the expiry sweep at most every ten minutes per server, in the background. */
+export function sweepStalePendingOrdersSoon(): void {
+  const now = Date.now();
+  if (now - lastSweep < 10 * 60 * 1000) return;
+  lastSweep = now;
+  expireStalePendingOrders().catch((error) => console.error("[orders.expire]", error));
 }
 
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -603,7 +748,13 @@ export async function updateOrderStatus(args: {
   if (notice) await notifyOrder(args.orderId, notice);
 }
 
-/** Records a refund against the order and restocks the goods. */
+/**
+ * Records a refund against the order and, if asked, restocks the goods.
+ *
+ * The running total moves with one conditional update, so two refunds made at
+ * once can never add up to more than was paid. Goods go back on the shelf at
+ * most once per sale: the restock claims the order's "stock applied" flag.
+ */
 export async function recordRefund(args: {
   orderId: string;
   amount: number;
@@ -611,22 +762,42 @@ export async function recordRefund(args: {
   restock: boolean;
   actorId?: string | null;
 }): Promise<void> {
-  const order = await db.order.findUnique({ where: { id: args.orderId } });
+  const order = await db.order.findUnique({
+    where: { id: args.orderId },
+    include: { payments: { where: { status: "SUCCESS" }, select: { amount: true } } },
+  });
   if (!order) throw new Error("Order not found.");
 
-  const refundedTotal = Math.min(order.total, order.refundedTotal + args.amount);
-  const fullyRefunded = refundedTotal >= order.total;
+  const paid = Math.min(order.total, order.payments.reduce((sum, p) => sum + p.amount, 0));
+  if (args.amount <= 0) throw new Error("Refund amount must be positive.");
 
-  await db.order.update({
-    where: { id: args.orderId },
-    data: {
-      refundedTotal,
-      paymentStatus: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED",
-      ...(fullyRefunded ? { status: "REFUNDED" } : {}),
-    },
+  const result = await db.$transaction(async (tx) => {
+    const moved = await tx.order.updateMany({
+      where: { id: args.orderId, refundedTotal: { lte: paid - args.amount } },
+      data: { refundedTotal: { increment: args.amount } },
+    });
+    if (moved.count === 0) throw new Error("That is more than is left to refund on this order.");
+
+    const fresh = await tx.order.findUniqueOrThrow({ where: { id: args.orderId } });
+    const fullyRefunded = fresh.refundedTotal >= paid;
+    await tx.order.update({
+      where: { id: args.orderId },
+      data: {
+        paymentStatus: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED",
+        ...(fullyRefunded ? { status: "REFUNDED" } : {}),
+      },
+    });
+
+    const restockClaim = args.restock
+      ? await tx.order.updateMany({
+          where: { id: args.orderId, inventoryAppliedAt: { not: null } },
+          data: { inventoryAppliedAt: null },
+        })
+      : { count: 0 };
+    return { restocked: restockClaim.count === 1 };
   });
 
-  if (args.restock) {
+  if (result.restocked) {
     const lines = await stockLinesForOrder(args.orderId);
     await restockUnits(lines, order.orderNumber, "RETURN", args.actorId);
   }
@@ -634,9 +805,9 @@ export async function recordRefund(args: {
   await logOrderEvent({
     orderId: args.orderId,
     type: "order.refunded",
-    message: `Refunded ${(args.amount / 100).toFixed(2)}. ${args.reason}`,
+    message: `Refunded ${formatMoney(args.amount, order.currency)}. ${args.reason}`,
     actorId: args.actorId,
-    meta: { amount: args.amount, restock: args.restock },
+    meta: { amount: args.amount, restock: result.restocked },
   });
 
   await notifyOrder(args.orderId, { kind: "order.refunded", amount: args.amount });

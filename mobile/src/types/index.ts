@@ -176,6 +176,8 @@ export type OrderEventDetail = {
 export type Order = {
   id: string;
   orderNumber: string;
+  /** Signed invoice path; opens without a web sign-in. */
+  invoicePath?: string;
   status: string;
   paymentStatus: string;
   fulfillmentStatus?: string;

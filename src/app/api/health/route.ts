@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { rateLimitResponse, requestAddress } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,12 @@ export async function GET(request: Request) {
     return NextResponse.json(base, { status: 200 });
   }
 
+  // Deep checks hit the database, so they are throttled per address.
+  const limited = rateLimitResponse([
+    { key: `health-db:${await requestAddress()}`, limit: 6, windowMs: 60 * 1000 },
+  ]);
+  if (limited) return limited;
+
   const start = Date.now();
   try {
     const [revSetting, productCount] = await Promise.all([
@@ -49,12 +56,13 @@ export async function GET(request: Request) {
       { status: 200 },
     );
   } catch (error) {
+    console.error("[health] database check failed", error);
     return NextResponse.json(
       {
         ...base,
         status: "degraded",
         database: "unreachable",
-        error: error instanceof Error ? error.message : "Unknown error",
+        // Raw driver errors can name hosts and users; they go to the log only.
       },
       { status: 503 },
     );

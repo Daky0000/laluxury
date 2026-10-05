@@ -16,6 +16,7 @@ import {
   type MomoProvider,
 } from "@/lib/paystack";
 import { formatMoney } from "@/lib/money";
+import { markOrderPaid } from "@/lib/orders";
 
 export type CustomerMomoPushResult = {
   ok: boolean;
@@ -337,32 +338,15 @@ async function finalizeCustomerMomoPayment(args: {
   providerLabel: string;
   isBalancePayment: boolean;
 }) {
-  const now = new Date();
-
-  await db.$transaction([
-    db.payment.update({
-      where: { reference: args.reference },
-      data: {
-        status: "SUCCESS",
-        paidAt: now,
-      },
-    }),
-    db.order.update({
-      where: { id: args.orderId },
-      data: {
-        status: "PAID",
-        paymentStatus: "SUCCESS",
-        paidAt: now,
-        ...(args.isBalancePayment ? { balancePaidAt: now } : {}),
-        events: {
-          create: {
-            type: "payment.momo_pin_confirmed",
-            message: `Customer entered MoMo PIN on ${args.cleanPhone} (${args.providerLabel}). ${formatMoney(args.amountToPay)} received (Ref: ${args.reference}).`,
-          },
-        },
-      },
-    }),
-  ]);
+  // Same finalizer as the webhook, so the outcome never depends on which
+  // path saw the payment first. It recognises balance payments itself.
+  await markOrderPaid({
+    orderId: args.orderId,
+    reference: args.reference,
+    amount: args.amountToPay,
+    channel: "mobile_money",
+    mobileMoneyNumber: args.cleanPhone || null,
+  });
 
   revalidatePath("/orders/track");
   revalidatePath(`/admin/orders/${args.orderId}`);

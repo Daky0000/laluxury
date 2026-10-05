@@ -263,17 +263,27 @@ export function StorefrontCartScreen({
 
     setMomoPolling(true);
     let attempts = 0;
-    const maxAttempts = 60; // ~90 seconds with 1.5s interval
+    let inFlight = false;
+    let done = false;
+    const maxAttempts = 45; // ~2 minutes with a 2.5s interval
+
+    const stopPolling = () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
 
     const checkPayment = async () => {
+      // One check at a time: a slow gateway must not stack up requests.
+      if (inFlight || done) return;
+      inFlight = true;
       attempts++;
       try {
         const verifyRes = await api.verifyOrderPayment(reference);
         if (verifyRes.ok && verifyRes.paid) {
-          if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-          }
+          done = true;
+          stopPolling();
           setMomoPolling(false);
           setMomoVerified(true);
 
@@ -294,23 +304,22 @@ export function StorefrontCartScreen({
               customerEmail.trim() || user?.email || undefined
             );
           }, 400);
-        } else if (attempts >= maxAttempts) {
-          if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-          }
-          setMomoPolling(false);
         }
       } catch {
         // Continue polling silently
+      } finally {
+        inFlight = false;
+        if (!done && attempts >= maxAttempts) {
+          done = true;
+          stopPolling();
+          setMomoPolling(false);
+        }
       }
     };
 
-    // Run first verification immediately after small initial handoff
+    // Run first verification shortly after the handoff, then poll.
     setTimeout(checkPayment, 600);
-
-    // Fast 1.5s polling loop
-    pollingIntervalRef.current = setInterval(checkPayment, 1500);
+    pollingIntervalRef.current = setInterval(checkPayment, 2500);
   };
 
   const handleManualVerifyMoMo = async () => {

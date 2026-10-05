@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rateLimitResponse, requestAddress } from "@/lib/rate-limit";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { normalisePhone } from "@/lib/phone";
@@ -28,6 +29,11 @@ export async function POST(request: Request) {
     }
 
     const { phone, purpose } = parsed.data;
+    const limited = rateLimitResponse([
+      { key: `app-otp-send:${phone}`, limit: 5, windowMs: 60 * 60 * 1000 },
+      { key: `app-otp-send-ip:${await requestAddress()}`, limit: 20, windowMs: 60 * 60 * 1000 },
+    ]);
+    if (limited) return limited;
     const normalized = normalisePhone(phone);
 
     if (!normalized) {

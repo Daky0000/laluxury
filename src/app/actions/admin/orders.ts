@@ -206,7 +206,11 @@ export async function refundOrderAction(
   }
 
   const amount = toMinorUnits(amountRaw);
-  const outstanding = order.total - order.refundedTotal;
+  const paid = Math.min(
+    order.total,
+    order.payments.reduce((sum, p) => sum + p.amount, 0),
+  );
+  const outstanding = paid - order.refundedTotal;
   if (amount > outstanding) {
     return { ok: false, message: `You can refund at most ${(outstanding / 100).toFixed(2)}.` };
   }
@@ -226,7 +230,16 @@ export async function refundOrderAction(
     }
   }
 
-  await recordRefund({ orderId, amount, reason, restock, actorId: actor.id });
+  try {
+    await recordRefund({ orderId, amount, reason, restock, actorId: actor.id });
+  } catch (error) {
+    return {
+      ok: false,
+      message: `${providerMessage} But the refund could not be recorded: ${
+        error instanceof Error ? error.message : "unknown error"
+      }`,
+    };
+  }
 
   await recordAudit({
     actorId: actor.id,

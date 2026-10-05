@@ -164,3 +164,23 @@ public product APIs remain bounded to 48 products per response; web catalog navi
 uses pages after 48 products. Identified bulk AI/backlink crawlers are rejected before
 public catalog rendering; normal web/mobile requests and payment webhooks remain available.
 See `RAILWAY_COST_GROWTH_RUNBOOK.md` for rate limits, retention and cost procedures.
+
+## Security & commerce hardening — 2026-10-05
+
+Contract changes from the 2026-10-05 audit (`docs/CODEBASE_AUDIT_2026-10-05.md`).
+Web and app share every change listed here through the services in `src/lib/`.
+
+| Area | Change | Web | App |
+| :--- | :--- | :--- | :--- |
+| Order management | `PATCH /api/app/orders/[id]` requires `orders:write`; status changes go through `updateOrderStatus` / `cancelOrder` / `markOrderPaid` (manual payments only from PENDING); refunds only via the refund flow. `GET` returns only the caller's own order unless staff have `orders:read`. | Admin actions use the same services | `OrdersScreen` (staff) |
+| Shipping zones | `/api/app/shipping/zones` (GET/POST/DELETE) requires `settings:manage`. Public quotes stay on `/api/app/shipping/rates`. | Admin settings | `DeliverySettingsScreen` (staff) |
+| Guest app checkout | An existing account is never signed in from checkout contact details; a session token is returned only for a newly created account. Phones are not marked verified at checkout. | n/a | `StorefrontCartScreen` |
+| Checkout rules | App checkout refuses inactive/draft products, checks free stock (on hand minus reserved), uses variant weights for quotes, refuses regions with no delivery rate (no silent free shipping), cancels the order if stock cannot be reserved (409), and uses a unique `Order.idempotencyKey` for retries. | `createOrderFromCart` | `POST /api/app/orders` |
+| Payment finalization | Every path (webhook, app verify, MoMo push, customer MoMo) finalizes through `markOrderPaid`, which also records deposit balances and completes a failed stock commit on retry. Late failures never overwrite a successful payment. No simulated or gateway-less settlement exists. | Same | Same |
+| Abandoned checkouts | Unpaid orders older than 6 h are cancelled and their stock and discount uses are released (`expireStalePendingOrders`, run during checkout and via `POST /api/cron/expire-orders` with `CRON_SECRET`). | Same | Same |
+| Order documents | Tracking/invoice pages need the order email, an owner/staff session, or a signed `t` token (`orderPath`). App order lists return `invoicePath`. Receipt resend is owner/staff only, and only staff may change the destination phone. | `/orders/track`, `/orders/[n]/invoice` | `AccountScreen`, `OrderConfirmationModal` |
+| Abuse limits | App login, OTP send/verify, register and payment verify return `429` with `Retry-After` when limited. | Web actions already limited | `api.ts` surfaces the error message |
+| Settings writes | `updateSettings` merges onto the stored row under a lock; pricing reads use `getCommerceSettings` (no default fallback). | Same | `/api/app/config` unchanged |
+| App client | 30 s request timeout; switching API host clears the session; logout clears the local bag; payment polling never overlaps. | n/a | `mobile/src/services/api.ts`, `App.tsx` |
+
+`npm run verify:sync` now includes authorization regression checks for these rules.

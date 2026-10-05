@@ -1,3 +1,4 @@
+import { orderPath } from "@/lib/order-access";
 import { db } from "./db";
 import { env } from "./env";
 import { formatMoney } from "./money";
@@ -98,7 +99,7 @@ type WrittenNotice = {
 };
 
 function trackingUrl(order: NoticeOrder): string {
-  return `${env.siteUrl()}/orders/track?order=${encodeURIComponent(order.orderNumber)}&email=${encodeURIComponent(order.email)}`;
+  return `${env.siteUrl()}${orderPath(order.orderNumber, "track")}`;
 }
 
 function deliveryEstimate(order: NoticeOrder): string | null {
@@ -278,7 +279,7 @@ export async function notifyOrder(orderId: string, notice: OrderNotice): Promise
     if (phone && written.smsEnabled) {
       const sent = await sendSms(phone, written.sms);
       smsSuccess = sent.ok;
-      outcomes.push(sent.ok ? "texted" : `text failed (${sent.code || (sent as any).message})`);
+      outcomes.push(sent.ok ? "texted" : `text failed (${sent.code || ("message" in sent ? String(sent.message) : "error")})`);
     } else if (!phone && written.smsEnabled) {
       outcomes.push("no phone number on order");
     } else if (!written.smsEnabled) {

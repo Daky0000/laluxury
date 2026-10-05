@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rateLimitResponse, requestAddress } from "@/lib/rate-limit";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { hashPassword, passwordProblems } from "@/lib/auth/password";
@@ -40,6 +41,10 @@ export async function POST(request: Request) {
     }
 
     const { name, email, phone, password } = parsed.data;
+    const limited = rateLimitResponse([
+      { key: `app-register-ip:${await requestAddress()}`, limit: 8, windowMs: 60 * 60 * 1000 },
+    ]);
+    if (limited) return limited;
 
     const problems = passwordProblems(password);
     if (problems.length > 0) {

@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { apiOptionsResponse, withApiAuth, requireBearerUser } from "@/lib/auth/bearer";
-import { isStaff } from "@/lib/auth/rbac";
-import {
-  initiateMomoPinPushAction,
-  submitMomoPushOtpAction,
-  checkOrConfirmMomoPinAction,
-} from "@/app/actions/admin/momo-push";
+import { can, isStaff } from "@/lib/auth/rbac";
+import { checkMomoPin, initiateMomoPinPush, submitMomoPushOtp } from "@/lib/momo-push";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +25,7 @@ export const POST = withApiAuth(async (
   }
 
   const user = await requireBearerUser();
-  const isStaffMember = isStaff(user.role);
+  const isStaffMember = isStaff(user.role) && can(user.role, "orders:write");
 
   const order = await db.order.findFirst({
     where: {
@@ -50,11 +46,10 @@ export const POST = withApiAuth(async (
 
   // If OTP submission
   if (body.otp && body.reference) {
-    const otpRes = await submitMomoPushOtpAction({
+    const otpRes = await submitMomoPushOtp({
       orderId: order.id,
       reference: String(body.reference).trim(),
       otp: String(body.otp).trim(),
-      actor: user,
     });
     return NextResponse.json(otpRes);
   }
@@ -70,12 +65,13 @@ export const POST = withApiAuth(async (
     );
   }
 
-  const result = await initiateMomoPinPushAction({
+  const result = await initiateMomoPinPush({
     orderId: order.id,
     phone,
     provider,
     chargeScope,
     actor: user,
+    allowDepositChange: isStaffMember,
   });
 
   return NextResponse.json(result);
@@ -96,7 +92,7 @@ export const GET = withApiAuth(async (
   }
 
   const user = await requireBearerUser();
-  const isStaffMember = isStaff(user.role);
+  const isStaffMember = isStaff(user.role) && can(user.role, "orders:write");
 
   const order = await db.order.findFirst({
     where: {
@@ -121,18 +117,17 @@ export const GET = withApiAuth(async (
     return NextResponse.json({ ok: false, error: "Payment reference is required." }, { status: 400 });
   }
 
-  const check = await checkOrConfirmMomoPinAction({
+  const check = await checkMomoPin({
     orderId: order.id,
     reference,
     chargeScope,
-    simulateClientPinEntered: false,
     actor: user,
   });
 
   return NextResponse.json({
     ok: true,
     paid: check.paid,
-    status: (check as any).status || (check.paid ? "success" : "pending"),
+    status: check.paid ? "success" : "pending",
     message: check.message,
   });
 });

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { env } from "./env";
 import { getIntegrations } from "./integrations";
 import crypto from "crypto";
@@ -46,7 +46,9 @@ export async function getR2Client(): Promise<{ s3: S3Client; bucketName: string;
   const config = await getR2Config();
   if (!config) return null;
 
-  const cacheKey = `${config.accountId}:${config.accessKeyId}`;
+  // Includes a digest of the secret so rotating it rebuilds the client.
+  const secretDigest = crypto.createHash("sha256").update(config.secretAccessKey).digest("hex").slice(0, 16);
+  const cacheKey = `${config.accountId}:${config.accessKeyId}:${secretDigest}`;
   if (!cachedS3 || cachedKey !== cacheKey) {
     cachedS3 = new S3Client({
       region: "auto",

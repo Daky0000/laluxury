@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Modal,
   View,
@@ -116,14 +116,22 @@ export function OrderPromptModal({
     }
   }, [order]);
 
+  // Latest callback without restarting the poll whenever the parent re-renders.
+  const onSuccessRef = useRef(onSuccess);
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+  }, [onSuccess]);
+
   // Polling for MoMo PIN entry on customer phone
   useEffect(() => {
     if (!visible || !order || !pushReference || isPaidConfirmed) return;
 
     let attempts = 0;
+    let inFlight = false;
     const MAX_ATTEMPTS = 25; // 25 x 3.5s = ~88 seconds
 
     const timer = setInterval(async () => {
+      if (inFlight) return;
       attempts += 1;
       if (attempts > MAX_ATTEMPTS) {
         clearInterval(timer);
@@ -131,6 +139,7 @@ export function OrderPromptModal({
         return;
       }
 
+      inFlight = true;
       try {
         const check = await api.checkMomoPinStatus(
           order.id,
@@ -142,10 +151,12 @@ export function OrderPromptModal({
           setIsPaidConfirmed(true);
           setPushDisplayText("Payment verified successfully! Order updated to PAID.");
           clearInterval(timer);
-          onSuccess(`Payment confirmed for Order #${order.orderNumber}!`);
+          onSuccessRef.current(`Payment confirmed for Order #${order.orderNumber}!`);
         }
-      } catch (err) {
+      } catch {
         // Continue polling silently
+      } finally {
+        inFlight = false;
       }
     }, 3500);
 
@@ -188,7 +199,7 @@ export function OrderPromptModal({
 
         if (res.status === "success") {
           setIsPaidConfirmed(true);
-          onSuccess(`Payment confirmed for Order #${order.orderNumber}!`);
+          onSuccessRef.current(`Payment confirmed for Order #${order.orderNumber}!`);
         }
       } else {
         onError(res?.error || "Failed to initiate MoMo PIN push.");
@@ -240,7 +251,7 @@ export function OrderPromptModal({
         if (res.status === "success") {
           setIsPaidConfirmed(true);
           setPushDisplayText("OTP verified and payment confirmed!");
-          onSuccess(`Payment confirmed for Order #${order.orderNumber}!`);
+          onSuccessRef.current(`Payment confirmed for Order #${order.orderNumber}!`);
         } else {
           setPushDisplayText(res.displayText || "OTP submitted. Awaiting confirmation...");
         }

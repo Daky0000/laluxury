@@ -72,12 +72,19 @@ export async function checkDbConnection(): Promise<boolean> {
   return inFlightProbe;
 }
 
+/** True while the most recent TCP probe found the database unreachable. */
 export function isDbTemporarilyDown(): boolean {
-  return false;
+  return isDbReachable === false && Date.now() - lastCheck < CHECK_INTERVAL_MS;
 }
 
+/**
+ * A query failed. One failed query is not proof the database is down (it may
+ * be a timeout or a bad query), so this only forces the next caller to probe
+ * again instead of trusting the last result.
+ */
 export function recordDbFailure(): void {
-  lastCheck = Date.now();
+  lastCheck = 0;
+  checkDbConnection().catch(() => {});
 }
 
 export function recordDbSuccess(): void {

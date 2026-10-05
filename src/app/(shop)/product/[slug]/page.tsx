@@ -350,7 +350,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
                   },
                 }
               : {}),
-          }),
+          }).replace(/</g, "\\u003c"),
         }}
       />
     </div>

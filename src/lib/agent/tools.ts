@@ -3,6 +3,7 @@ import { can, type Permission } from "@/lib/auth/rbac";
 import { formatMoney, toMinorUnits } from "@/lib/money";
 import { buildSearchText, refreshPriceRange } from "@/lib/catalog";
 import { lowStockItems, setStockLevel, restockVariant } from "@/lib/inventory";
+import { revalidateProductCatalog } from "@/lib/catalog-revalidate";
 import { ensureUniqueCode, describeDiscount } from "@/lib/discounts";
 import { updateOrderStatus, cancelOrder } from "@/lib/orders";
 import { recordAudit } from "@/lib/audit";
@@ -437,6 +438,7 @@ const updatePriceTool: ToolDefinition = {
       where: { id: variant.id },
       data: { price, ...(compareAtPrice !== undefined ? { compareAtPrice } : {}) },
     });
+    revalidateProductCatalog();
     await refreshPriceRange(variant.productId);
 
     await recordAudit({
@@ -487,10 +489,12 @@ const adjustStockTool: ToolDefinition = {
 
     if (args.setTo !== undefined) {
       const result = await setStockLevel(variant.id, num(args.setTo), reason, ctx.userId);
+      revalidateProductCatalog();
       return { ok: true, sku: variant.sku, ...result };
     }
     if (args.addUnits !== undefined) {
       await restockVariant(variant.id, num(args.addUnits), reason, ctx.userId);
+      revalidateProductCatalog();
       const item = await db.inventoryItem.findUnique({ where: { variantId: variant.id } });
       return { ok: true, sku: variant.sku, added: num(args.addUnits), onHand: item?.onHand ?? 0 };
     }
@@ -549,6 +553,7 @@ const updateProductTool: ToolDefinition = {
     });
 
     const updated = await db.product.update({ where: { id: product.id }, data });
+    revalidateProductCatalog();
 
     await recordAudit({
       actorId: ctx.userId,
@@ -789,6 +794,7 @@ const createProductTool: ToolDefinition = {
       },
       include: { variants: true },
     });
+    revalidateProductCatalog();
 
     if (args.categorySlug) {
       const category = await db.category.findUnique({ where: { slug: str(args.categorySlug) } });

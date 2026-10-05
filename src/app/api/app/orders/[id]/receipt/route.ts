@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { apiOptionsResponse } from "@/lib/auth/bearer";
+import { apiOptionsResponse, getOptionalBearerUser } from "@/lib/auth/bearer";
+import { can, isStaff } from "@/lib/auth/rbac";
 import { notifyOrder } from "@/lib/notify";
 
 export const runtime = "nodejs";
@@ -23,15 +24,18 @@ export async function POST(
     where: {
       OR: [{ id }, { orderNumber: id.toUpperCase() }],
     },
-    select: { id: true, orderNumber: true, email: true, phone: true },
+    select: { id: true, orderNumber: true, email: true, phone: true, userId: true },
   });
 
-  if (!order) {
+  // Owner or staff only. Receipts go to the contact details on file; only
+  // staff may change where they are sent.
+  const user = await getOptionalBearerUser();
+  const staff = Boolean(user && isStaff(user.role) && can(user.role, "orders:write"));
+  if (!order || !user || (!staff && order.userId !== user.id)) {
     return NextResponse.json({ ok: false, error: "Order not found." }, { status: 404 });
   }
 
-  // Allow updating or providing recipient phone if missing or explicitly provided
-  if (body?.phone && typeof body.phone === "string" && body.phone.trim() !== order.phone) {
+  if (staff && body?.phone && typeof body.phone === "string" && body.phone.trim() !== order.phone) {
     await db.order.update({
       where: { id: order.id },
       data: { phone: body.phone.trim() },

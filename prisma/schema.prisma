@@ -621,6 +621,9 @@ model Order {
   // Set when stock has been decremented so it can never double-apply
   inventoryAppliedAt DateTime?
 
+  // Client retry key for app checkout; unique so two retries cannot both create
+  idempotencyKey String? @unique
+
   items       OrderItem[]
   payments    Payment[]
   redemptions DiscountRedemption[]

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
+import { apiOptionsResponse, requireBearerPermission, withApiAuth } from "@/lib/auth/bearer";
 import { isStaff } from "@/lib/auth/rbac";
 import { GHANA_REGIONS } from "@/lib/constants";
 
@@ -14,6 +14,7 @@ export const OPTIONS = apiOptionsResponse;
  * List all shipping zones with their rates and regions for mobile management.
  */
 export const GET = withApiAuth(async () => {
+  await requireBearerPermission("settings:manage");
   const zones = await db.shippingZone.findMany({
     include: {
       rates: {
@@ -50,6 +51,7 @@ export const GET = withApiAuth(async () => {
  * Create or update a shipping zone or shipping rate.
  */
 export const POST = withApiAuth(async (request: Request) => {
+  await requireBearerPermission("settings:manage");
   const body = await request.json().catch(() => ({}));
   const { action } = body;
 
@@ -132,6 +134,7 @@ export const POST = withApiAuth(async (request: Request) => {
  * Deactivates or removes a shipping zone or rate.
  */
 export const DELETE = withApiAuth(async (request: Request) => {
+  await requireBearerPermission("settings:manage");
   const url = new URL(request.url);
   const action = url.searchParams.get("action");
   const targetId = url.searchParams.get("id");

@@ -8,6 +8,16 @@ import { invalidateCatalogFacetsCache } from "@/lib/catalog";
  */
 export function revalidateProductCatalog(id?: string, slug?: string): void {
   invalidateCatalogFacetsCache();
+  try {
+    revalidateCatalogPaths(id, slug);
+  } catch (error) {
+    // Background callers (webhooks, agent jobs) run outside a request, where
+    // Next cannot revalidate; the short public cache TTL covers them.
+    console.warn("[catalog.revalidate] skipped outside request", error);
+  }
+}
+
+function revalidateCatalogPaths(id?: string, slug?: string): void {
   revalidateTag("public-catalog", { expire: 0 });
   revalidatePath("/api/store/products");
   if (id) revalidatePath(`/api/store/products/${id}`);

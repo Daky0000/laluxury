@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rateLimitResponse, requestAddress } from "@/lib/rate-limit";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth/password";
@@ -37,6 +38,12 @@ export async function POST(request: Request) {
 
     const { identifier, email, password } = parsed.data;
     const clean = (identifier || email || "").trim();
+    const address = await requestAddress();
+    const limited = rateLimitResponse([
+      { key: `app-login:${clean.toLowerCase()}`, limit: 10, windowMs: 15 * 60 * 1000 },
+      { key: `app-login-ip:${address}`, limit: 100, windowMs: 15 * 60 * 1000 },
+    ]);
+    if (limited) return limited;
 
     // Check if it's a phone number or an email
     const asPhone = normalisePhone(clean);
@@ -49,24 +56,8 @@ export async function POST(request: Request) {
       },
     });
 
-    const seedOwnerEmail = (process.env.SEED_OWNER_EMAIL || "owner@nobleenclave.com").toLowerCase();
-    const seedOwnerPassword = process.env.SEED_OWNER_PASSWORD || "ChangeMe!2026";
-    const isSeedOwner = clean.toLowerCase() === seedOwnerEmail && password === seedOwnerPassword;
-
     let valid = false;
-    if (isSeedOwner && user) {
-      valid = true;
-      if (user.passwordHash) {
-        const matches = await verifyPassword(password, user.passwordHash);
-        if (!matches) {
-          const { hashPassword } = await import("@/lib/auth/password");
-          await db.user.update({
-            where: { id: user.id },
-            data: { passwordHash: await hashPassword(password) },
-          });
-        }
-      }
-    } else if (user?.passwordHash) {
+    if (user?.passwordHash) {
       valid = await verifyPassword(password, user.passwordHash);
     } else {
       await verifyPassword(password, null);

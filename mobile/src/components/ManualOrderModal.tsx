@@ -14,7 +14,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
-import { Product, Variant } from "../types";
+import { Product } from "../types";
 import { formatCurrency } from "../utils/format";
 
 type Props = {

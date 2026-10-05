@@ -412,7 +412,8 @@ export async function sendSms(phone: string, message: string): Promise<SmsResult
     status >= 200 &&
     status < 300 &&
     (data.success === true ||
-      (typeof (data as any).status === "string" && (data as any).status.toLowerCase() === "success") ||
+      (typeof (data as { status?: unknown }).status === "string" &&
+        String((data as { status?: unknown }).status).toLowerCase() === "success") ||
       (typeof data.message === "string" && /success|queued|sent|delivered/i.test(data.message)));
 
   if (isSuccess) {

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getIntegrations } from "@/lib/integrations";
 import {
   extractMessages,
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
   for (const message of extractMessages(body)) {
     if (message.messageId && alreadySeen(message.messageId)) continue;
-    void respond(message.from, message.text);
+    after(() => respond(message.from, message.text));
   }
 
   return NextResponse.json({ ok: true });

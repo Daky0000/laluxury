@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimitResponse, requestAddress } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { apiOptionsResponse } from "@/lib/auth/bearer";
 import {
@@ -23,6 +24,10 @@ export const OPTIONS = apiOptionsResponse;
  * as soon as the customer authorizes the transaction on their phone.
  */
 export async function GET(request: NextRequest) {
+  const limited = rateLimitResponse([
+    { key: `app-pay-verify-ip:${await requestAddress()}`, limit: 120, windowMs: 10 * 60 * 1000 },
+  ]);
+  if (limited) return limited;
   const { searchParams } = new URL(request.url);
   const reference = searchParams.get("reference")?.trim();
 
@@ -156,6 +161,10 @@ export async function GET(request: NextRequest) {
  * Submits an SMS OTP or voucher code (required for some networks like Telecel Cash).
  */
 export async function POST(request: NextRequest) {
+  const limited = rateLimitResponse([
+    { key: `app-pay-otp-ip:${await requestAddress()}`, limit: 20, windowMs: 10 * 60 * 1000 },
+  ]);
+  if (limited) return limited;
   try {
     const body = await request.json();
     const { reference, otp } = body;

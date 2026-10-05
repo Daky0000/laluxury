@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
+import { canViewOrder, orderAccessToken } from "@/lib/order-access";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { formatPrice } from "@/lib/money";
@@ -16,7 +17,7 @@ export default async function OrderInvoicePage({
   searchParams,
 }: {
   params: Promise<{ orderNumber: string }>;
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; t?: string; email?: string }>;
 }) {
   const { orderNumber } = await params;
   const query = await searchParams;
@@ -35,7 +36,11 @@ export default async function OrderInvoicePage({
     getSettings(),
   ]);
 
-  if (!order) notFound();
+  if (!order || !(await canViewOrder(order, { token: query.t, email: query.email }))) {
+    // Signed-out visitors without a signed link confirm the order email first.
+    redirect(`/orders/track?order=${encodeURIComponent(orderNumber.toUpperCase())}`);
+  }
+  const accessToken = orderAccessToken(order.orderNumber);
 
   const isPaid = order.paymentStatus === "SUCCESS" || Boolean(order.balancePaidAt);
   const balanceRemaining =
@@ -51,20 +56,20 @@ export default async function OrderInvoicePage({
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5 print:hidden">
         <div className="flex flex-wrap items-center gap-3">
           <Link
-            href={`/orders/track?order=${order.orderNumber}`}
+            href={`/orders/track?order=${order.orderNumber}&t=${accessToken}`}
             className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
           >
             ← Back to Order {order.orderNumber}
           </Link>
           <span className="text-[var(--text-muted)]">|</span>
           <Link
-            href={`/orders/${order.orderNumber}/invoice?type=invoice`}
+            href={`/orders/${order.orderNumber}/invoice?type=invoice&t=${accessToken}`}
             className={`text-xs uppercase tracking-[0.14em] ${docType === "invoice" ? "font-semibold text-[var(--accent)]" : "text-[var(--text-secondary)]"}`}
           >
             Tax / Pro-Forma Invoice
           </Link>
           <Link
-            href={`/orders/${order.orderNumber}/invoice?type=waybill`}
+            href={`/orders/${order.orderNumber}/invoice?type=waybill&t=${accessToken}`}
             className={`text-xs uppercase tracking-[0.14em] ${docType === "waybill" ? "font-semibold text-[var(--accent)]" : "text-[var(--text-secondary)]"}`}
           >
             White-Glove Delivery Waybill

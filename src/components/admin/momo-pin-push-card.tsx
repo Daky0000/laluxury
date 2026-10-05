@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Smartphone, CheckCircle2, Loader2, ShieldCheck, RefreshCw, Send } from "lucide-react";
+import { Smartphone, CheckCircle2, Loader2, RefreshCw, Send } from "lucide-react";
 import {
   initiateMomoPinPushAction,
   submitMomoPushOtpAction,
   checkOrConfirmMomoPinAction,
-  type MomoPushResult,
 } from "@/app/actions/admin/momo-push";
+import type { MomoPushResult } from "@/lib/momo-push";
 import { formatMoney } from "@/lib/money";
 import type { MomoProvider } from "@/lib/paystack";
 
@@ -93,7 +93,6 @@ export function MomoPinPushCard({
         orderId,
         reference: pushState.reference!,
         chargeScope,
-        simulateClientPinEntered: false,
       });
       if (check.paid) {
         setConfirmedPaid(true);
@@ -138,14 +137,13 @@ export function MomoPinPushCard({
     });
   }
 
-  function handleCheckOrSimulate(simulate: boolean) {
+  function handleCheck() {
     if (!pushState?.reference) return;
     startTransition(async () => {
       const check = await checkOrConfirmMomoPinAction({
         orderId,
         reference: pushState.reference!,
         chargeScope,
-        simulateClientPinEntered: simulate,
       });
       setStatusMessage(check.message);
       if (check.paid) {
@@ -327,23 +325,11 @@ export function MomoPinPushCard({
                 <button
                   type="button"
                   disabled={isPending}
-                  onClick={() => handleCheckOrSimulate(false)}
+                  onClick={() => handleCheck()}
                   className="inline-flex items-center gap-1.5 rounded border border-[var(--border-subtle)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)]"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   Check PIN Status Now
-                </button>
-
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => handleCheckOrSimulate(true)}
-                  className="inline-flex items-center gap-1.5 rounded bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-                >
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  {pushState.simulated
-                    ? "Simulate Client Entering MoMo PIN on Phone ✓"
-                    : "Confirm MoMo PIN Received & Mark Paid ✓"}
                 </button>
               </div>
             </div>

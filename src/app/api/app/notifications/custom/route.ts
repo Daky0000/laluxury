@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { withApiAuth, getBearerSession, apiOptionsResponse } from "@/lib/auth/bearer";
+import { withApiAuth, requireBearerPermission, apiOptionsResponse } from "@/lib/auth/bearer";
 import { isStaff } from "@/lib/auth/rbac";
 import { db } from "@/lib/db";
 import { sendSms } from "@/lib/sms";
@@ -22,22 +22,8 @@ const customNotificationSchema = z.object({
 });
 
 export const POST = withApiAuth(async (request: Request) => {
-  const session = await getBearerSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized. Staff login required." }, { status: 401 });
-  }
-
-  const staffUser = await db.user.findUnique({
-    where: { id: session.userId },
-    select: { id: true, role: true, firstName: true, lastName: true },
-  });
-
-  if (!staffUser || !isStaff(staffUser.role)) {
-    return NextResponse.json(
-      { error: "Forbidden. Only store owners and staff can broadcast custom notifications." },
-      { status: 403 },
-    );
-  }
+  // Active staff with settings access only; disabled accounts are refused.
+  const staffUser = await requireBearerPermission("settings:manage");
 
   const json = await request.json().catch(() => null);
   const parsed = customNotificationSchema.safeParse(json);
@@ -142,10 +128,7 @@ export const POST = withApiAuth(async (request: Request) => {
 });
 
 export const GET = withApiAuth(async () => {
-  const session = await getBearerSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
+  await requireBearerPermission("settings:manage");
 
   const settings = await getSettings();
   return NextResponse.json({

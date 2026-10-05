@@ -1,3 +1,4 @@
+import { orderPath } from "@/lib/order-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Clock, XCircle } from "lucide-react";
@@ -328,13 +329,13 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
         {/* CTAs */}
         <section className="lx-container flex flex-wrap justify-center gap-3.5 pb-8">
           <Link
-            href={`/orders/${fresh.orderNumber}/invoice`}
+            href={orderPath(fresh.orderNumber, "invoice")}
             className="inline-flex items-center justify-center gap-2 border border-[var(--accent)] bg-[var(--accent)] px-8 py-4 text-sm font-medium uppercase tracking-[0.12em] text-[var(--accent-contrast)] transition-colors hover:bg-ink-800"
           >
             Download Receipt / Tax Invoice (PDF)
           </Link>
           <Link
-            href={`/orders/track?order=${fresh.orderNumber}`}
+            href={orderPath(fresh.orderNumber, "track")}
             className="inline-flex items-center justify-center border border-[var(--border-strong)] px-8 py-4 text-sm font-medium uppercase tracking-[0.12em] transition-colors hover:bg-[var(--surface-sunken)]"
           >
             Track this order

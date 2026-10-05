@@ -6,7 +6,7 @@ async function main() {
   delete process.env.NEXT_PUBLIC_MEDIA_BASE_URL;
   const { db } = await import("../src/lib/db");
   const { publicAssetUrl } = await import("../src/lib/media-url");
-  const { appDownloadUrl } = await import("../src/lib/app-release");
+  const { appDownloadUrl, resolveAppVersion } = await import("../src/lib/app-release");
   const { GET: list } = await import("../src/app/api/store/products/route");
   const { GET: detail } = await import("../src/app/api/store/products/[id]/route");
   const { GET: download } = await import("../src/app/api/app/download/route");
@@ -53,16 +53,19 @@ async function main() {
     assert.equal(missing.status, 404);
     assert.equal(missing.headers.get("cache-control"), "no-store");
 
+    // APK policy: the versioned CDN file is the default; an override is only
+    // honoured when it is HTTPS and names the current release.
     Object.assign(process.env, { NODE_ENV: "production" });
+    const { version: appVersion } = resolveAppVersion();
+    process.env.R2_PUBLIC_URL = "https://pub-test.r2.dev";
     delete process.env.APK_DOWNLOAD_URL;
-    assert.throws(appDownloadUrl, /required/);
-    assert.equal(download().status, 503);
-    assert.equal((await version()).status, 503);
-    process.env.APK_DOWNLOAD_URL = "https://pub-test.r2.dev/downloads/app-v1.apk";
-    assert.equal(appDownloadUrl(), process.env.APK_DOWNLOAD_URL);
-    process.env.APK_DOWNLOAD_URL = "http://media.example.com/app.apk";
-    assert.throws(appDownloadUrl, /HTTPS/);
-    process.env.APK_DOWNLOAD_URL = "https://media.example.com/downloads/app-v1.2.6.apk";
+    const versioned = `https://pub-test.r2.dev/downloads/NobleEnclave-v${appVersion}.apk`;
+    assert.equal(appDownloadUrl(), versioned);
+    process.env.APK_DOWNLOAD_URL = `http://media.example.com/app-v${appVersion}.apk`;
+    assert.equal(appDownloadUrl(), versioned, "plain HTTP override is ignored");
+    process.env.APK_DOWNLOAD_URL = "https://media.example.com/downloads/app-v0.0.1.apk";
+    assert.equal(appDownloadUrl(), versioned, "stale override is ignored");
+    process.env.APK_DOWNLOAD_URL = `https://media.example.com/downloads/app-v${appVersion}.apk`;
     assert.equal(appDownloadUrl(), process.env.APK_DOWNLOAD_URL);
     const redirect = download();
     assert.equal(redirect.status, 307);

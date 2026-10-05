@@ -277,6 +277,56 @@ try {
   fail("Settings check", (err as Error).message);
 }
 
+// --- Security guards ----------------------------------------------------------
+console.log("\nSecurity Guards (authorization regressions)");
+try {
+  // Every /api/app handler must authenticate, except this public allowlist.
+  const PUBLIC_HANDLERS = new Set([
+    "auth/login/route.ts",
+    "auth/otp/send/route.ts",
+    "auth/otp/verify/route.ts",
+    "auth/register/route.ts",
+    "orders/verify/route.ts",
+    "shipping/rates/route.ts",
+    "version/route.ts",
+  ]);
+  const GUARD = /requireBearer(User|Permission)|getOptionalBearer(User|Staff)|getBearerSession|requireUser|currentUser/;
+  const appDir = path.join(ROOT, "src", "app", "api", "app");
+  const walk = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(path.join(dir, e.name)) : e.name === "route.ts" ? [path.join(dir, e.name)] : [],
+    );
+  const unguarded: string[] = [];
+  for (const file of walk(appDir)) {
+    const rel = path.relative(appDir, file).split(path.sep).join("/");
+    if (PUBLIC_HANDLERS.has(rel)) continue;
+    const src = fs.readFileSync(file, "utf-8");
+    const handlers = src.split(/export (?:const|async function) (?:GET|POST|PATCH|PUT|DELETE)\b/).slice(1);
+    if (handlers.some((body) => !GUARD.test(body.split(/\nexport /)[0]))) unguarded.push(rel);
+  }
+  if (unguarded.length === 0) pass("Every non-public /api/app handler authenticates");
+  else fail("Unguarded /api/app handlers", unguarded.join(", "));
+
+  const login = fs.readFileSync(path.join(appDir, "auth", "login", "route.ts"), "utf-8");
+  if (/SEED_OWNER|seedOwner/.test(login)) fail("App login", "seed-password override is back");
+  else pass("App login has no seed-password override");
+
+  const momoAction = fs.readFileSync(path.join(ROOT, "src", "app", "actions", "admin", "momo-push.ts"), "utf-8");
+  if (/actor\??:/.test(momoAction) || /simulate/i.test(momoAction)) {
+    fail("MoMo server actions", "accept a caller-supplied actor or simulation flag");
+  } else pass("MoMo server actions take the actor from the session only");
+
+  const auth = fs.readFileSync(path.join(ROOT, "src", "app", "actions", "auth.ts"), "utf-8");
+  if (/sent\.fatal\)\s*\{[^}]*createSessionCookie/.test(auth)) fail("Web OTP", "SMS failure signs users in");
+  else pass("Web OTP failure never signs anyone in");
+
+  const balance = fs.readFileSync(path.join(ROOT, "src", "app", "actions", "order-balance.ts"), "utf-8");
+  if (/status:\s*"SUCCESS"/.test(balance)) fail("Balance action", "settles money without a gateway");
+  else pass("Balance payments always go through the gateway");
+} catch (err) {
+  fail("Security guard check", (err as Error).message);
+}
+
 // --- Summary ----------------------------------------------------------------
 console.log("\n-------------------------------------------------------");
 console.log(`Results: ${passed} passed, ${failed} failed`);

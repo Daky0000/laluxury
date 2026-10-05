@@ -100,3 +100,22 @@ export function retryMessage(seconds: number): string {
   const minutes = Math.ceil(seconds / 60);
   return `Too many attempts. Wait ${minutes} minutes and try again.`;
 }
+
+/**
+ * Checks every rule in turn and returns a 429 response for the first one
+ * that is exhausted, or null when the request may proceed. For API routes.
+ */
+export function rateLimitResponse(
+  rules: { key: string; limit: number; windowMs: number }[],
+): Response | null {
+  for (const rule of rules) {
+    const result = rateLimit(rule.key, { limit: rule.limit, windowMs: rule.windowMs });
+    if (!result.ok) {
+      return Response.json(
+        { ok: false, error: retryMessage(result.retryAfterSeconds) },
+        { status: 429, headers: { "Retry-After": String(result.retryAfterSeconds) } },
+      );
+    }
+  }
+  return null;
+}

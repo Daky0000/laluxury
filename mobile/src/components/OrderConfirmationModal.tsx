@@ -33,7 +33,10 @@ export function OrderConfirmationModal({
 
   if (!visible || !orderNumber) return null;
 
-  const invoiceUrl = `${api.getBaseUrl()}/orders/${orderNumber}/invoice`;
+  // The order email proves access when the app has no web session.
+  const invoiceUrl = `${api.getBaseUrl()}/orders/${orderNumber}/invoice${
+    customerEmail ? `?email=${encodeURIComponent(customerEmail)}` : ""
+  }`;
 
   const handleDownloadReceipt = () => {
     Linking.openURL(invoiceUrl).catch(() => {});

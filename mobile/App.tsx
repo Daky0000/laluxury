@@ -584,6 +584,10 @@ function MainApp() {
 
   const handleLogout = async () => {
     await api.clearSession();
+    // The bag belongs to the account (it stays on the server); the next
+    // person on this device starts with an empty one.
+    await api.clearLocalCart();
+    setCart([]);
     setUser(null);
     setSelectedProductId(null);
     setMode("STOREFRONT");

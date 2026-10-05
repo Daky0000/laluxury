@@ -25,6 +25,8 @@ const STORAGE_KEY_USER = "lx_user";
 const STORAGE_KEY_URL = "lx_api_url";
 const STORAGE_KEY_CART = "lx_cart";
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
 class ApiService {
   private publicCache = new Map<string, { expiresAt: number; data: unknown }>();
   private token: string | null = null;
@@ -91,6 +93,10 @@ class ApiService {
     if (!__DEV__ && !clean.startsWith("https://")) {
       throw new Error("Production API URL must use HTTPS.");
     }
+    // A token is only valid for the server that issued it; never send it to
+    // a different host.
+    if (clean !== this.baseUrl && this.token) await this.clearSession();
+    this.publicCache.clear();
     this.baseUrl = clean;
     await AsyncStorage.setItem(STORAGE_KEY_URL, clean);
   }
@@ -137,13 +143,31 @@ class ApiService {
       headers["Content-Type"] = "application/json";
     }
 
+    // Every request gives up after a while so screens never spin forever.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    if (options.signal) {
+      if (options.signal.aborted) controller.abort();
+      else options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+
     let response: Response;
     try {
-      response = await fetch(url, { ...options, headers, ...(publicRead ? { credentials: "omit" as const } : { cache: "no-store" as const }) });
+      response = await fetch(url, {
+        ...options,
+        headers,
+        signal: controller.signal,
+        ...(publicRead ? { credentials: "omit" as const } : { cache: "no-store" as const }),
+      });
     } catch (err: unknown) {
+      clearTimeout(timeout);
+      if (controller.signal.aborted && !options.signal?.aborted) {
+        throw new Error("The server took too long to respond. Check your connection and try again.");
+      }
       const msg = err instanceof Error ? err.message : "Network request failed";
       throw new Error(`Unable to connect to Noble Enclave server (${this.baseUrl}). ${msg}`);
     }
+    clearTimeout(timeout);
 
     const data = await response.json().catch(() => null);
 

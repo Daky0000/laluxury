@@ -131,14 +131,12 @@ export async function loginAction(
   const sent = await sendOtp(user.phone ?? phone, settings.storeName);
 
   if (!sent.ok && sent.fatal) {
-    // Fallback when SMS gateway (Vynfy) is not configured: verify and sign in directly
-    await db.user.update({
-      where: { id: user.id },
-      data: { phoneVerified: new Date(), lastLoginAt: new Date() },
-    });
-    await createSessionCookie({ userId: user.id, role: user.role });
-    await getOrCreateCart().catch(() => {});
-    redirect(isStaff(user.role) ? "/admin" : "/account");
+    // Without a working SMS gateway the number cannot be proven, so nobody is
+    // signed in on it. Password sign-in still works above.
+    return {
+      ok: false,
+      message: "We can't send a sign-in code right now. Use your password, or try again shortly.",
+    };
   }
 
   await setPendingSignup({
@@ -212,13 +210,10 @@ export async function registerAction(
   const sent = await sendOtp(phone, settings.storeName);
 
   if (!sent.ok && sent.fatal) {
-    await db.user.update({
-      where: { id: user.id },
-      data: { phoneVerified: new Date(), lastLoginAt: new Date() },
-    });
-    await createSessionCookie({ userId: user.id, role: user.role });
-    await getOrCreateCart().catch(() => {});
-    redirect("/account");
+    return {
+      ok: false,
+      message: "We can't send a verification code right now. Please try again shortly.",
+    };
   }
 
   await setPendingSignup({
