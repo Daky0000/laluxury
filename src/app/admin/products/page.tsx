@@ -137,6 +137,9 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
               <LinkButton href="/admin/products/bulk" variant="secondary" size="sm">
                 Quick Price Editor
               </LinkButton>
+              <LinkButton href="/admin/products/bulk-add" variant="secondary" size="sm" className="hidden lg:inline-flex">
+                Bulk Product Add
+              </LinkButton>
               <LinkButton href="/admin/products/new" size="sm">
                 <Plus className="h-3.5 w-3.5" aria-hidden />
                 Add Product

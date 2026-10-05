@@ -8,6 +8,7 @@ import { ensureUniqueCode, describeDiscount } from "@/lib/discounts";
 import { updateOrderStatus, cancelOrder } from "@/lib/orders";
 import { recordAudit } from "@/lib/audit";
 import { uniqueSlug } from "@/lib/slug";
+import { createCatalogProduct } from "@/lib/catalog/create-product";
 import type { ToolSchema } from "./provider";
 import type { Role, OrderStatus, DiscountType } from "@/generated/prisma";
 
@@ -773,37 +774,20 @@ const createProductTool: ToolDefinition = {
     const existingSku = await db.variant.findUnique({ where: { sku }, select: { id: true } });
     if (existingSku) return { error: `SKU ${sku} is already in use.` };
 
-    const product = await db.product.create({
-      data: {
-        title,
-        slug,
-        description: str(args.description) || null,
-        status: "DRAFT",
-        minPrice: price,
-        maxPrice: price,
-        tags,
-        searchText: buildSearchText({ title, tags, shortDescription: str(args.description) }),
-        variants: {
-          create: {
-            title: "Default",
-            sku,
-            price,
-            inventory: { create: { onHand: num(args.stock) || 0 } },
-          },
-        },
-      },
-      include: { variants: true },
+    const category = args.categorySlug
+      ? await db.category.findUnique({ where: { slug: str(args.categorySlug) }, select: { id: true } })
+      : null;
+    const product = await createCatalogProduct({
+      title,
+      slug,
+      description: str(args.description) || null,
+      status: "DRAFT",
+      tags,
+      options: [],
+      variants: [{ values: [], sku, price, stock: num(args.stock) || 0 }],
+      categoryIds: category ? [category.id] : [],
     });
     revalidateProductCatalog();
-
-    if (args.categorySlug) {
-      const category = await db.category.findUnique({ where: { slug: str(args.categorySlug) } });
-      if (category) {
-        await db.productCategory.create({
-          data: { productId: product.id, categoryId: category.id },
-        });
-      }
-    }
 
     await recordAudit({
       actorId: ctx.userId,
@@ -816,9 +800,9 @@ const createProductTool: ToolDefinition = {
 
     return {
       ok: true,
-      product: product.title,
+      product: title,
       slug: product.slug,
-      sku: product.variants[0].sku,
+      sku,
       status: "DRAFT",
       note: "Created as a draft. Add images in the admin, then ask me to publish it.",
     };

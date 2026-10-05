@@ -197,3 +197,17 @@ Web and app share every change listed here through the services in `src/lib/`.
 | Order tracking | `GET /api/app/orders/[id]` accepts the signed `?t=` token and returns `invoicePath` | `/orders/track` | `OrderTrackingScreen` timeline |
 | Deep links | `nobleenclave://`, `https://nobleenclave.com/product/*`, `/orders/track` | `/.well-known/assetlinks.json` (set `ANDROID_CERT_SHA256`) | React Navigation `linking` |
 | OTA updates | EAS Update, `runtimeVersion` = app version, channels per build profile | n/a | Checked on launch and on resume |
+
+## Bulk Product Add — 2026-10-06
+
+Web admin only (`/admin/products/bulk-add`). No `/api/app/*` contract changes: the mobile app does not expose
+the importer, and products it creates are ordinary `Product`/`Variant` rows that both clients already read.
+
+| Area | Authoritative source | Web | App |
+| :--- | :--- | :--- | :--- |
+| Product creation | `src/lib/catalog/create-product.ts` (`createCatalogProduct`) — one transaction per product: options, values, variants, inventory, images (incl. `optionValueId`), categories, collections | Add Product form, agent `create_product`, Bulk Product Add | Unchanged (reads only) |
+| Catalog Inbox | `ProductImportBatch` / `ProductImportItem` / `ProductImportMedia`; nothing reaches `Product` until imported; drafts by default | `/admin/products/bulk-add/[batchId]` | n/a |
+| Recipes & options | `ProductRecipe`, `CatalogOptionDefinition`/`CatalogOptionValueDefinition`, `CatalogNormalizationRule` | `/admin/products/recipes`, `/admin/products/options` | n/a |
+| Supplier identity | `CatalogSource`, `CatalogSourceProfile`, `CatalogSourceProduct` (source + external key → product) | Import profiles | n/a |
+| Work queue | `ProductImportJob` (Postgres, `SKIP LOCKED`); runs after requests, on review-page polls, `POST /api/cron/bulk-import` (`CRON_SECRET`), or `npm run catalog:worker` | Same | n/a |
+| Bulk AI | OpenRouter only, `src/lib/bulk-ai/*`; settings key `bulkAi`; `FREE_ONLY` by default; 3 attempts per model, max 3 models; attempts logged in `ProductImportAiAttempt`, results cached in `BulkAiCache` | `/admin/products/bulk-add/settings` (`settings:manage`) | n/a |

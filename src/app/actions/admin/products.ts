@@ -10,6 +10,7 @@ import { buildSearchText, refreshPriceRange, invalidateCatalogFacetsCache } from
 import { toMinorUnits } from "@/lib/money";
 import { ensureInventoryItem } from "@/lib/inventory";
 import { recordAudit } from "@/lib/audit";
+import { createCatalogProduct } from "@/lib/catalog/create-product";
 
 export type AdminState = { ok: boolean; message?: string; fieldErrors?: Record<string, string> };
 
@@ -138,55 +139,28 @@ export async function createProductAction(
     if (preorderCat) categorySet.add(preorderCat.id);
   }
 
-  const product = await db.product.create({
-    data: {
-      title: data.title,
-      slug,
-      shortDescription: data.shortDescription ?? null,
-      description: data.description ?? null,
-      status: data.status,
-      brand: data.brand ?? null,
-      material: data.material ?? null,
-      care: data.care ?? null,
-      tags,
-      isFeatured: Boolean(data.isFeatured),
-      isPreorder: Boolean(data.isPreorder),
-      preorderLeadTime: data.isPreorder ? (data.preorderLeadTime ?? "4–6 weeks") : null,
-      preorderDepositPercent: data.isPreorder ? (data.preorderDepositPercent ?? 50) : null,
-      preorderNote: data.isPreorder ? (data.preorderNote ?? null) : null,
-      metaTitle: data.metaTitle ?? null,
-      metaDescription: data.metaDescription ?? null,
-      publishedAt: data.status === "ACTIVE" ? new Date() : null,
-      minPrice: price,
-      maxPrice: price,
-      compareAtPrice,
-      searchText: buildSearchText({
-        title: data.title,
-        tags,
-        brand: data.brand,
-        material: data.material,
-        shortDescription: data.shortDescription,
-      }),
-      variants: {
-        create: {
-          title: "Default",
-          sku,
-          price,
-          inventory: {
-            create: {
-              onHand: Number(formData.get("stock")) || 0,
-              allowBackorder: Boolean(data.isPreorder),
-            },
-          },
-        },
-      },
-      categories: {
-        create: [...categorySet].map((categoryId) => ({ categoryId })),
-      },
-      collections: {
-        create: (data.collectionIds ?? []).map((collectionId) => ({ collectionId })),
-      },
-    },
+  const product = await createCatalogProduct({
+    title: data.title,
+    slug,
+    shortDescription: data.shortDescription ?? null,
+    description: data.description ?? null,
+    status: data.status,
+    brand: data.brand ?? null,
+    material: data.material ?? null,
+    care: data.care ?? null,
+    tags,
+    isFeatured: Boolean(data.isFeatured),
+    isPreorder: Boolean(data.isPreorder),
+    preorderLeadTime: data.preorderLeadTime ?? null,
+    preorderDepositPercent: data.preorderDepositPercent ?? null,
+    preorderNote: data.preorderNote ?? null,
+    metaTitle: data.metaTitle ?? null,
+    metaDescription: data.metaDescription ?? null,
+    compareAtPrice,
+    options: [],
+    variants: [{ values: [], sku, price, stock: Number(formData.get("stock")) || 0 }],
+    categoryIds: [...categorySet],
+    collectionIds: data.collectionIds ?? [],
   });
 
   await recordAudit({
@@ -194,7 +168,7 @@ export async function createProductAction(
     action: "product.create",
     entity: "Product",
     entityId: product.id,
-    after: { title: product.title, slug, price, isPreorder: product.isPreorder },
+    after: { title: data.title, slug, price, isPreorder: Boolean(data.isPreorder) },
   });
 
   revalidateProduct(product.id);

@@ -42,11 +42,13 @@ model User {
   isActive      Boolean   @default(true)
 
   // Marketing / CRM
-  acceptsMarketing Boolean   @default(false)
-  /** When marketing consent was given. The GDPR wants consent evidenced, not assumed. */
+  acceptsMarketing   Boolean   @default(false)
+  /**
+   * When marketing consent was given. The GDPR wants consent evidenced, not assumed.
+   */
   marketingConsentAt DateTime?
-  lastLoginAt      DateTime?
-  notes            String?
+  lastLoginAt        DateTime?
+  notes              String?
 
   addresses    Address[]
   orders       Order[]
@@ -1020,7 +1022,6 @@ enum MediaSource {
 
 /**
  * Every picture the store has, in one place.
- *
  * Uploads used to be written to the container's public/ folder, which meant
  * they were gone on the next deploy and were never served in production at
  * all. Bytes now live in Postgres unless a CDN is configured, so an upload is
@@ -1097,4 +1098,311 @@ model AnalyticsEvent {
 
   @@index([name, createdAt])
   @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Bulk Product Add — catalog intake
+//
+// Nothing here touches the live catalog directly. Sources land in the Catalog
+// Inbox (batches + items), are normalised, matched, enriched and validated,
+// and only then written to Product/Variant through the shared catalog service.
+// ---------------------------------------------------------------------------
+
+enum ProductImportSourceKind {
+  PHOTOS
+  SPREADSHEET
+  PHOTOS_SPREADSHEET
+  FEED
+}
+
+enum ProductImportBatchStatus {
+  DRAFT
+  UPLOADING
+  PARSING
+  NORMALIZING
+  MATCHING
+  ENRICHING
+  VALIDATING
+  READY_FOR_REVIEW
+  IMPORTING
+  PARTIAL
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ProductImportItemStatus {
+  PENDING
+  PROCESSING
+  READY
+  NEEDS_REVIEW
+  BLOCKED
+  IMPORTING
+  IMPORTED
+  UPDATED
+  FAILED
+  SKIPPED
+}
+
+enum ProductImportJobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+}
+
+model ProductImportBatch {
+  id         String                   @id @default(cuid())
+  name       String
+  sourceKind ProductImportSourceKind
+  status     ProductImportBatchStatus @default(DRAFT)
+
+  /// The owner's answers: options, pricing, stock, image meaning, AI fields.
+  setup Json @default("{}")
+
+  recipeId  String?
+  sourceId  String?
+  profileId String?
+
+  // Spreadsheet, kept until parsed so a failed parse can be re-run.
+  fileName      String?
+  fileData      Bytes?
+  fileHeaders   String[] @default([])
+  columnMapping Json?
+  rowCount      Int      @default(0)
+
+  /// Cached exception summary for the review screen.
+  summary Json?
+
+  aiCalls    Int @default(0)
+  aiFailures Int @default(0)
+
+  createdById String?
+  error       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items      ProductImportItem[]
+  media      ProductImportMedia[]
+  jobs       ProductImportJob[]
+  aiAttempts ProductImportAiAttempt[]
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+model ProductImportItem {
+  id      String                  @id @default(cuid())
+  batchId String
+  batch   ProductImportBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  status  ProductImportItemStatus @default(PENDING)
+
+  /// Stable key inside the batch (external key, parent SKU, photo group).
+  groupKey    String
+  externalKey String?
+  /// First source row (1-based, header excluded) for spreadsheet items.
+  rowNumber   Int?
+
+  /// Source rows as received, after column mapping.
+  raw        Json?
+  /// The resolved product draft, every field carrying its provenance.
+  data       Json     @default("{}")
+  /// Owner edits for this one item — highest precedence.
+  overrides  Json?
+  issues     Json     @default("[]")
+  issueCodes String[] @default([])
+
+  /// CREATE | UPDATE | SKIP
+  action         String  @default("CREATE")
+  matchProductId String?
+  matchMethod    String?
+  productId      String?
+  /// PENDING | DONE | FAILED | SKIPPED
+  aiStatus       String?
+  error          String?
+  attempts       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  media ProductImportMedia[]
+
+  @@unique([batchId, groupKey])
+  @@index([batchId, status])
+  @@index([batchId, rowNumber])
+}
+
+model ProductImportMedia {
+  id      String             @id @default(cuid())
+  batchId String
+  batch   ProductImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  itemId  String?
+  item    ProductImportItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  mediaId  String
+  url      String
+  filename String
+  checksum String?
+  /// 64-bit difference hash, hex. Near-identical photos differ by a few bits.
+  phash    String?
+  position Int     @default(0)
+
+  /// When the photo stands for an option value, e.g. Colour → Black.
+  optionName   String?
+  optionValue  String?
+  /// OWNER | RULE | AI
+  optionSource String?
+
+  duplicateOfId String?
+  /// EXACT | SIMILAR | EXISTING_PRODUCT
+  duplicateKind String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([batchId, mediaId])
+  @@index([batchId, itemId])
+}
+
+/// "Curtain Blind", "Bedsheet" — how a product family is normally sold.
+model ProductRecipe {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  config      Json     @default("{}")
+  version     Int      @default(1)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// Option Library: reusable option names and their saved values.
+model CatalogOptionDefinition {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  values CatalogOptionValueDefinition[]
+}
+
+model CatalogOptionValueDefinition {
+  id       String                  @id @default(cuid())
+  optionId String
+  option   CatalogOptionDefinition @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  value    String
+  hexColor String?
+  position Int                     @default(0)
+
+  @@unique([optionId, value])
+}
+
+/// A supplier, a feed, or simply "Owner photos".
+model CatalogSource {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  kind      String   @default("SUPPLIER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profiles CatalogSourceProfile[]
+  products CatalogSourceProduct[]
+}
+
+/// A saved import profile: column mapping, keys, recipe, rules, authority.
+model CatalogSourceProfile {
+  id        String        @id @default(cuid())
+  sourceId  String
+  source    CatalogSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  name      String
+  config    Json          @default("{}")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([sourceId, name])
+}
+
+/// Supplier identity: DUB-93852 at Supplier A is this Noble Enclave product.
+model CatalogSourceProduct {
+  id          String        @id @default(cuid())
+  sourceId    String
+  source      CatalogSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  externalKey String
+  productId   String?
+  lastData    Json?
+  lastSeenAt  DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+
+  @@unique([sourceId, externalKey])
+  @@index([productId])
+}
+
+/// Deterministic aliases, e.g. Size: "S-KING" → "Superking".
+model CatalogNormalizationRule {
+  id        String   @id @default(cuid())
+  /// Option or field name the rule applies to; "*" for any.
+  field     String
+  fromValue String
+  toValue   String
+  /// Empty for a catalog-wide rule, else a CatalogSource id.
+  sourceKey String   @default("")
+  hits      Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([field, fromValue, sourceKey])
+}
+
+/// Postgres-backed work queue. Every job is idempotent.
+model ProductImportJob {
+  id          String                 @id @default(cuid())
+  batchId     String?
+  batch       ProductImportBatch?    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  type        String
+  status      ProductImportJobStatus @default(QUEUED)
+  payload     Json                   @default("{}")
+  /// Prevents the same unit of work being queued twice.
+  dedupeKey   String?                @unique
+  attempts    Int                    @default(0)
+  maxAttempts Int                    @default(5)
+  runAfter    DateTime               @default(now())
+  lockedAt    DateTime?
+  lockedBy    String?
+  error       String?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@index([status, runAfter])
+  @@index([batchId, status])
+}
+
+model ProductImportAiAttempt {
+  id               String              @id @default(cuid())
+  batchId          String?
+  batch            ProductImportBatch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  itemId           String?
+  task             String
+  model            String
+  attempt          Int
+  success          Boolean
+  error            String?
+  latencyMs        Int                 @default(0)
+  promptTokens     Int?
+  completionTokens Int?
+  cost             Float?
+  createdAt        DateTime            @default(now())
+
+  @@index([batchId, createdAt])
+  @@index([createdAt])
+}
+
+/// Validated AI results, keyed by input checksum + task + prompt/recipe version.
+model BulkAiCache {
+  key       String   @id
+  task      String
+  model     String
+  result    Json
+  createdAt DateTime @default(now())
 }
