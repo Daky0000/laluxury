@@ -20,7 +20,7 @@ import { buildItemDraft } from "../src/lib/bulk-import/merge-data";
 import { batchSetupSchema } from "../src/lib/bulk-import/schema";
 import { matchFilenameToOptionValue, filenameStem, matchPhotoToRow } from "../src/lib/bulk-import/image-matching";
 import { runWithFailover } from "../src/lib/bulk-ai/failover";
-import { BulkAiError, BulkAiExhaustedError } from "../src/lib/bulk-ai/retry";
+import { BulkAiError, BulkAiExhaustedError, classifyHttpStatus } from "../src/lib/bulk-ai/retry";
 
 let passed = 0;
 let failed = 0;
@@ -183,6 +183,26 @@ async function main() {
       (x) => x as { model: string },
     );
     check("invalid JSON is retried on the same model", out.model === "A" && calls.join("") === "AA");
+  }
+
+  {
+    const calls: string[] = [];
+    const msg = "thinkingmachines/inkling:free is only available on agentic harnesses.";
+    const out = await runWithFailover(
+      {
+        models: ["A", "B"],
+        attemptsPerModel: 3,
+        wait: noWait,
+        log: () => undefined,
+        call: async (m) => {
+          calls.push(m);
+          if (m === "A") throw new BulkAiError(msg, classifyHttpStatus(403, msg), 403);
+          return ok(m);
+        },
+      },
+      (x) => x as { model: string },
+    );
+    check("restricted model (403) skipped once, next model used", out.model === "B" && calls.join("") === "AB", calls.join(""));
   }
 
   console.log("\nSpreadsheets");

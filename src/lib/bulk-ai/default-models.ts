@@ -21,9 +21,9 @@ export const DEFAULT_MODELS: Record<AiProfile, string[]> = {
     "nvidia/nemotron-3.5-lightning:free",
   ],
   VISION: [
-    "inclusionai/ling-3.0-flash-vl:free",
-    "thinkingmachines/inkling:free",
+    "google/gemma-4-31b-it:free",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "google/gemma-4-26b-a4b-it:free",
   ],
 };
 
@@ -42,8 +42,8 @@ export const MODEL_LABELS: Record<string, string> = {
   "nvidia/nemotron-3-super-120b-a12b:free": "Nemotron 3 Super",
   "nvidia/nemotron-3-ultra-550b-a55b:free": "Nemotron 3 Ultra",
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": "Nemotron 3 Nano Omni",
-  "inclusionai/ling-3.0-flash-vl:free": "Ling 3.0 Flash VL",
-  "thinkingmachines/inkling:free": "Inkling",
+  "google/gemma-4-31b-it:free": "Gemma 4 31B",
+  "google/gemma-4-26b-a4b-it:free": "Gemma 4 26B A4B",
 };
 
 export function modelLabel(id: string): string {

@@ -36,9 +36,14 @@ export class BulkAiDisabledError extends Error {
 
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 
+/** Errors about one model (restricted, withdrawn, not free) — try the next model, don't stop. */
+const MODEL_UNAVAILABLE = /only available|not available|no endpoints|not a valid model|model not found|does not exist|not supported|agentic|data policy|guardrail|restricted/i;
+
 export function classifyHttpStatus(status: number, message = ""): AiFailureKind {
   if (RETRYABLE_STATUS.has(status)) return "RETRYABLE";
-  if (status === 401 || status === 403) return "FATAL"; // invalid / unauthorised key
+  if (MODEL_UNAVAILABLE.test(message)) return "SKIP_MODEL";
+  if (status === 401) return "FATAL"; // invalid key
+  if (status === 403) return /key|auth|credential/i.test(message) ? "FATAL" : "SKIP_MODEL";
   if (status === 402) return "SKIP_MODEL"; // credits needed: never pay silently
   if (status === 404) return "SKIP_MODEL"; // model withdrawn
   if (status === 400 && /model|not a valid model|no endpoints/i.test(message)) return "SKIP_MODEL";

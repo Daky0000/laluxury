@@ -41,6 +41,7 @@ export async function runWithFailover<T>(
   // If every model is tripped, probe them anyway rather than fail outright.
   const chain = usable.length ? usable : deps.models;
 
+  let lastError = "";
   for (const model of chain) {
     for (let attempt = 1; attempt <= deps.attemptsPerModel; attempt++) {
       const started = Date.now();
@@ -66,6 +67,7 @@ export async function runWithFailover<T>(
           error: errorMessage(error),
           latencyMs: Date.now() - started,
         });
+        lastError = `${model}: ${errorMessage(error)}`;
         if (isFatal(error)) throw error;
         if (!isRetryable(error)) break; // SKIP_MODEL: go straight to the next model
         deps.onModelFailure?.(model);
@@ -73,5 +75,7 @@ export async function runWithFailover<T>(
       }
     }
   }
-  throw new BulkAiExhaustedError();
+  throw new BulkAiExhaustedError(
+    `AI could not complete this task; the item was kept for retry.${lastError ? ` Last error — ${lastError}` : ""}`,
+  );
 }

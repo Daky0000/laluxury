@@ -69,6 +69,9 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.round(Number(n) || min)));
 }
 
+/** Defaults from earlier releases that OpenRouter no longer serves to this app. */
+const RETIRED_MODELS = new Set(["inclusionai/ling-3.0-flash-vl:free", "thinkingmachines/inkling:free"]);
+
 export function isFreeModel(id: string): boolean {
   return id.endsWith(":free");
 }
@@ -85,7 +88,9 @@ export function modelsFor(config: BulkAiConfig, profile: AiProfile): string[] {
       : profile === "COMPLEX_TEXT"
         ? config.bulkAiComplexModels
         : config.bulkAiVisionModels;
-  const clean = [...new Set(raw.map((m) => m.trim()).filter(Boolean))];
+  let clean = [...new Set(raw.map((m) => m.trim()).filter((m) => m && !RETIRED_MODELS.has(m)))];
+  // Saved settings may still list only retired models; fall back to the defaults.
+  if (!clean.length) clean = envModels(profile);
 
   let chain: string[];
   switch (config.bulkAiPolicy) {
