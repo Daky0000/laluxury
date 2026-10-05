@@ -47,14 +47,18 @@ export async function callOpenRouter(args: {
   } catch (error) {
     // Structured outputs are preferred, but not every free endpoint has them.
     // Fall back to JSON-by-prompt within the same attempt.
+    // Free providers often reject structured outputs with only a generic
+    // "Provider returned error". Try once more as plain JSON-by-prompt.
     if (
       useSchema &&
       error instanceof BulkAiError &&
-      error.status === 400 &&
-      /response_format|json_schema|structured/i.test(error.message)
+      error.status !== 401 &&
+      error.status !== 429 &&
+      (error.status === 400 || /provider returned error|response_format|json_schema|structured/i.test(error.message))
     ) {
-      noStructured.add(args.model);
-      return send(args, false);
+      const result = await send(args, false);
+      noStructured.add(args.model); // only remembered once plain JSON is proven to work
+      return result;
     }
     throw error;
   }
@@ -107,17 +111,17 @@ async function send(
     choices?: { message?: { content?: string | null } }[];
     model?: string;
     usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
-    error?: { message?: string; code?: number };
+    error?: { message?: string; code?: number; metadata?: { raw?: unknown; provider_name?: string } };
   } | null;
 
   if (!response.ok) {
-    const message = payload?.error?.message ?? `OpenRouter request failed (${response.status}).`;
+    const message = describeError(payload?.error, `OpenRouter request failed (${response.status}).`);
     throw new BulkAiError(message, classifyHttpStatus(response.status, message), response.status);
   }
   // OpenRouter can answer 200 with an error body when the upstream failed mid-way.
   if (payload?.error) {
     const status = Number(payload.error.code) || 502;
-    const message = payload.error.message ?? "Provider error.";
+    const message = describeError(payload.error, "Provider error.");
     throw new BulkAiError(message, classifyHttpStatus(status, message), status);
   }
 
@@ -131,6 +135,21 @@ async function send(
     completionTokens: payload?.usage?.completion_tokens,
     cost: payload?.usage?.cost,
   };
+}
+
+/**
+ * OpenRouter's top-level message is often just "Provider returned error";
+ * the provider's own reason is in metadata.raw. Keep both, briefly.
+ */
+function describeError(
+  error: { message?: string; metadata?: { raw?: unknown; provider_name?: string } } | undefined,
+  fallback: string,
+): string {
+  const base = error?.message ?? fallback;
+  const raw = error?.metadata?.raw;
+  const detail = typeof raw === "string" ? raw : raw ? JSON.stringify(raw) : "";
+  const provider = error?.metadata?.provider_name ? ` [${error.metadata.provider_name}]` : "";
+  return `${base}${provider}${detail ? `: ${detail.slice(0, 300)}` : ""}`;
 }
 
 /** Pulls the first JSON object out of a reply, tolerating code fences and prose. */

@@ -5,7 +5,7 @@ import { env } from "@/lib/env";
 /**
  * A temporary, AI-only copy of a catalog photo: auto-rotated, metadata
  * stripped (sharp drops EXIF unless asked to keep it), at most 1280px on the
- * long edge, WebP. The storefront original is never touched.
+ * long edge, JPEG (the format every vision provider accepts). The storefront original is never touched.
  *
  * Only ProductImportMedia → MediaAsset images reach here, so only catalog
  * photos are ever sent to a model.
@@ -30,10 +30,10 @@ export async function prepareAiImage(mediaId: string): Promise<{ dataUrl: string
   const out = await sharp(original)
     .rotate()
     .resize({ width: 1280, height: 1280, fit: "inside", withoutEnlargement: true })
-    .webp({ quality: 72 })
+    .jpeg({ quality: 80, mozjpeg: true })
     .toBuffer();
 
-  return { dataUrl: `data:image/webp;base64,${out.toString("base64")}`, bytes: out.length };
+  return { dataUrl: `data:image/jpeg;base64,${out.toString("base64")}`, bytes: out.length };
 }
 
 /**
