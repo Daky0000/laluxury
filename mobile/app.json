@@ -14,8 +14,12 @@
         "applinks:nobleenclave.com"
       ],
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Use Face ID to unlock the Noble Enclave store backend."
-      }
+        "NSFaceIDUsageDescription": "Use Face ID to unlock the Noble Enclave store backend.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Allow Noble Enclave to capture inventory photos directly with camera.",
+        "NSPhotoLibraryUsageDescription": "Allow Noble Enclave to access your photos to attach product imagery."
+      },
+      "buildNumber": "18"
     },
     "android": {
       "package": "com.laluxury.management",

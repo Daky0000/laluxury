@@ -1,15 +1,15 @@
 export const APP_BASE_RELEASE = {
-  version: "1.3.5",
-  versionCode: 17,
+  version: "1.4.0",
+  versionCode: 18,
   appName: "Noble Enclave",
-  publishedAt: "2026-10-04T16:20:00.000Z",
+  publishedAt: "2026-10-05T14:30:00.000Z",
   minSupportedVersion: "1.0.0",
   releaseNotes:
-    "Noble Enclave v1.3.5 release: Live MoMo PIN direct authorization with bearer auth integration, refined adaptive app icon with safe-zone breathing room, and stability improvements.",
+    "Noble Enclave v1.4.0: saved pieces synced with the website, product reviews, live order tracking with notifications, smarter search with filters, offline support, faster image loading, and fingerprint unlock for the store backend.",
 };
 
 export const FALLBACK_APK_URL =
-  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.3.5.apk";
+  "https://pub-1a69b11766fc4280aadbd18a8e923f34.r2.dev/downloads/NobleEnclave-v1.4.0.apk";
 
 /** Release metadata is compile-time data so server tracing stays bounded. */
 export function resolveAppVersion(): { version: string; versionCode: number } {

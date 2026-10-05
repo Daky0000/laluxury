@@ -20,6 +20,10 @@
       "channel": "preview",
       "env": {
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
+      "ios": {
+        "simulator": false,
+        "resourceClass": "m-medium"
       }
     },
     "production": {
@@ -30,6 +34,16 @@
       "autoIncrement": true,
       "env": {
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
+    "ios-simulator": {
+      "extends": "preview",
+      "channel": "preview",
+      "ios": {
+        "simulator": true
       }
     }
   },

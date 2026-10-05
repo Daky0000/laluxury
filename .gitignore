@@ -53,3 +53,6 @@ next-env.d.ts
 
 # Play Console service account for eas submit (never commit)
 mobile/google-play-service-account.json
+
+# Built app binaries (large; published to R2, not committed)
+/releases/*.apk

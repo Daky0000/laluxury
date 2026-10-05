@@ -1,19 +1,34 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Download, Smartphone, ShieldCheck, CheckCircle2, ArrowRight } from "lucide-react";
+import { Download, Smartphone, Heart, Bell, ArrowRight, Apple } from "lucide-react";
 import { getAppReleaseInfo } from "@/lib/app-release";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Download Mobile App | Noble Enclave",
-  description: "Download the Noble Enclave mobile app for Android to browse luxury living collections, track orders, and manage pieces.",
+  description: "Download the Noble Enclave mobile app to browse luxury living collections, track orders, and manage pieces.",
 };
 
 const DOWNLOAD_URL = "/api/app/download";
 
+/**
+ * iPhone install link (TestFlight public link or an ad-hoc install page).
+ * Until IOS_INSTALL_URL is set, the page says the iPhone version is coming.
+ */
+function iosInstallUrl(): string | null {
+  const raw = process.env.IOS_INSTALL_URL?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).protocol === "https:" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function AppDownloadPage() {
   const release = getAppReleaseInfo();
+  const iosUrl = iosInstallUrl();
 
   return (
     <>
@@ -39,6 +54,15 @@ export default function AppDownloadPage() {
             <Download className="h-4 w-4" />
             <span>Download Android APK (v{release.version})</span>
           </a>
+          {iosUrl ? (
+            <a
+              href={iosUrl}
+              className="inline-flex items-center gap-2.5 rounded-none border border-[#7A2E3C] px-8 py-4 text-xs font-medium uppercase tracking-[0.16em] text-[#7A2E3C] transition-all hover:bg-[#7A2E3C] hover:text-white"
+            >
+              <Apple className="h-4 w-4" />
+              <span>Install on iPhone</span>
+            </a>
+          ) : null}
           <Link
             href="/shop"
             className="inline-flex items-center gap-2 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-6 py-4 text-xs font-medium uppercase tracking-[0.16em] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)]"
@@ -61,18 +85,18 @@ export default function AppDownloadPage() {
           </div>
 
           <div className="border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-7">
-            <ShieldCheck className="h-6 w-6 text-[var(--accent)]" strokeWidth={1.5} />
-            <h3 className="mt-4 font-display text-lg">Store Owner 1-Tap Login</h3>
+            <Heart className="h-6 w-6 text-[var(--accent)]" strokeWidth={1.5} />
+            <h3 className="mt-4 font-display text-lg">Saved Pieces &amp; Reviews</h3>
             <p className="mt-2 text-sm font-light leading-relaxed text-[var(--text-secondary)]">
-              Convenient 1-tap auto-fill for store owner credentials to instantly unlock real-time pricing and stock adjustments.
+              Save favourites with one tap. Your list follows you between the app and the website.
             </p>
           </div>
 
           <div className="border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-7">
-            <CheckCircle2 className="h-6 w-6 text-[var(--accent)]" strokeWidth={1.5} />
-            <h3 className="mt-4 font-display text-lg">Web Storefront Sync</h3>
+            <Bell className="h-6 w-6 text-[var(--accent)]" strokeWidth={1.5} />
+            <h3 className="mt-4 font-display text-lg">Live Order Tracking</h3>
             <p className="mt-2 text-sm font-light leading-relaxed text-[var(--text-secondary)]">
-              Direct links in product views allow opening any item on the live website with full customer checkout preview.
+              Follow every order from payment to your door, with notifications when it ships and arrives.
             </p>
           </div>
         </div>
@@ -131,6 +155,14 @@ export default function AppDownloadPage() {
           </ol>
 
           <div className="mt-10 border-t border-[var(--border-subtle)] pt-6 text-center">
+            <p className="mb-3 text-sm font-light text-[var(--text-secondary)]">
+              <strong>On iPhone?</strong>{" "}
+              {iosUrl ? (
+                <a href={iosUrl} className="underline hover:text-[var(--text-primary)]">Install the iPhone version</a>
+              ) : (
+                <>The iPhone version is coming soon. Meanwhile, the full store works in Safari.</>
+              )}
+            </p>
             <p className="text-xs text-[var(--text-muted)]">
               Direct Download:{" "}
               <a

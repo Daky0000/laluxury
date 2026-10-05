@@ -846,13 +846,13 @@ class ApiService {
 
       // Safe resilient metadata so the user is NEVER blocked from updating
       return {
-        latestVersion: "1.3.5",
-        versionCode: 17,
+        latestVersion: "1.4.0",
+        versionCode: 18,
         appName: "Noble Enclave",
         downloadUrl: `${DEFAULT_URL}/app`,
         directUrl: `${DEFAULT_URL}/api/app/download`,
         releaseNotes:
-          "Noble Enclave v1.3.5 release: Live MoMo PIN direct authorization with bearer auth integration, refined adaptive app icon with safe-zone breathing room, and stability improvements.",
+          "Noble Enclave v1.4.0: saved pieces, reviews, order tracking with notifications, smarter search and offline support.",
       };
     }
   }
