@@ -5,13 +5,14 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  Image,
   StyleSheet,
   ActivityIndicator,
   Alert,
   Switch,
   Linking,
 } from "react-native";
+import { toast } from "../lib/toast";
+import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
@@ -101,7 +102,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
         onPress: async () => {
           const { status: perm } = await ImagePicker.requestCameraPermissionsAsync();
           if (perm !== "granted") {
-            Alert.alert("Permission needed", "Camera permission is required to snap product photos.");
+            toast("Permission needed", "Camera permission is required to snap product photos.");
             return;
           }
           const result = await ImagePicker.launchCameraAsync({
@@ -161,10 +162,10 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
       await loadProduct();
       setFeedback("Photo added successfully!");
       setTimeout(() => setFeedback(null), 3000);
-      Alert.alert("Success", "Photo uploaded and added to the piece!");
+      toast("Success", "Photo uploaded and added to the piece!");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Upload failed.";
-      Alert.alert("Upload Error", msg);
+      toast("Upload Error", msg);
     } finally {
       setUploadingImage(false);
     }
@@ -173,7 +174,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
   const handleSave = async () => {
     const numPrice = parseFloat(priceGHS);
     if (isNaN(numPrice) || numPrice < 0) {
-      Alert.alert("Invalid Price", "Please enter a valid price in GHS.");
+      toast("Invalid Price", "Please enter a valid price in GHS.");
       return;
     }
 
@@ -227,7 +228,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
       setTimeout(() => setFeedback(null), 3500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to save.";
-      Alert.alert("Save Error", msg);
+      toast("Save Error", msg);
     } finally {
       setSaving(false);
     }
@@ -248,7 +249,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
               Alert.alert("Success", res.message, [{ text: "OK", onPress: onDeleted }]);
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message : "Delete failed.";
-              Alert.alert("Error", msg);
+              toast("Error", msg);
             }
           },
         },
@@ -293,7 +294,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
           onPress={() => {
             const webUrl = `${api.getBaseUrl()}/product/${product.slug}`;
             Linking.openURL(webUrl).catch(() => {
-              Alert.alert("Unable to open browser", `Web address: ${webUrl}`);
+              toast("Unable to open browser", `Web address: ${webUrl}`);
             });
           }}
           activeOpacity={0.8}

@@ -5,11 +5,12 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
-  Image,
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { Image } from "expo-image";
+import { FlashList } from "@shopify/flash-list";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { Product, User } from "../types";
@@ -95,7 +96,7 @@ export function ProductsListScreen({
       >
         <View style={styles.cardImageContainer}>
           {fullImageUrl ? (
-            <Image source={{ uri: fullImageUrl }} style={styles.cardImage} resizeMode="cover" />
+            <Image source={{ uri: fullImageUrl }} style={styles.cardImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />
           ) : (
             <View style={styles.imagePlaceholder}>
               <Text style={styles.imagePlaceholderText}>NO PHOTO</Text>
@@ -246,7 +247,7 @@ export function ProductsListScreen({
           </Text>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={products}
           keyExtractor={(item) => item.id}
           renderItem={renderProductItem}
@@ -266,6 +267,8 @@ export function ProductsListScreen({
         style={styles.fab}
         onPress={onCreateProduct}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel="Add product"
       >
         <Text style={styles.fabIcon}>+</Text>
       </TouchableOpacity>

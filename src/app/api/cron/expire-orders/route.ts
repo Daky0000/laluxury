@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
+import { db } from "@/lib/db";
 import { expireStalePendingOrders } from "@/lib/orders";
 
 export const runtime = "nodejs";
@@ -21,5 +22,9 @@ export async function POST(request: Request) {
   if (!ok) return NextResponse.json({ ok: false }, { status: 401 });
 
   const expired = await expireStalePendingOrders(200);
-  return NextResponse.json({ ok: true, expired });
+  // Housekeeping: app funnel events are kept for 180 days.
+  const pruned = await db.analyticsEvent.deleteMany({
+    where: { createdAt: { lt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } },
+  });
+  return NextResponse.json({ ok: true, expired, prunedEvents: pruned.count });
 }

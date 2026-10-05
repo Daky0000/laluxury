@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { appFunnel } from "@/lib/analytics";
 import Link from "next/link";
 import { TrendingUp, Wallet, ArrowUpRight, Sparkles } from "lucide-react";
 import { ExportLink } from "@/components/admin/export-link";
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic";
 export default async function AdminFinancialAnalyticsPage() {
   await requirePermission("dashboard:view");
 
-  const [orders, variants, tradeApps] = await Promise.all([
+  const [funnel, orders, variants, tradeApps] = await Promise.all([
+    appFunnel(30).catch(() => []),
     db.order.findMany({
       where: { status: { not: "CANCELLED" } },
       include: {
@@ -179,6 +181,33 @@ export default async function AdminFinancialAnalyticsPage() {
           </p>
         </Card>
       </div>
+
+      {/* App funnel (last 30 days) */}
+      <Card className="overflow-hidden">
+        <div className="border-b border-[var(--border-subtle)] px-6 py-4">
+          <h2 className="text-base font-medium">Mobile app funnel (30 days)</h2>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Events from the app; purchases are counted at payment for every channel.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-4 px-6 py-5 sm:grid-cols-5">
+          {funnel.map((step, idx) => {
+            const prev = idx > 0 ? funnel[idx - 1].count : 0;
+            const rate = idx > 0 && prev > 0 ? Math.round((step.count / prev) * 100) : null;
+            return (
+              <div key={step.name}>
+                <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">
+                  {step.name.replace(/_/g, " ")}
+                </p>
+                <p className="text-2xl font-semibold">{step.count.toLocaleString()}</p>
+                {rate !== null ? (
+                  <p className="text-xs text-[var(--text-secondary)]">{rate}% of previous step</p>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </Card>
 
       {/* Section 1: 50% Pre-Order Balances Receivable Ledger */}
       <Card className="overflow-hidden">

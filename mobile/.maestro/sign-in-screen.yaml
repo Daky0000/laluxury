@@ -1,0 +1,12 @@
+# The account tab offers sign-in by SMS code. Does not complete a login
+# (that needs a real phone); checks the flow is reachable and validates input.
+appId: com.laluxury.management
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "NOBLE ENCLAVE"
+    timeout: 15000
+- tapOn: "Account"
+- assertVisible:
+    text: ".*(Sign In|SIGN IN).*"

@@ -53,6 +53,7 @@ model User {
   carts        Cart[]
   reviews      Review[]
   wishlist     WishlistItem[]
+  pushDevices  PushDevice[]
   interactions CustomerInteraction[]
   tags         CustomerTagOnUser[]
   auditLogs    AuditLog[]
@@ -1059,5 +1060,41 @@ model MediaAsset {
   updatedAt DateTime @updatedAt
 
   @@index([folder, createdAt])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Mobile app: push devices and product analytics
+// ---------------------------------------------------------------------------
+
+/// An Expo push token for one installed app. A device belongs to whoever is
+/// signed in on it; signing out detaches it so the next person's alerts do not
+/// reach the last person's phone.
+model PushDevice {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  platform   String
+  appVersion String?
+  isActive   Boolean  @default(true)
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([userId, isActive])
+}
+
+/// Funnel events from the app (product view, add to bag, checkout, purchase).
+/// Kept small on purpose: a name, a few properties, and who did it if known.
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String?
+  sessionId String?
+  platform  String
+  props     Json?
+  createdAt DateTime @default(now())
+
+  @@index([name, createdAt])
   @@index([createdAt])
 }

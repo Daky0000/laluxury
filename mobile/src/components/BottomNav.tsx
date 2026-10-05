@@ -11,7 +11,7 @@ type Props = {
   mode: "STOREFRONT" | "BACKEND";
   activeTab: string;
   cartCount: number;
-  onTabPress: (tab: any) => void;
+  onTabPress: (tab: string) => void;
   onSwitchMode?: () => void;
 };
 
@@ -43,6 +43,9 @@ export function BottomNav({
               key={tab.key}
               style={styles.tabBtn}
               onPress={() => onTabPress(tab.key)}
+              accessibilityRole="tab"
+              accessibilityLabel={tab.label}
+              accessibilityState={{ selected: isActive }}
               activeOpacity={0.7}
             >
               <Feather
@@ -62,6 +65,8 @@ export function BottomNav({
           <TouchableOpacity
             style={styles.switchModeBtn}
             onPress={onSwitchMode}
+            accessibilityRole="button"
+            accessibilityLabel={mode === "BACKEND" ? "Switch to storefront" : "Switch to store backend"}
             activeOpacity={0.7}
           >
             <Feather name="eye" size={18} color="#FFFFFF" />
@@ -89,6 +94,9 @@ export function BottomNav({
             key={tab.key}
             style={styles.tabBtn}
             onPress={() => onTabPress(tab.key)}
+            accessibilityRole="tab"
+            accessibilityLabel={tab.key === "BAG" && cartCount > 0 ? `${tab.label}, ${cartCount} items` : tab.label}
+            accessibilityState={{ selected: isActive }}
             activeOpacity={0.7}
           >
             <View style={styles.iconWrapper}>

@@ -392,3 +392,61 @@ export const GHANA_REGIONS = [
 
 export type GhanaRegion = (typeof GHANA_REGIONS)[number];
 
+
+// --- Wishlist, reviews, search, analytics ------------------------------------
+
+export type WishlistItem = {
+  productId: string;
+  slug: string;
+  title: string;
+  brand: string | null;
+  isPreorder: boolean;
+  imageUrl: string | null;
+  price: number | null;
+  compareAtPrice: number | null;
+  variantId: string | null;
+  savedAt: string;
+};
+
+export type Review = {
+  id: string;
+  authorName: string;
+  rating: number;
+  title: string | null;
+  body: string;
+  isVerifiedPurchase: boolean;
+  createdAt: string;
+};
+
+export type ProductReviews = {
+  ok: boolean;
+  average: number | null;
+  count: number;
+  reviews: Review[];
+  mine: { rating: number; title: string | null; body: string; isApproved: boolean } | null;
+};
+
+export type SearchSuggestion = {
+  id: string;
+  slug: string;
+  title: string;
+  minPrice: number;
+  images: { url: string }[];
+};
+
+export type ProductSort = "featured" | "newest" | "price_asc" | "price_desc";
+
+export type AnalyticsEventName =
+  | "app_open"
+  | "product_view"
+  | "add_to_bag"
+  | "wishlist_add"
+  | "search"
+  | "checkout_start"
+  | "purchase";
+
+export type AnalyticsEventInput = {
+  name: AnalyticsEventName;
+  sessionId?: string;
+  props?: Record<string, string | number | boolean | null>;
+};

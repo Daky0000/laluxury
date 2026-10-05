@@ -4,12 +4,12 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Image,
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
   useWindowDimensions,
 } from "react-native";
+import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
@@ -134,7 +134,9 @@ export function StorefrontHomeScreen({
         <View style={styles.brandContainerLeft}>
           <Image
             source={require("../../assets/emblem-transparent.png")}
-            style={{ width: 28, height: 20, resizeMode: "contain", marginRight: 10 }}
+            contentFit="contain"
+            accessibilityLabel="Noble Enclave"
+            style={{ width: 28, height: 20, marginRight: 10 }}
           />
           <View>
             <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
@@ -245,7 +247,7 @@ export function StorefrontHomeScreen({
                     <Image
                       source={{ uri: bgUrl }}
                       style={styles.categoryCardImage}
-                      resizeMode="cover"
+                      contentFit="cover" cachePolicy="memory-disk" transition={150}
                     />
                   ) : (
                     <View style={styles.categoryFallbackBg}>
@@ -292,7 +294,7 @@ export function StorefrontHomeScreen({
                     <Image
                       source={{ uri: resolveImageUrl(item.images?.[0]?.url)! }}
                       style={styles.productImage}
-                      resizeMode="cover"
+                      contentFit="cover" cachePolicy="memory-disk" transition={150}
                     />
                   ) : (
                     <View style={styles.productImageFallback}>
@@ -355,7 +357,7 @@ export function StorefrontHomeScreen({
                     <Image
                       source={{ uri: resolveImageUrl(item.images?.[0]?.url)! }}
                       style={styles.productImage}
-                      resizeMode="cover"
+                      contentFit="cover" cachePolicy="memory-disk" transition={150}
                     />
                   ) : (
                     <View style={styles.productImageFallback}>

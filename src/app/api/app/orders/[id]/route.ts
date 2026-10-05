@@ -3,13 +3,14 @@ import { db } from "@/lib/db";
 import {
   ApiAuthError,
   apiOptionsResponse,
+  getOptionalBearerUser,
   requireBearerPermission,
-  requireBearerUser,
   withApiAuth,
 } from "@/lib/auth/bearer";
 import { can, isStaff } from "@/lib/auth/rbac";
 import { cancelOrder, logOrderEvent, markOrderPaid, orderInclude, updateOrderStatus } from "@/lib/orders";
 import type { OrderStatus } from "@/generated/prisma";
+import { orderAccessTokenMatches, orderPath } from "@/lib/order-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,9 +40,13 @@ export const GET = withApiAuth(async (
 
   // Staff with order access see any order; customers only their own. A
   // missing and a foreign order answer the same, so IDs cannot be probed.
-  const viewer = await requireBearerUser();
+  // A signed tracking link (?t=) from SMS/email also opens it, for guests.
+  const token = new URL(_request.url).searchParams.get("t");
+  const viewer = await getOptionalBearerUser();
   const allowed =
-    order && ((isStaff(viewer.role) && can(viewer.role, "orders:read")) || order.userId === viewer.id);
+    order &&
+    ((viewer && ((isStaff(viewer.role) && can(viewer.role, "orders:read")) || order.userId === viewer.id)) ||
+      (token ? orderAccessTokenMatches(order.orderNumber, token) : false));
   if (!order || !allowed) {
     return NextResponse.json({ ok: false, error: "Order not found." }, { status: 404 });
   }
@@ -51,6 +56,7 @@ export const GET = withApiAuth(async (
     order: {
       id: order.id,
       orderNumber: order.orderNumber,
+      invoicePath: orderPath(order.orderNumber, "invoice"),
       status: order.status,
       paymentStatus: order.paymentStatus,
       fulfillmentStatus: order.fulfillmentStatus,

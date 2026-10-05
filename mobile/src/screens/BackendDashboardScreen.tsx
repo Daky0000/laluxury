@@ -7,8 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  Image,
 } from "react-native";
+import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
@@ -287,7 +287,7 @@ export function BackendDashboardScreen({
                       <Image
                         source={{ uri: item.imageUrl }}
                         style={styles.lowStockImage}
-                        resizeMode="cover"
+                        contentFit="cover" cachePolicy="memory-disk" transition={150}
                       />
                     ) : (
                       <Feather name="box" size={18} color="#8E9889" />

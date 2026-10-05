@@ -4,14 +4,14 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Image,
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
   TextInput,
-  Alert,
   Modal,
 } from "react-native";
+import { toast } from "../lib/toast";
+import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { colors } from "../theme/colors";
@@ -86,7 +86,7 @@ export function StoreDesignScreen({ user, onBack, onNotify }: Props) {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
+        toast(
           "Permission Required",
           "Please grant camera roll permissions to change the background photo."
         );
@@ -120,7 +120,7 @@ export function StoreDesignScreen({ user, onBack, onNotify }: Props) {
   const handleSave = async () => {
     if (!editingCategory) return;
     if (!name.trim()) {
-      Alert.alert("Name Required", "Please enter a category name.");
+      toast("Name Required", "Please enter a category name.");
       return;
     }
 
@@ -146,7 +146,7 @@ export function StoreDesignScreen({ user, onBack, onNotify }: Props) {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to update category.";
-      Alert.alert("Error", msg);
+      toast("Error", msg);
     } finally {
       setSaving(false);
     }
@@ -156,7 +156,7 @@ export function StoreDesignScreen({ user, onBack, onNotify }: Props) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Back">
           <Feather name="arrow-left" size={22} color={colors.text} />
         </TouchableOpacity>
         <View style={{ alignItems: "center" }}>
@@ -200,7 +200,7 @@ export function StoreDesignScreen({ user, onBack, onNotify }: Props) {
                     <Image
                       source={{ uri: resolveImageUrl(cat.imageUrl)! }}
                       style={styles.catImage}
-                      resizeMode="cover"
+                      contentFit="cover" cachePolicy="memory-disk" transition={150}
                     />
                   ) : (
                     <View style={styles.imageFallback}>
@@ -261,7 +261,7 @@ export function StoreDesignScreen({ user, onBack, onNotify }: Props) {
                     <Image
                       source={{ uri: resolveImageUrl(imageUrl)! }}
                       style={styles.previewImage}
-                      resizeMode="cover"
+                      contentFit="cover" cachePolicy="memory-disk" transition={150}
                     />
                   ) : (
                     <View style={styles.previewFallback}>

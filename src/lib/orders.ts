@@ -1,3 +1,4 @@
+import { pushToStaff } from "@/lib/push";
 import { revalidateProductCatalog } from "@/lib/catalog-revalidate";
 import { db } from "./db";
 import { generateOrderNumber } from "./slug";
@@ -486,6 +487,24 @@ export async function markOrderPaid(args: {
   await postAlert(
     `:tada: New order ${order.orderNumber} - ${formatMoney(args.amount, order.currency)} via ${describeChannel(args.channel ?? null)}.`,
   );
+  // The purchase step of the funnel, recorded where it is certain (here),
+  // whichever app or website path the payment came through.
+  await db.analyticsEvent
+    .create({
+      data: {
+        name: "purchase",
+        userId: order.userId,
+        platform: "server",
+        props: { orderNumber: order.orderNumber, amount: args.amount, currency: order.currency },
+      },
+    })
+    .catch(() => {});
+
+  await pushToStaff("orders:read", {
+    title: `New order ${order.orderNumber}`,
+    body: `${formatMoney(args.amount, order.currency)} via ${describeChannel(args.channel ?? null)}.`,
+    data: { type: "staff_order", orderId: order.id, orderNumber: order.orderNumber },
+  }).catch(() => 0);
 
   // Told last, so nothing about the sale depends on a gateway answering.
   await notifyOrder(order.id, {

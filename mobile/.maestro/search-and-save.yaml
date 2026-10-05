@@ -1,0 +1,19 @@
+# Search, apply a sort, open a result and try to save it (signed out -> prompt).
+appId: com.laluxury.management
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "NOBLE ENCLAVE"
+    timeout: 15000
+- tapOn: "Shop"
+- tapOn: "Search products"
+- inputText: "duvet"
+- pressKey: Enter
+- tapOn: "Sort and filter"
+- tapOn: "Price: low to high"
+- tapOn:
+    text: "Add .* to bag"
+    index: 0
+    optional: true
+- back

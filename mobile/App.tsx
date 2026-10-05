@@ -1,82 +1,31 @@
-import React, { useState, useEffect } from "react";
-import { StyleSheet, View, SafeAreaView, StatusBar, BackHandler, ToastAndroid, Platform } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
 import * as Notifications from "expo-notifications";
-import { StatusBar as ExpoStatusBar } from "expo-status-bar";
-import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors } from "./src/theme/colors";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
+import { QueryClient, QueryClientProvider, focusManager, onlineManager } from "@tanstack/react-query";
+import NetInfo from "@react-native-community/netinfo";
+
 import { api } from "./src/services/api";
-import { User, Product, Variant, CartItem, ServerCartItem } from "./src/types";
-
-// Storefront Screens
-
-import { StorefrontHomeScreen } from "./src/screens/StorefrontHomeScreen";
-import { StorefrontShopScreen } from "./src/screens/StorefrontShopScreen";
-import { StorefrontCartScreen } from "./src/screens/StorefrontCartScreen";
-import { StorefrontProductDetailScreen } from "./src/screens/StorefrontProductDetailScreen";
-import { AccountScreen } from "./src/screens/AccountScreen";
-
-// Store Backend (Owner/Staff) Screens
-import { BackendDashboardScreen } from "./src/screens/BackendDashboardScreen";
-import { ProductsListScreen } from "./src/screens/ProductsListScreen";
-import { ProductDetailScreen } from "./src/screens/ProductDetailScreen";
-import { CreateProductScreen } from "./src/screens/CreateProductScreen";
-import { SettingsScreen } from "./src/screens/SettingsScreen";
-import { StoreDesignScreen } from "./src/screens/StoreDesignScreen";
-import { OrdersScreen } from "./src/screens/OrdersScreen";
-import { DeliverySettingsScreen } from "./src/screens/DeliverySettingsScreen";
-import { isNewerVersion } from "./src/utils/version";
-
-// Components
-import { BottomNav, StorefrontTab, BackendTab } from "./src/components/BottomNav";
+import { AppProvider, useApp } from "./src/state/AppContext";
+import { RootNavigator } from "./src/navigation/RootNavigator";
+import { linking } from "./src/navigation/linking";
+import type { RootStackParamList } from "./src/navigation/types";
+import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { SplashScreen } from "./src/components/SplashScreen";
 import { OrderConfirmationModal } from "./src/components/OrderConfirmationModal";
-import { PopNotification, PopNotificationData } from "./src/components/PopNotification";
+import { PopNotification } from "./src/components/PopNotification";
 import { AppUpdateModal, AppUpdateInfo } from "./src/components/AppUpdateModal";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
+import { isNewerVersion } from "./src/utils/version";
+import { initTelemetry, Sentry } from "./src/lib/telemetry";
+import { setupNotificationChannel, type PushPayload } from "./src/lib/push";
+import { applyOtaUpdate, fetchOtaUpdate } from "./src/lib/updates";
+import { flushEvents, track } from "./src/lib/analytics";
 import appJson from "./app.json";
 
-// Helper to convert server cart line items into mobile CartItem format
-function serverCartToLocalCart(items: ServerCartItem[]): CartItem[] {
-  return items.map((item) => ({
-    product: {
-      id: item.variant.productId,
-      title: item.variant.product.title,
-      slug: item.variant.product.slug,
-      status: "ACTIVE" as const,
-      minPrice: item.variant.price,
-      maxPrice: item.variant.price,
-      compareAtPrice: item.variant.compareAtPrice,
-      brand: null,
-      material: null,
-      isFeatured: false,
-      isPreorder: Boolean(item.variant.product.isPreorder),
-      tags: [],
-      totalStock: item.availableStock ?? 10,
-      variantCount: 1,
-      imageCount: item.variant.product.imageUrl ? 1 : 0,
-      images: item.variant.product.imageUrl
-        ? [{ id: "img-1", url: item.variant.product.imageUrl, alt: null, position: 0 }]
-        : [],
-      categories: [],
-      collections: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    variant: {
-      id: item.variant.id,
-      title: item.variant.title,
-      sku: item.variant.sku,
-      price: item.variant.price,
-      compareAtPrice: item.variant.compareAtPrice,
-      costPrice: null,
-      isActive: true,
-    },
-    quantity: item.quantity,
-  }));
-}
+initTelemetry();
 
-// Configure phone notification handler for system tray
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -87,859 +36,154 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const CURRENT_APP_VERSION = appJson.expo.version;
+// React Query follows the phone's connectivity and app focus.
+onlineManager.setEventListener((setOnline) =>
+  NetInfo.addEventListener((state) => setOnline(state.isConnected !== false)),
+);
+AppState.addEventListener("change", (status) => focusManager.setFocused(status === "active"));
 
-export default function App() {
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 2, staleTime: 30_000 } },
+});
+
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
+const CURRENT_APP_VERSION = appJson.expo.version;
+const DISMISSED_UPDATE_KEY = "@nobleenclave_dismissed_update_v";
+
+function App() {
   return (
-    <SafeAreaProvider>
-      <MainApp />
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <SafeAreaProvider>
+          <AppProvider>
+            <Shell />
+          </AppProvider>
+        </SafeAreaProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
-function MainApp() {
-  const insets = useSafeAreaInsets();
-  const [user, setUser] = useState<User | null>(null);
-  const [mode, setMode] = useState<"STOREFRONT" | "BACKEND">("STOREFRONT");
-  const [storefrontTab, setStorefrontTab] = useState<StorefrontTab>("HOME");
-  const [backendTab, setBackendTab] = useState<BackendTab>("DASHBOARD");
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
-  const [shopFilter, setShopFilter] = useState<string | undefined>(undefined);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [confirmedOrderNumber, setConfirmedOrderNumber] = useState<string | null>(null);
-  const [confirmedOrderPhone, setConfirmedOrderPhone] = useState<string | null>(null);
-  const [confirmedOrderEmail, setConfirmedOrderEmail] = useState<string | null>(null);
-  const [initializing, setInitializing] = useState(true);
-  const [notification, setNotification] = useState<PopNotificationData | null>(null);
+export default Sentry.wrap(App);
+
+/** Opens the screen a push notification is about. */
+function openFromPush(data: PushPayload | undefined) {
+  if (!data || !navigationRef.isReady()) return;
+  if (data.type === "order" && typeof data.orderNumber === "string") {
+    navigationRef.navigate("OrderTracking", { order: data.orderNumber });
+  } else if (data.type === "staff_order") {
+    navigationRef.navigate("Backend", { screen: "ORDERS" });
+  }
+}
+
+function Shell() {
+  const { ready, notification, dismissNotification, confirmedOrder, setConfirmedOrder } = useApp();
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [showStoreDesign, setShowStoreDesign] = useState(false);
-  const [showDeliverySettings, setShowDeliverySettings] = useState(false);
+  const [otaReady, setOtaReady] = useState(false);
+  const pendingPush = useRef<PushPayload | undefined>(undefined);
 
-  const notify = async (data: PopNotificationData) => {
-    setNotification(data);
-    try {
-      const { status } = await Notifications.getPermissionsAsync();
-      if (status === "granted") {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: data.title || "Noble Enclave",
-            body: data.message,
-            data: data,
-            color: "#7A2E3C",
-          },
-          trigger: null,
-        });
-      }
-    } catch {}
-  };
-
-  // Configure Android notification channel & interaction listeners
+  // Notification channel, taps on pushes, analytics flush on background.
   useEffect(() => {
-    async function configureNotifications() {
-      if (Platform.OS === "android") {
-        await Notifications.setNotificationChannelAsync("noble_updates", {
-          name: "Noble Enclave Updates",
-          importance: Notifications.AndroidImportance.HIGH,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: "#7A2E3C",
-          sound: "default",
-        });
-      }
-    }
-    configureNotifications().catch(() => {});
-
-    const responseSub = Notifications.addNotificationResponseReceivedListener(() => {
-      setShowUpdateModal(true);
+    setupNotificationChannel().catch(() => {});
+    const tapSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as PushPayload | undefined;
+      if (navigationRef.isReady()) openFromPush(data);
+      else pendingPush.current = data;
     });
-
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (response) pendingPush.current = response.notification.request.content.data as PushPayload;
+      })
+      .catch(() => {});
+    const appSub = AppState.addEventListener("change", (state) => {
+      if (state === "background") flushEvents().catch(() => {});
+      if (state === "active") fetchOtaUpdate().then(setOtaReady).catch(() => {});
+    });
     return () => {
-      responseSub.remove();
+      tapSub.remove();
+      appSub.remove();
     };
   }, []);
 
-  // Check for app updates on launch and prompt user
+  // OTA update first (silent JS fixes); fall back to the APK prompt for native releases.
   useEffect(() => {
-    async function checkAppUpdates() {
+    fetchOtaUpdate().then(setOtaReady).catch(() => {});
+    (async () => {
       try {
         const info = await api.checkAppVersion();
-        if (info && info.latestVersion) {
-          setUpdateInfo(info);
-          if (isNewerVersion(CURRENT_APP_VERSION, info.latestVersion)) {
-            const dismissed = await AsyncStorage.getItem("@nobleenclave_dismissed_update_v");
-            if (dismissed !== info.latestVersion) {
-              setShowUpdateModal(true);
-
-              // Post native push notification to phone notification area
-              try {
-                const { status: existingStatus } = await Notifications.getPermissionsAsync();
-                let finalStatus = existingStatus;
-                if (existingStatus !== "granted") {
-                  const { status } = await Notifications.requestPermissionsAsync();
-                  finalStatus = status;
-                }
-                if (finalStatus === "granted") {
-                  await Notifications.scheduleNotificationAsync({
-                    content: {
-                      title: "Noble Enclave Update Available",
-                      body: `Version ${info.latestVersion} is ready to install with official brand assets & improvements.`,
-                      data: { version: info.latestVersion, url: info.downloadUrl },
-                      color: "#7A2E3C",
-                    },
-                    trigger: null,
-                  });
-                }
-              } catch {
-                // Non-blocking notification fallback
-              }
-            }
-          }
-        }
+        if (!info?.latestVersion) return;
+        setUpdateInfo(info);
+        if (!isNewerVersion(CURRENT_APP_VERSION, info.latestVersion)) return;
+        const dismissed = await AsyncStorage.getItem(DISMISSED_UPDATE_KEY);
+        if (dismissed !== info.latestVersion) setShowUpdateModal(true);
       } catch {
-        // Non-blocking fallback when offline
+        // Offline: try again next launch.
       }
-    }
-    checkAppUpdates();
+    })();
   }, []);
 
-  const handleDismissUpdate = async () => {
+  const dismissUpdate = async () => {
     setShowUpdateModal(false);
-    if (updateInfo) {
-      try {
-        await AsyncStorage.setItem("@nobleenclave_dismissed_update_v", updateInfo.latestVersion);
-      } catch {
-        // ignore
-      }
-    }
+    if (updateInfo) await AsyncStorage.setItem(DISMISSED_UPDATE_KEY, updateInfo.latestVersion).catch(() => {});
   };
 
-  // Initialize Auth & Cart
-  useEffect(() => {
-    async function init() {
-      try {
-        const [{ token, user: cachedUser }, savedCart] = await Promise.all([
-          api.init(),
-          api.getSavedCart(),
-        ]);
-
-        if (savedCart && savedCart.length > 0) {
-          setCart(savedCart);
-        }
-
-        if (token && cachedUser) {
-          setUser(cachedUser);
-          const isOwnerUser = ["OWNER", "ADMIN", "MANAGER", "STAFF"].includes(
-            cachedUser.role,
-          );
-          if (isOwnerUser) {
-            setMode("BACKEND");
-            setBackendTab("DASHBOARD");
-          }
-
-          api
-            .getMe()
-            .then((res) => {
-              setUser(res.user);
-            })
-            .catch(() => {
-              // Retain cached session
-            });
-
-          // Token means this is an existing signed-in session. Pull the
-          // authoritative server cart. Re-merging the cached copy on every
-          // launch used to duplicate quantities repeatedly.
-          api
-            .getServerCart()
-            .then((res) => {
-              if (res.ok && res.cart?.items) {
-                const synced = serverCartToLocalCart(res.cart.items);
-                setCart(synced);
-                api.saveCart(synced);
-              }
-            })
-            .catch(() => null);
-        }
-      } catch {
-        setUser(null);
-      } finally {
-
-        // Keep splash screen visible for a moment for smooth branded intro
-        setTimeout(() => {
-          setInitializing(false);
-        }, 1200);
-      }
-    }
-    init();
-  }, []);
-
-  // Handle Android Hardware Back Button navigation
-  useEffect(() => {
-    let lastBackPressTime = 0;
-
-    const onHardwareBackPress = () => {
-      // 1. If viewing product detail, go back to previous view
-      if (selectedProductId) {
-        setSelectedProductId(null);
-        return true;
-      }
-
-      // If viewing store design, return to dashboard
-      if (showStoreDesign) {
-        setShowStoreDesign(false);
-        return true;
-      }
-
-      // 2. If order confirmation modal is open, close it
-      if (confirmedOrderNumber) {
-        setConfirmedOrderNumber(null);
-        setConfirmedOrderPhone(null);
-        setConfirmedOrderEmail(null);
-        setStorefrontTab("HOME");
-        return true;
-      }
-
-      // 3. Storefront mode navigation
-      if (mode === "STOREFRONT") {
-        if (storefrontTab !== "HOME") {
-          // If on BAG, SHOP, or ACCOUNT, return to HOME
-          setStorefrontTab("HOME");
-          return true;
-        }
-
-        // On HOME: double-press back to exit gracefully
-        const now = Date.now();
-        if (now - lastBackPressTime < 2000) {
-          BackHandler.exitApp();
-          return false;
-        }
-        lastBackPressTime = now;
-        if (ToastAndroid?.show) {
-          ToastAndroid.show("Press back again to exit", ToastAndroid.SHORT);
-        }
-        return true;
-      }
-
-      // 4. Backend mode navigation
-      if (mode === "BACKEND") {
-        if (backendTab !== "DASHBOARD") {
-          setBackendTab("DASHBOARD");
-          return true;
-        }
-
-        // If on DASHBOARD, return to Storefront
-        setMode("STOREFRONT");
-        setStorefrontTab("HOME");
-        return true;
-      }
-
-      return false;
-    };
-
-    const subscription = BackHandler.addEventListener(
-      "hardwareBackPress",
-      onHardwareBackPress,
-    );
-
-    return () => subscription.remove();
-  }, [selectedProductId, showStoreDesign, confirmedOrderNumber, mode, storefrontTab, backendTab]);
-
-  // Sync Cart with Storage
-  const updateCartState = (newCart: CartItem[]) => {
-    setCart(newCart);
-    api.saveCart(newCart);
-  };
-
-  const applyServerCart = (items: ServerCartItem[]) => {
-    const synced = serverCartToLocalCart(items);
-    setCart(synced);
-    api.saveCart(synced);
-  };
-
-  // Cart operations
-  const handleAddToCart = (product: Product, variant?: Variant, qty: number = 1) => {
-    const activeVariant =
-      variant ||
-      (product.variants && product.variants.length > 0
-        ? product.variants[0]
-        : {
-            id: `${product.id}-default`,
-            title: "Default",
-            sku: product.slug,
-            price: product.minPrice,
-            compareAtPrice: product.compareAtPrice,
-            costPrice: null,
-            isActive: true,
-          });
-
-    const existingIndex = cart.findIndex(
-      (item) => item.variant.id === activeVariant.id,
-    );
-
-    let nextCart: CartItem[];
-    if (existingIndex > -1) {
-      nextCart = [...cart];
-      nextCart[existingIndex] = {
-        ...nextCart[existingIndex],
-        quantity: nextCart[existingIndex].quantity + qty,
-      };
-    } else {
-      nextCart = [...cart, { product, variant: activeVariant, quantity: qty }];
-    }
-    updateCartState(nextCart);
-
-    if (user && !activeVariant.id.endsWith("-default")) {
-      api
-        .addToServerCart(activeVariant.id, qty)
-        .then((res) => applyServerCart(res.cart.items))
-        .catch(() => api.getServerCart().then((res) => applyServerCart(res.cart.items)).catch(() => null));
-    }
-
-    // If product had no variants in memory, resolve real variant from API to avoid -default IDs
-    if (!variant && (!product.variants || product.variants.length === 0)) {
-      api
-        .getProduct(product.id)
-        .then((res) => {
-          if (res?.product?.variants && res.product.variants.length > 0) {
-            const realVar = res.product.variants[0];
-            setCart((curr) => {
-              const updated = curr.map((c) =>
-                c.variant.id === `${product.id}-default` ? { ...c, variant: realVar } : c,
-              );
-              api.saveCart(updated);
-              return updated;
-            });
-            if (user) {
-              api.addToServerCart(realVar.id, qty).catch(() => null);
-            }
-          }
-        })
-        .catch(() => null);
-    }
-
-    notify({
-      title: "Added to Bag",
-      message: `${qty}× ${product.title} added to your bag.`,
-      type: "success",
-      icon: "shopping-bag",
-    });
-  };
-
-  const handleBulkAddToCart = (
-    items: { product: Product; variant: Variant; quantity: number }[],
-  ) => {
-    if (!items || items.length === 0) return;
-    let nextCart = [...cart];
-
-    for (const { product, variant, quantity } of items) {
-      if (quantity <= 0) continue;
-      const existingIndex = nextCart.findIndex((i) => i.variant.id === variant.id);
-      if (existingIndex > -1) {
-        nextCart[existingIndex] = {
-          ...nextCart[existingIndex],
-          quantity: nextCart[existingIndex].quantity + quantity,
-        };
-      } else {
-        nextCart.push({ product, variant, quantity });
-      }
-
-    }
-
-    updateCartState(nextCart);
-
-    if (user) {
-      Promise.all(
-        items
-          .filter(({ variant, quantity }) => quantity > 0 && !variant.id.endsWith("-default"))
-          .map(({ variant, quantity }) => api.addToServerCart(variant.id, quantity)),
-      )
-        .then(() => api.getServerCart())
-        .then((res) => applyServerCart(res.cart.items))
-        .catch(() => api.getServerCart().then((res) => applyServerCart(res.cart.items)).catch(() => null));
-    }
-
-    const totalAdded = items.reduce((sum, i) => sum + i.quantity, 0);
-    notify({
-      title: "Bulk Added to Bag",
-      message: `${totalAdded} items added to your bag.`,
-      type: "success",
-      icon: "shopping-bag",
-    });
-  };
-
-  const handleUpdateCartQty = (variantId: string, delta: number) => {
-    let nextQty = 0;
-    const nextCart = cart
-      .map((item) => {
-        if (item.variant.id === variantId) {
-          nextQty = item.quantity + delta;
-          return nextQty > 0 ? { ...item, quantity: nextQty } : null;
-        }
-        return item;
-      })
-      .filter(Boolean) as CartItem[];
-    updateCartState(nextCart);
-
-    if (user) {
-      api
-        .updateServerCartItem(variantId, nextQty)
-        .then((res) => applyServerCart(res.cart.items))
-        .catch(() => api.getServerCart().then((res) => applyServerCart(res.cart.items)).catch(() => null));
-    }
-  };
-
-  const handleRemoveCartItem = (variantId: string) => {
-    const itemToRemove = cart.find((i) => i.variant.id === variantId);
-    const nextCart = cart.filter((item) => item.variant.id !== variantId);
-    updateCartState(nextCart);
-
-    if (user) {
-      api
-        .removeServerCartItem(variantId)
-        .then((res) => applyServerCart(res.cart.items))
-        .catch(() => api.getServerCart().then((res) => applyServerCart(res.cart.items)).catch(() => null));
-    }
-
-    notify({
-      title: "Item Removed",
-      message: itemToRemove ? `${itemToRemove.product.title} removed from bag.` : "Item removed from bag.",
-      type: "info",
-      icon: "trash-2",
-    });
-  };
-
-  const handleClearCart = () => {
-    updateCartState([]);
-    api.clearLocalCart().catch(() => {});
-
-    if (user) {
-      api
-        .removeServerCartItem()
-        .then(() => updateCartState([]))
-        .catch(() => null);
-    }
-
-    notify({
-      title: "Bag Cleared",
-      message: "All items have been removed.",
-      type: "info",
-      icon: "trash-2",
-    });
-  };
-
-  // Auth Handling
-  const handleLoginSuccess = (signedInUser: User) => {
-    setUser(signedInUser);
-    const isOwnerUser = ["OWNER", "ADMIN", "MANAGER", "STAFF"].includes(
-      signedInUser.role,
-    );
-
-    // Merge local guest cart or pull active server cart upon login
-    if (cart.length > 0) {
-      api
-        .mergeGuestCartWithServer(
-          cart.map((i) => ({ variantId: i.variant.id, quantity: i.quantity })),
-        )
-        .then((res) => {
-          if (res.ok && res.cart?.items) {
-            const synced = serverCartToLocalCart(res.cart.items);
-            setCart(synced);
-            api.saveCart(synced);
-          }
-        })
-        .catch(() => null);
-    } else {
-      api
-        .getServerCart()
-        .then((res) => {
-          if (res.ok && res.cart?.items && res.cart.items.length > 0) {
-            const synced = serverCartToLocalCart(res.cart.items);
-            setCart(synced);
-            api.saveCart(synced);
-          }
-        })
-        .catch(() => null);
-    }
-
-    if (isOwnerUser) {
-      setMode("BACKEND");
-      setBackendTab("DASHBOARD");
-      notify({
-        title: "Store Backend Active",
-        message: `Welcome ${signedInUser.firstName || "Owner"}. Catalog & orders ready.`,
-        type: "success",
-        icon: "shield",
-      });
-    } else {
-      setMode("STOREFRONT");
-      setStorefrontTab("ACCOUNT");
-      notify({
-        title: "Welcome Back",
-        message: `Signed in as ${signedInUser.firstName || "Customer"}.`,
-        type: "success",
-        icon: "user-check",
-      });
-    }
-  };
-
-
-  const handleLogout = async () => {
-    await api.clearSession();
-    // The bag belongs to the account (it stays on the server); the next
-    // person on this device starts with an empty one.
-    await api.clearLocalCart();
-    setCart([]);
-    setUser(null);
-    setSelectedProductId(null);
-    setMode("STOREFRONT");
-    setStorefrontTab("HOME");
-    notify({
-      title: "Signed Out",
-      message: "You have been safely signed out.",
-      type: "info",
-      icon: "log-out",
-    });
-  };
-
-  const isOwnerStaff =
-    user && ["OWNER", "ADMIN", "MANAGER", "STAFF"].includes(user.role);
-
-  // Splash Screen on cold start
-  if (initializing) {
-    return <SplashScreen />;
-  }
-
-  // Active Product Detail View in Storefront (Customer view)
-  if (mode === "STOREFRONT" && selectedProductId) {
-    return (
-      <SafeAreaView
-        style={[
-          styles.container,
-          { paddingTop: Math.max(insets.top, StatusBar.currentHeight || 0) },
-        ]}
-      >
-        <ExpoStatusBar style="dark" />
-        <StorefrontProductDetailScreen
-          productId={selectedProductId}
-          cartCount={cart.length}
-          onBack={() => setSelectedProductId(null)}
-          onNavigateToBag={() => {
-            setSelectedProductId(null);
-            setStorefrontTab("BAG");
-          }}
-          onSelectProduct={(id) => setSelectedProductId(id)}
-          onAddToCart={(product, variant, qty) => {
-            handleAddToCart(product, variant, qty);
-          }}
-          onBulkAddToCart={(items) => {
-            handleBulkAddToCart(items);
-          }}
-          onNotify={notify}
-        />
-        <PopNotification
-          notification={notification}
-          onDismiss={() => setNotification(null)}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // Active Product Detail Editor in Backend (Staff/Owner editor view)
-  if (mode === "BACKEND" && selectedProductId) {
-    return (
-      <SafeAreaView
-        style={[
-          styles.containerDark,
-          { paddingTop: Math.max(insets.top, StatusBar.currentHeight || 0) },
-        ]}
-      >
-        <ExpoStatusBar style="light" />
-        <ProductDetailScreen
-          productId={selectedProductId}
-          onBack={() => setSelectedProductId(null)}
-          onDeleted={() => setSelectedProductId(null)}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // Active Store Design View in Backend
-  if (mode === "BACKEND" && showStoreDesign && user) {
-    return (
-      <SafeAreaView
-        style={[
-          styles.containerDark,
-          { paddingTop: Math.max(insets.top, StatusBar.currentHeight || 0) },
-        ]}
-      >
-        <ExpoStatusBar style="light" />
-        <StoreDesignScreen
-          user={user}
-          onBack={() => setShowStoreDesign(false)}
-          onNotify={notify}
-        />
-        <PopNotification
-          notification={notification}
-          onDismiss={() => setNotification(null)}
-        />
-      </SafeAreaView>
-    );
-  }
+  if (!ready) return <SplashScreen />;
 
   return (
-    <SafeAreaView
-      style={[
-        mode === "BACKEND" ? styles.containerDark : styles.container,
-        { paddingTop: Math.max(insets.top, StatusBar.currentHeight || 0) },
-      ]}
-    >
-      <ExpoStatusBar style={mode === "BACKEND" ? "light" : "dark"} />
-
-      <View style={[styles.screenContent, { paddingBottom: 64 + Math.max(insets.bottom, 12) }]}>
-        {/* ================================================================ */}
-        {/* STOREFRONT MODE (E-Commerce Customer Experience)                  */}
-        {/* ================================================================ */}
-        {mode === "STOREFRONT" && (
-          <>
-            {storefrontTab === "HOME" && (
-              <StorefrontHomeScreen
-                user={user}
-                cartCount={cart.length}
-                onNavigateToShop={(filter) => {
-                  setShopFilter(filter);
-                  setStorefrontTab("SHOP");
-                }}
-                onNavigateToBag={() => setStorefrontTab("BAG")}
-                onNavigateToAccount={() => setStorefrontTab("ACCOUNT")}
-                onSelectProduct={(id) => setSelectedProductId(id)}
-                onAddToCart={(prod) => handleAddToCart(prod)}
-                onSwitchToBackend={
-                  isOwnerStaff
-                    ? () => {
-                        setMode("BACKEND");
-                        setBackendTab("DASHBOARD");
-                        notify({
-                          title: "Store Backend Active",
-                          message: "Switched to owner management mode.",
-                          type: "info",
-                          icon: "shield",
-                        });
-                      }
-                    : undefined
-                }
-              />
-            )}
-
-            {storefrontTab === "SHOP" && (
-              <StorefrontShopScreen
-                initialFilter={shopFilter}
-                cartCount={cart.length}
-                onBack={() => setStorefrontTab("HOME")}
-                onNavigateToBag={() => setStorefrontTab("BAG")}
-                onSelectProduct={(id) => setSelectedProductId(id)}
-                onAddToCart={(prod) => handleAddToCart(prod)}
-              />
-            )}
-
-            {storefrontTab === "BAG" && (
-              <StorefrontCartScreen
-                cart={cart}
-                user={user}
-                onBack={() => setStorefrontTab("SHOP")}
-                onUpdateQuantity={handleUpdateCartQty}
-                onRemoveItem={handleRemoveCartItem}
-                onClearCart={handleClearCart}
-                onOrderSuccess={(orderNum, phone, email) => {
-                  handleClearCart();
-                  setConfirmedOrderNumber(orderNum);
-                  setConfirmedOrderPhone(phone || null);
-                  setConfirmedOrderEmail(email || null);
-                }}
-                onBrowseProducts={() => setStorefrontTab("SHOP")}
-                onNotify={notify}
-                onAuthSuccess={(loggedUser) => {
-                  setUser(loggedUser);
-                  notify({
-                    title: "Account Linked",
-                    message: `Welcome ${loggedUser.firstName || "Customer"}! Account created and linked to ${loggedUser.phone || "your phone"}.`,
-                    type: "success",
-                    icon: "user-check",
-                  });
-                }}
-              />
-            )}
-
-            {storefrontTab === "ACCOUNT" && (
-              <AccountScreen
-                user={user}
-                onLoginSuccess={handleLoginSuccess}
-                onLogout={handleLogout}
-                onOpenBackend={() => {
-                  setMode("BACKEND");
-                  setBackendTab("DASHBOARD");
-                  notify({
-                    title: "Store Backend",
-                    message: "Switched to owner management mode.",
-                    type: "info",
-                    icon: "shield",
-                  });
-                }}
-              />
-            )}
-          </>
-        )}
-
-        {/* ================================================================ */}
-        {/* STORE BACKEND MODE (Owner / Management Experience)                */}
-        {/* ================================================================ */}
-        {mode === "BACKEND" && user && (
-          <>
-            {showDeliverySettings ? (
-              <DeliverySettingsScreen
-                onBack={() => setShowDeliverySettings(false)}
-                onNotify={notify}
-              />
-            ) : (
-              <>
-                {backendTab === "DASHBOARD" && (
-                  <BackendDashboardScreen
-                    user={user}
-                    onNavigateToProducts={() => setBackendTab("PRODUCTS")}
-                    onNavigateToCreate={() => setBackendTab("ADD")}
-                    onNavigateToOrders={() => setBackendTab("ORDERS")}
-                    onNavigateToDeliverySettings={() => setShowDeliverySettings(true)}
-                    onNavigateToStoreDesign={() => setShowStoreDesign(true)}
-                    onSelectProduct={(id) => setSelectedProductId(id)}
-                    onSwitchToStorefront={() => {
-                      setMode("STOREFRONT");
-                      setStorefrontTab("HOME");
-                      notify({
-                        title: "Storefront View",
-                        message: "Viewing catalog as a customer.",
-                        type: "info",
-                        icon: "shopping-bag",
-                      });
-                    }}
-                    onLogout={handleLogout}
-                    onNotify={notify}
-                  />
-                )}
-
-                {backendTab === "ORDERS" && (
-                  <OrdersScreen user={user} onNotify={notify} />
-                )}
-
-                {backendTab === "PRODUCTS" && (
-                  <ProductsListScreen
-                    user={user}
-                    onSelectProduct={(id) => setSelectedProductId(id)}
-                    onCreateProduct={() => setBackendTab("ADD")}
-                    onLogout={handleLogout}
-                  />
-                )}
-
-                {backendTab === "ADD" && (
-                  <CreateProductScreen
-                    onBack={() => setBackendTab("PRODUCTS")}
-                    onCreated={(newId) => {
-                      setSelectedProductId(newId);
-                    }}
-                  />
-                )}
-
-                {backendTab === "SETTINGS" && (
-                  <SettingsScreen
-                    user={user}
-                    onLogout={handleLogout}
-                    onNavigateToDeliverySettings={() => setShowDeliverySettings(true)}
-                  />
-                )}
-              </>
-            )}
-          </>
-        )}
-      </View>
-
-      {/* Persistent Mode-Aware Bottom Nav Tab Bar */}
-      <BottomNav
-        mode={mode}
-        activeTab={mode === "BACKEND" ? backendTab : storefrontTab}
-        cartCount={cart.length}
-        onTabPress={(tab) => {
-          if (mode === "BACKEND") {
-            setBackendTab(tab);
-          } else {
-            setStorefrontTab(tab);
+    <>
+      <NavigationContainer
+        ref={navigationRef}
+        linking={linking}
+        onReady={() => {
+          if (pendingPush.current) {
+            openFromPush(pendingPush.current);
+            pendingPush.current = undefined;
           }
         }}
-        onSwitchMode={
-          isOwnerStaff
-            ? () => {
-                if (mode === "BACKEND") {
-                  setMode("STOREFRONT");
-                  setStorefrontTab("HOME");
-                  notify({
-                    title: "Storefront View",
-                    message: "Viewing store as customer.",
-                    type: "info",
-                    icon: "shopping-bag",
-                  });
-                } else {
-                  setMode("BACKEND");
-                  setBackendTab("DASHBOARD");
-                  notify({
-                    title: "Store Backend Active",
-                    message: "Management mode enabled.",
-                    type: "info",
-                    icon: "shield",
-                  });
-                }
-              }
-            : undefined
-        }
-      />
-
-      {/* Order Confirmation Receipt Modal */}
-      <OrderConfirmationModal
-        visible={Boolean(confirmedOrderNumber)}
-        orderNumber={confirmedOrderNumber}
-        customerPhone={confirmedOrderPhone}
-        customerEmail={confirmedOrderEmail}
-        onClose={() => {
-          setConfirmedOrderNumber(null);
-          setConfirmedOrderPhone(null);
-          setConfirmedOrderEmail(null);
-          setStorefrontTab("HOME");
+        onStateChange={() => {
+          const route = navigationRef.getCurrentRoute();
+          if (route?.name === "ProductDetail") {
+            track("product_view", { productId: (route.params as { id?: string } | undefined)?.id ?? null });
+          }
         }}
-      />
+      >
+        <RootNavigator />
+        <OrderConfirmationModal
+          visible={Boolean(confirmedOrder)}
+          orderNumber={confirmedOrder?.orderNumber ?? null}
+          customerPhone={confirmedOrder?.phone ?? null}
+          customerEmail={confirmedOrder?.email ?? null}
+          onClose={() => {
+            const order = confirmedOrder?.orderNumber;
+            setConfirmedOrder(null);
+            if (order && navigationRef.isReady()) navigationRef.navigate("OrderTracking", { order });
+          }}
+        />
+      </NavigationContainer>
 
-      {/* In-App Update Prompt Modal */}
       <AppUpdateModal
         visible={showUpdateModal}
         updateInfo={updateInfo}
         currentVersion={CURRENT_APP_VERSION}
-        onDismiss={handleDismissUpdate}
+        onDismiss={dismissUpdate}
       />
 
-      {/* Floating Pop Notifications */}
-      <PopNotification
-        notification={notification}
-        onDismiss={() => setNotification(null)}
-      />
-    </SafeAreaView>
+      <PopNotification notification={notification} onDismiss={dismissNotification} />
+
+      {otaReady ? (
+        <PopNotification
+          notification={{
+            title: "Update ready",
+            message: "A fresh version of the app is ready. Tap to restart.",
+            type: "info",
+            icon: "refresh-cw",
+            duration: 15000,
+          }}
+          onDismiss={() => setOtaReady(false)}
+          onPress={applyOtaUpdate}
+        />
+      ) : null}
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  containerDark: {
-    flex: 1,
-    backgroundColor: colors.darkBg,
-  },
-  screenContent: {
-    flex: 1,
-    paddingBottom: 64, // Space for BottomNav
-  },
-});

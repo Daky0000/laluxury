@@ -1,0 +1,20 @@
+# Browse the shop, open a product, add it to the bag and see it there.
+# Run on a device/emulator with the app installed:  maestro test .maestro
+appId: com.laluxury.management
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "NOBLE ENCLAVE"
+    timeout: 15000
+- tapOn: "Shop"
+- tapOn:
+    id: "Search products"
+    optional: true
+- assertVisible: "ALL PRODUCTS"
+- tapOn:
+    text: "Add to Cart"
+    index: 0
+- assertVisible: "Added to Bag"
+- tapOn: "Bag"
+- assertNotVisible: "Your bag is empty"

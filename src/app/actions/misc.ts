@@ -1,5 +1,6 @@
 "use server";
 
+import { toggleWishlist } from "@/lib/wishlist";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
@@ -81,18 +82,15 @@ export async function toggleWishlistAction(
   const user = await currentUser();
   if (!user) return { ok: false, saved: false, message: "Sign in to save pieces." };
 
-  const existing = await db.wishlistItem.findUnique({
-    where: { userId_productId: { userId: user.id, productId } },
-  });
-
-  if (existing) {
-    await db.wishlistItem.delete({ where: { id: existing.id } });
-  } else {
-    await db.wishlistItem.create({ data: { userId: user.id, productId } });
+  let saved: boolean;
+  try {
+    ({ saved } = await toggleWishlist(user.id, productId));
+  } catch (error) {
+    return { ok: false, saved: false, message: error instanceof Error ? error.message : "Could not save." };
   }
 
   revalidatePath("/account");
-  return { ok: true, saved: !existing };
+  return { ok: true, saved };
 }
 
 const contactSchema = z.object({

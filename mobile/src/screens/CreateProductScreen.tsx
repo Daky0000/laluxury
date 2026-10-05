@@ -5,12 +5,13 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  Image,
   StyleSheet,
   ActivityIndicator,
   Alert,
   Switch,
 } from "react-native";
+import { toast } from "../lib/toast";
+import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
@@ -56,7 +57,7 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
         onPress: async () => {
           const { status: perm } = await ImagePicker.requestCameraPermissionsAsync();
           if (perm !== "granted") {
-            Alert.alert("Permission needed", "Camera access is needed to photograph inventory.");
+            toast("Permission needed", "Camera access is needed to photograph inventory.");
             return;
           }
           const result = await ImagePicker.launchCameraAsync({
@@ -102,13 +103,13 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      Alert.alert("Required", "Please provide a title for the piece.");
+      toast("Required", "Please provide a title for the piece.");
       return;
     }
 
     const numPrice = parseFloat(priceGHS);
     if (isNaN(numPrice) || numPrice <= 0) {
-      Alert.alert("Invalid Price", "Enter a valid selling price in GHS.");
+      toast("Invalid Price", "Enter a valid selling price in GHS.");
       return;
     }
 
@@ -154,7 +155,7 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
       ]);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create piece.";
-      Alert.alert("Error", msg);
+      toast("Error", msg);
     } finally {
       setCreating(false);
     }
@@ -176,7 +177,7 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
         <TouchableOpacity style={styles.photoBox} onPress={handlePickPhoto}>
           {photo?.uri ? (
             <View style={{ width: "100%", height: "100%", position: "relative" }}>
-              <Image source={{ uri: photo.uri }} style={styles.photoPreview} resizeMode="cover" />
+              <Image source={{ uri: photo.uri }} style={styles.photoPreview} contentFit="cover" cachePolicy="memory-disk" transition={150} />
               <View style={styles.photoOverlayBadge}>
                 <Text style={styles.photoOverlayText}>Tap to Change Photo</Text>
               </View>

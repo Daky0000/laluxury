@@ -119,7 +119,7 @@ export function CustomNotificationModal({
               <Text style={styles.badge}>OWNER & STAFF TOOL</Text>
               <Text style={styles.title}>Send Custom Notification</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close">
               <Feather name="x" size={20} color={colors.text} />
             </TouchableOpacity>
           </View>

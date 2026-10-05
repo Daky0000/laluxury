@@ -1,5 +1,11 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Animated, Image } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+} from "react-native";
+import { Image } from "expo-image";
 import { colors } from "../theme/colors";
 
 export function SplashScreen() {
@@ -24,6 +30,8 @@ export function SplashScreen() {
       <View style={styles.brandBox}>
         <Image
           source={require("../../assets/emblem-white.png")}
+          contentFit="contain"
+          accessibilityLabel="Noble Enclave"
           style={styles.emblemImage}
         />
         <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>

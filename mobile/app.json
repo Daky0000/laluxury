@@ -3,22 +3,55 @@
     "name": "Noble Enclave",
     "slug": "danny",
     "owner": "danny1999s-team",
-    "version": "1.3.5",
+    "version": "1.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.nobleenclave.management"
+      "bundleIdentifier": "com.nobleenclave.management",
+      "associatedDomains": [
+        "applinks:nobleenclave.com"
+      ],
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to unlock the Noble Enclave store backend."
+      }
     },
     "android": {
       "package": "com.laluxury.management",
-      "versionCode": 17,
+      "versionCode": 18,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#7A2E3C",
         "foregroundImage": "./assets/android-icon-foreground.png"
-      }
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "nobleenclave.com",
+              "pathPrefix": "/product"
+            },
+            {
+              "scheme": "https",
+              "host": "www.nobleenclave.com",
+              "pathPrefix": "/product"
+            },
+            {
+              "scheme": "https",
+              "host": "nobleenclave.com",
+              "pathPrefix": "/orders/track"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "plugins": [
       [
@@ -44,12 +77,30 @@
           "backgroundColor": "#7A2E3C",
           "imageWidth": 220
         }
-      ]
+      ],
+      "expo-image",
+      "expo-updates",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to unlock the Noble Enclave store backend."
+        }
+      ],
+      "@sentry/react-native"
     ],
     "extra": {
       "eas": {
         "projectId": "9acc53b0-c45d-4274-88bf-65ff2dfde707"
       }
+    },
+    "scheme": "nobleenclave",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9acc53b0-c45d-4274-88bf-65ff2dfde707",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     }
   }
 }

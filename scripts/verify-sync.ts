@@ -221,14 +221,15 @@ try {
     fail("Cart Validation", "A cart mutation bypasses the shared stock and sellability guard");
   }
 
-  const mobileAppTsx = fs.readFileSync(path.join(ROOT, "mobile", "App.tsx"), "utf-8");
+  // Bag state lives in the app context since the navigation rewrite (1.4.0).
+  const mobileAppTsx = fs.readFileSync(path.join(ROOT, "mobile", "src", "state", "AppContext.tsx"), "utf-8");
   if (
     mobileAppTsx.includes("mergeGuestCartWithServer") &&
     mobileAppTsx.includes("getServerCart")
   ) {
     pass("Mobile client synchronizes server cart and merges guest items on login");
   } else {
-    fail("Mobile Cart Continuity", "mobile/App.tsx missing server cart sync calls");
+    fail("Mobile Cart Continuity", "mobile/src/state/AppContext.tsx missing server cart sync calls");
   }
 } catch (err) {
   fail("Cart continuity check", (err as Error).message);

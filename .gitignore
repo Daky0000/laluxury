@@ -50,3 +50,6 @@ next-env.d.ts
 # Binary builds & mobile
 *.apk
 .agents/
+
+# Play Console service account for eas submit (never commit)
+mobile/google-play-service-account.json

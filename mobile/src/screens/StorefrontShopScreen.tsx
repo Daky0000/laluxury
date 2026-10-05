@@ -1,22 +1,27 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { FlashList } from "@shopify/flash-list";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
-  Image,
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
   TextInput,
   useWindowDimensions,
 } from "react-native";
+import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
-import { Product } from "../types";
+import { Product, ProductSort } from "../types";
+import { useApp } from "../state/AppContext";
+import { SmartImage } from "../components/SmartImage";
+import { track } from "../lib/analytics";
 import { formatCurrency } from "../utils/format";
-import { resolveImageUrl } from "../utils/image";
 import { getProductGridMetrics } from "../utils/layout";
 
 type Props = {
@@ -37,6 +42,57 @@ const FILTER_PILLS = [
   { id: "CUSHIONS", label: "CUSHIONS" },
 ];
 
+const SORTS: { id: ProductSort; label: string }[] = [
+  { id: "featured", label: "Featured" },
+  { id: "newest", label: "Newest" },
+  { id: "price_asc", label: "Price: low to high" },
+  { id: "price_desc", label: "Price: high to low" },
+];
+
+// Price bands in minor units (pesewas), matching the server's Product.minPrice.
+const PRICE_BANDS: { id: string; label: string; min?: number; max?: number }[] = [
+  { id: "any", label: "Any price" },
+  { id: "u500", label: "Under GH₵500", max: 50_000 },
+  { id: "500-2000", label: "GH₵500 – 2,000", min: 50_000, max: 200_000 },
+  { id: "2000+", label: "GH₵2,000+", min: 200_000 },
+];
+
+const RECENT_KEY = "lx_recent_searches";
+const PAGE_SIZE = 24;
+
+function useDebounced<T>(value: T, ms: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return debounced;
+}
+
+/** Category pills match on title, tags and category names (catalogue has no fixed taxonomy). */
+function matchesPill(p: Product, pill: string): boolean {
+  if (pill === "ALL" || pill === "RECENTLY_STOCKED") return true;
+  const title = (p.title || "").toLowerCase();
+  const tags = (p.tags || []).map((t) => t.toLowerCase());
+  const cats = (p.categories || []).map((c) => (c.name || "").toLowerCase());
+  const any = (...words: string[]) =>
+    words.some((w) => title.includes(w) || tags.includes(w) || cats.includes(w));
+  switch (pill) {
+    case "CURTAINS":
+      return any("curtain", "blind", "blinds", "rod", "curtains", "windows");
+    case "CARPETS":
+      return any("carpet", "rug", "doormat", "carpets");
+    case "CUSHIONS":
+      return any("cushion", "cushions") || (title.includes("pillow") && !title.includes("bed") && !title.includes("sleep"));
+    case "BEDDING":
+      return any("bed", "duvet", "blanket", "sheet", "topper", "pillow", "bedding");
+    default: {
+      const term = pill.toLowerCase();
+      return title.includes(term) || tags.some((t) => t.includes(term)) || cats.some((c) => c.includes(term));
+    }
+  }
+}
+
 export function StorefrontShopScreen({
   initialFilter,
   cartCount,
@@ -45,138 +101,252 @@ export function StorefrontShopScreen({
   onSelectProduct,
   onAddToCart,
 }: Props) {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [activeFilter, setActiveFilter] = useState(
-    initialFilter ? initialFilter.toUpperCase() : "ALL"
-  );
+  const { wishlistIds, toggleWishlist } = useApp();
+  const [activeFilter, setActiveFilter] = useState(initialFilter ? initialFilter.toUpperCase() : "ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [focused, setFocused] = useState(false);
+  const [recent, setRecent] = useState<string[]>([]);
+  const [sort, setSort] = useState<ProductSort>("featured");
+  const [priceBand, setPriceBand] = useState("any");
+  const [inStock, setInStock] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
+  const term = useDebounced(searchQuery.trim(), 350);
   const { width: windowWidth } = useWindowDimensions();
   const gridMetrics = getProductGridMetrics(windowWidth);
-
-  const loadProducts = useCallback(async () => {
-    try {
-      const res = await api.getStoreProducts({
-        q: searchQuery.trim() || undefined,
-        limit: 60,
-      });
-      setProducts(res.products || []);
-    } catch {
-      // Fallback
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [searchQuery]);
+  const band = PRICE_BANDS.find((b) => b.id === priceBand) ?? PRICE_BANDS[0];
+  const effectiveSort: ProductSort = activeFilter === "RECENTLY_STOCKED" ? "newest" : sort;
 
   useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
+    AsyncStorage.getItem(RECENT_KEY)
+      .then((raw) => setRecent(raw ? (JSON.parse(raw) as string[]) : []))
+      .catch(() => {});
+  }, []);
 
-  useEffect(() => {
-    if (initialFilter) {
-      setActiveFilter(initialFilter.toUpperCase());
-    }
-  }, [initialFilter]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadProducts();
-  };
-
-  const handleQuickAdd = (product: Product) => {
-    onAddToCart(product);
-  };
-
-  // Filter and sort products according to the selected basic filter
-  const displayedProducts = useMemo(() => {
-    let list = [...products];
-
-    if (activeFilter === "RECENTLY_STOCKED") {
-      return list.sort((a, b) => {
-        const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-        const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
-        return timeB - timeA;
-      });
-    }
-
-    if (activeFilter === "ALL") {
-      return list;
-    }
-
-    const filterTerm = activeFilter.toLowerCase();
-    return list.filter((p) => {
-      const title = (p.title || "").toLowerCase();
-      const tags = (p.tags || []).map((t) => t.toLowerCase());
-      const cats = (p.categories || []).map((c) => (c.name || "").toLowerCase());
-
-      if (filterTerm === "curtains") {
-        return (
-          title.includes("curtain") ||
-          title.includes("blind") ||
-          title.includes("rod") ||
-          tags.includes("curtain") ||
-          tags.includes("blinds") ||
-          cats.includes("curtains") ||
-          cats.includes("windows")
-        );
-      }
-
-      if (filterTerm === "carpets") {
-        return (
-          title.includes("carpet") ||
-          title.includes("rug") ||
-          title.includes("doormat") ||
-          tags.includes("carpet") ||
-          tags.includes("rug") ||
-          cats.includes("carpets") ||
-          cats.includes("living")
-        );
-      }
-
-      if (filterTerm === "cushions") {
-        return (
-          (title.includes("cushion") || (title.includes("pillow") && !title.includes("bed") && !title.includes("sleep"))) ||
-          tags.includes("cushion") ||
-          cats.includes("cushions")
-        );
-      }
-
-      if (filterTerm === "bedding") {
-        return (
-          title.includes("bed") ||
-          title.includes("duvet") ||
-          title.includes("blanket") ||
-          title.includes("sheet") ||
-          title.includes("topper") ||
-          title.includes("pillow") ||
-          tags.includes("bedding") ||
-          cats.includes("bedding")
-        );
-      }
-
-      return (
-        title.includes(filterTerm) ||
-        tags.some((t) => t.includes(filterTerm)) ||
-        cats.some((c) => c.includes(filterTerm))
-      );
+  const rememberSearch = useCallback((q: string) => {
+    const clean = q.trim();
+    if (clean.length < 2) return;
+    track("search", { q: clean.slice(0, 60) });
+    setRecent((curr) => {
+      const next = [clean, ...curr.filter((r) => r.toLowerCase() !== clean.toLowerCase())].slice(0, 8);
+      AsyncStorage.setItem(RECENT_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
     });
-  }, [products, activeFilter]);
+  }, []);
+
+  const products = useInfiniteQuery({
+    queryKey: ["store-products", term, effectiveSort, band.id, inStock],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      api.getStoreProducts({
+        q: term || undefined,
+        page: pageParam,
+        limit: PAGE_SIZE,
+        sort: effectiveSort,
+        minPrice: band.min,
+        maxPrice: band.max,
+        inStock: inStock || undefined,
+      }),
+    getNextPageParam: (last) =>
+      last.pagination.page < last.pagination.totalPages ? last.pagination.page + 1 : undefined,
+  });
+
+  const suggestions = useQuery({
+    queryKey: ["suggest", term],
+    queryFn: () => api.searchSuggestions(term),
+    enabled: focused && term.length >= 2,
+  });
+
+  const displayedProducts = useMemo(
+    () => (products.data?.pages.flatMap((p) => p.products) ?? []).filter((p) => matchesPill(p, activeFilter)),
+    [products.data, activeFilter],
+  );
+  const total = products.data?.pages[0]?.pagination.total ?? 0;
+  const filtersActive = sort !== "featured" || priceBand !== "any" || inStock;
+
+  const resetAll = () => {
+    setSearchQuery("");
+    setActiveFilter("ALL");
+    setSort("featured");
+    setPriceBand("any");
+    setInStock(false);
+  };
+
+  const header = (
+    <View>
+      <View style={styles.categoryHero}>
+        <View style={styles.categoryHeroLeft}>
+          <Text style={styles.categoryTitle} accessibilityRole="header">ALL PRODUCTS</Text>
+          <Text style={styles.categoryDescription}>
+            Considered textiles and furnishings for Ghanaian homes — bedding, curtains, carpets and cushions.
+          </Text>
+        </View>
+        <View style={styles.categoryHeroRight}>
+          <Feather name="grid" size={32} color={colors.gold} />
+        </View>
+      </View>
+
+      <View style={styles.searchBar}>
+        <Feather name="search" size={16} color={colors.textSecondary} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search pieces by title, category, or material..."
+          placeholderTextColor={colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setTimeout(() => setFocused(false), 150)}
+          onSubmitEditing={() => rememberSearch(searchQuery)}
+          returnKeyType="search"
+          accessibilityLabel="Search products"
+        />
+        {searchQuery ? (
+          <TouchableOpacity onPress={() => setSearchQuery("")} accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={10}>
+            <Feather name="x" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity
+          onPress={() => setShowFilters((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel="Sort and filter"
+          accessibilityState={{ expanded: showFilters }}
+          hitSlop={10}
+          style={{ marginLeft: 10 }}
+        >
+          <Feather name="sliders" size={17} color={filtersActive ? colors.primary : colors.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      {focused && !searchQuery && recent.length > 0 ? (
+        <View style={styles.suggestBox}>
+          <View style={styles.suggestHead}>
+            <Text style={styles.suggestTitle}>RECENT SEARCHES</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setRecent([]);
+                AsyncStorage.removeItem(RECENT_KEY).catch(() => {});
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={styles.resetFilterText}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+          {recent.map((r) => (
+            <TouchableOpacity key={r} style={styles.suggestRow} onPress={() => setSearchQuery(r)} accessibilityRole="button">
+              <Feather name="clock" size={14} color={colors.textMuted} />
+              <Text style={styles.suggestText}>{r}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
+      {focused && term.length >= 2 && (suggestions.data?.results.length ?? 0) > 0 ? (
+        <View style={styles.suggestBox}>
+          {suggestions.data!.results.map((s) => (
+            <TouchableOpacity
+              key={s.id}
+              style={styles.suggestRow}
+              onPress={() => {
+                rememberSearch(searchQuery);
+                onSelectProduct(s.id);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`${s.title}, ${formatCurrency(s.minPrice)}`}
+            >
+              <SmartImage uri={s.images[0]?.url} style={styles.suggestImg} />
+              <Text style={[styles.suggestText, { flex: 1 }]} numberOfLines={1}>{s.title}</Text>
+              <Text style={styles.suggestPrice}>{formatCurrency(s.minPrice)}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
+      {showFilters ? (
+        <View style={styles.filterPanel}>
+          <Text style={styles.suggestTitle}>SORT</Text>
+          <View style={styles.chipRow}>
+            {SORTS.map((s) => (
+              <TouchableOpacity
+                key={s.id}
+                style={[styles.pill, sort === s.id && styles.pillActive]}
+                onPress={() => setSort(s.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: sort === s.id }}
+              >
+                <Text style={[styles.pillText, sort === s.id && styles.pillTextActive]}>{s.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.suggestTitle}>PRICE</Text>
+          <View style={styles.chipRow}>
+            {PRICE_BANDS.map((b) => (
+              <TouchableOpacity
+                key={b.id}
+                style={[styles.pill, priceBand === b.id && styles.pillActive]}
+                onPress={() => setPriceBand(b.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: priceBand === b.id }}
+              >
+                <Text style={[styles.pillText, priceBand === b.id && styles.pillTextActive]}>{b.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={styles.stockRow}
+            onPress={() => setInStock((v) => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: inStock }}
+          >
+            <Feather name={inStock ? "check-square" : "square"} size={18} color={inStock ? colors.primary : colors.textSecondary} />
+            <Text style={styles.suggestText}>In stock or available to pre-order</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScroll}>
+        {FILTER_PILLS.map((pill) => {
+          const isActive = activeFilter === pill.id;
+          return (
+            <TouchableOpacity
+              key={pill.id}
+              style={[styles.pill, isActive && styles.pillActive]}
+              onPress={() => setActiveFilter(pill.id)}
+              activeOpacity={0.8}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+            >
+              <Text style={[styles.pillText, isActive && styles.pillTextActive]}>{pill.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      <View style={styles.countRow}>
+        <Text style={styles.countText}>
+          {activeFilter === "ALL" ? `${total} ${total === 1 ? "piece" : "pieces"}` : `Showing ${displayedProducts.length} pieces`}
+        </Text>
+        {activeFilter !== "ALL" || filtersActive ? (
+          <TouchableOpacity onPress={resetAll} accessibilityRole="button">
+            <Text style={styles.resetFilterText}>Reset filters</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
-      {/* Top Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconBtn} onPress={onBack} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.iconBtn} onPress={onBack} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Back">
           <Feather name="arrow-left" size={22} color={colors.text} />
         </TouchableOpacity>
 
         <View style={styles.brandContainer}>
           <Image
             source={require("../../assets/emblem-transparent.png")}
-            style={{ width: 26, height: 18, resizeMode: "contain", marginBottom: 2 }}
+            contentFit="contain"
+            accessibilityLabel="Noble Enclave"
+            style={{ width: 26, height: 18, marginBottom: 2 }}
           />
           <Text style={styles.brandTitle}>NOBLE ENCLAVE</Text>
           <Text style={styles.brandSubtitle}>HOME TEXTILES • LIVING ESSENTIALS</Text>
@@ -186,6 +356,8 @@ export function StorefrontShopScreen({
           style={styles.iconBtn}
           onPress={onNavigateToBag}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`Bag, ${cartCount} item${cartCount === 1 ? "" : "s"}`}
         >
           <Feather name="shopping-bag" size={22} color={colors.text} />
           {cartCount > 0 && (
@@ -196,170 +368,137 @@ export function StorefrontShopScreen({
         </TouchableOpacity>
       </View>
 
-      <ScrollView
+      <FlashList
+        data={products.isLoading ? [] : displayedProducts}
+        numColumns={2}
+        keyExtractor={(item) => item.id}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={header}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
+          <RefreshControl refreshing={products.isRefetching && !products.isFetchingNextPage} onRefresh={() => products.refetch()} tintColor={colors.primary} />
         }
-      >
-        {/* Collection Heading Banner (No 'atelier' copy) */}
-        <View style={styles.categoryHero}>
-          <View style={styles.categoryHeroLeft}>
-            <Text style={styles.categoryTitle}>ALL PRODUCTS</Text>
-            <Text style={styles.categoryDescription}>
-              Considered textiles and furnishings for Ghanaian homes — bedding, curtains, carpets and cushions.
-            </Text>
-          </View>
-          <View style={styles.categoryHeroRight}>
-            <Feather name="grid" size={32} color={colors.gold} />
-          </View>
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchBar}>
-          <Feather name="search" size={16} color={colors.textSecondary} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search pieces by title, category, or material..."
-            placeholderTextColor={colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-          />
-          {searchQuery ? (
-            <TouchableOpacity onPress={() => setSearchQuery("")}>
-              <Feather name="x" size={16} color={colors.textSecondary} />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-
-        {/* Basic Filter Pills (Clean, simple, includes Recently Stocked) */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.pillsScroll}
-        >
-          {FILTER_PILLS.map((pill) => {
-            const isActive = activeFilter === pill.id;
-            return (
-              <TouchableOpacity
-                key={pill.id}
-                style={[styles.pill, isActive && styles.pillActive]}
-                onPress={() => setActiveFilter(pill.id)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.pillText, isActive && styles.pillTextActive]}>
-                  {pill.label}
-                </Text>
+        onEndReachedThreshold={0.6}
+        onEndReached={() => {
+          if (products.hasNextPage && !products.isFetchingNextPage) products.fetchNextPage();
+        }}
+        ListFooterComponent={
+          products.isLoading || products.isFetchingNextPage ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 30 }} />
+          ) : (
+            <View style={{ height: 40 }} />
+          )
+        }
+        ListEmptyComponent={
+          products.isLoading ? null : products.isError ? (
+            <View style={styles.emptyContainer}>
+              <Feather name="wifi-off" size={40} color={colors.textMuted} />
+              <Text style={styles.emptyTitle}>Couldn't load products</Text>
+              <TouchableOpacity style={styles.resetBtn} onPress={() => products.refetch()}>
+                <Text style={styles.resetBtnText}>Try again</Text>
               </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* Product Count Header */}
-        <View style={styles.countRow}>
-          <Text style={styles.countText}>
-            Showing {displayedProducts.length} {displayedProducts.length === 1 ? "piece" : "pieces"}
-          </Text>
-          {activeFilter !== "ALL" && (
-            <TouchableOpacity onPress={() => setActiveFilter("ALL")}>
-              <Text style={styles.resetFilterText}>Reset filter</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Products Grid: 2 Products in a row */}
-        {loading ? (
-          <ActivityIndicator
-            size="small"
-            color={colors.primary}
-            style={{ marginVertical: 40 }}
-          />
-        ) : displayedProducts.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Feather name="inbox" size={44} color={colors.textMuted} />
-            <Text style={styles.emptyTitle}>No pieces found</Text>
-            <Text style={styles.emptySub}>
-              {searchQuery
-                ? `No products matched "${searchQuery}". Try a broader term.`
-                : "No pieces available in this filter."}
-            </Text>
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Feather name="inbox" size={44} color={colors.textMuted} />
+              <Text style={styles.emptyTitle}>No pieces found</Text>
+              <Text style={styles.emptySub}>
+                {term ? `No products matched "${term}". Try a broader term.` : "No pieces match these filters."}
+              </Text>
+              <TouchableOpacity style={styles.resetBtn} onPress={resetAll}>
+                <Text style={styles.resetBtnText}>View All Products</Text>
+              </TouchableOpacity>
+            </View>
+          )
+        }
+        renderItem={({ item, index }) => (
+          <View style={{ width: gridMetrics.itemWidth, marginLeft: index % 2 === 1 ? gridMetrics.gap : 0, marginBottom: gridMetrics.gap }}>
             <TouchableOpacity
-              style={styles.resetBtn}
-              onPress={() => {
-                setSearchQuery("");
-                setActiveFilter("ALL");
-              }}
+              style={[styles.productCard, { width: gridMetrics.itemWidth }]}
+              onPress={() => onSelectProduct(item.id)}
+              activeOpacity={0.9}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.title}, ${formatCurrency(item.minPrice)}`}
             >
-              <Text style={styles.resetBtnText}>View All Products</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={[styles.productsGrid, { gap: gridMetrics.gap }]}>
-            {displayedProducts.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[styles.productCard, { width: gridMetrics.itemWidth }]}
-                onPress={() => onSelectProduct(item.id)}
-                activeOpacity={0.9}
-              >
-                <View style={styles.productImageContainer}>
-                  {resolveImageUrl(item.images?.[0]?.url) ? (
-                    <Image
-                      source={{ uri: resolveImageUrl(item.images?.[0]?.url)! }}
-                      style={styles.productImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.productImageFallback}>
-                      <Feather name="box" size={26} color={colors.textMuted} />
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.productInfo}>
-                  <Text style={styles.productTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                  {item.material ? (
-                    <Text style={styles.productMaterial} numberOfLines={1}>
-                      {item.material}
-                    </Text>
-                  ) : null}
-                  <Text style={styles.productPrice}>
-                    {formatCurrency(item.minPrice)}
-                  </Text>
-                </View>
-
-                {/* Explicit Add to Cart action button (NO share button, NO plus-only icon) */}
+              <View style={styles.productImageContainer}>
+                {item.images?.[0]?.url ? (
+                  <SmartImage uri={item.images[0].url} alt={item.title} style={styles.productImage} />
+                ) : (
+                  <View style={styles.productImageFallback}>
+                    <Feather name="box" size={26} color={colors.textMuted} />
+                  </View>
+                )}
                 <TouchableOpacity
-                  style={styles.addToCartBtn}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handleQuickAdd(item);
-                  }}
-                  activeOpacity={0.8}
+                  style={styles.heartBtn}
+                  onPress={() => toggleWishlist(item.id)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={wishlistIds.has(item.id) ? `Remove ${item.title} from saved` : `Save ${item.title}`}
                 >
-                  <Feather name="shopping-bag" size={13} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.addToCartBtnText}>Add to Cart</Text>
+                  <Feather name="heart" size={15} color={wishlistIds.has(item.id) ? colors.primary : colors.text} />
                 </TouchableOpacity>
+              </View>
+
+              <View style={styles.productInfo}>
+                <Text style={styles.productTitle} numberOfLines={2}>{item.title}</Text>
+                {item.material ? <Text style={styles.productMaterial} numberOfLines={1}>{item.material}</Text> : null}
+                <Text style={styles.productPrice}>{formatCurrency(item.minPrice)}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.addToCartBtn}
+                onPress={() => onAddToCart(item)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`Add ${item.title} to bag`}
+              >
+                <Feather name="shopping-bag" size={13} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.addToCartBtnText}>Add to Cart</Text>
               </TouchableOpacity>
-            ))}
+            </TouchableOpacity>
           </View>
         )}
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  suggestBox: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: 8,
+    paddingVertical: 6,
+    marginBottom: 12,
+  },
+  suggestHead: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 6 },
+  suggestTitle: { fontSize: 10, fontWeight: "800", letterSpacing: 1.3, color: colors.textMuted, marginBottom: 6 },
+  suggestRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 9 },
+  suggestText: { fontSize: 14, color: colors.text },
+  suggestImg: { width: 34, height: 40, borderRadius: 4, backgroundColor: colors.surfaceCard },
+  suggestPrice: { fontSize: 13, fontWeight: "700", color: colors.primary },
+  filterPanel: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 12,
+  },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
+  stockRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  heartBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

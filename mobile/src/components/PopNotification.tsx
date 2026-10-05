@@ -22,11 +22,13 @@ export type PopNotificationData = {
 type Props = {
   notification: PopNotificationData | null;
   onDismiss: () => void;
+  /** Tapping the body runs this instead of just dismissing. */
+  onPress?: () => void;
 };
 
 const { width } = Dimensions.get("window");
 
-export function PopNotification({ notification, onDismiss }: Props) {
+export function PopNotification({ notification, onDismiss, onPress }: Props) {
   const translateY = useRef(new Animated.Value(-120)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -126,7 +128,8 @@ export function PopNotification({ notification, onDismiss }: Props) {
     >
       <TouchableOpacity
         activeOpacity={0.9}
-        onPress={dismiss}
+        onPress={onPress ?? dismiss}
+        accessibilityRole="alert"
         style={[
           styles.card,
           {
@@ -150,7 +153,7 @@ export function PopNotification({ notification, onDismiss }: Props) {
           ) : null}
         </View>
 
-        <TouchableOpacity onPress={dismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity onPress={dismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Close">
           <Feather name="x" size={16} color="rgba(255,255,255,0.4)" />
         </TouchableOpacity>
       </TouchableOpacity>

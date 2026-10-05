@@ -53,6 +53,13 @@ export async function storeProductList(url: URL) {
   const q = url.searchParams.get("q")?.trim().slice(0, 200);
   const categoryId = url.searchParams.get("categoryId");
   const collectionId = url.searchParams.get("collectionId");
+  const money = (key: string) => {
+    const raw = url.searchParams.get(key);
+    const value = raw === null || raw === "" ? NaN : Number(raw);
+    return Number.isSafeInteger(value) && value >= 0 ? value : null;
+  };
+  const minPrice = money("minPrice");
+  const maxPrice = money("maxPrice");
   const where: Prisma.ProductWhereInput = {
     status: "ACTIVE",
     ...(q ? { OR: [{ title: { contains: q, mode: "insensitive" } }, { searchText: { contains: q.toLowerCase() } }] } : {}),
@@ -60,11 +67,33 @@ export async function storeProductList(url: URL) {
     ...(collectionId ? { collections: { some: { collectionId, collection: { isActive: true } } } } : {}),
     ...(url.searchParams.has("isFeatured") ? { isFeatured: url.searchParams.get("isFeatured") === "true" } : {}),
     ...(url.searchParams.has("isPreorder") ? { isPreorder: url.searchParams.get("isPreorder") === "true" } : {}),
+    // Prices are minor units, matching the denormalised Product.minPrice.
+    ...(minPrice !== null || maxPrice !== null
+      ? { minPrice: { ...(minPrice !== null ? { gte: minPrice } : {}), ...(maxPrice !== null ? { lte: maxPrice } : {}) } }
+      : {}),
+    ...(url.searchParams.get("inStock") === "true"
+      ? {
+          // AND so it never replaces the search term's own OR.
+          AND: [{ OR: [
+            { isPreorder: true },
+            { variants: { some: { isActive: true, inventory: { OR: [{ onHand: { gt: 0 } }, { allowBackorder: true }, { trackInventory: false }] } } } },
+          ] }],
+        }
+      : {}),
   };
+  const sort = url.searchParams.get("sort");
+  const orderBy: Prisma.ProductOrderByWithRelationInput[] =
+    sort === "price_asc"
+      ? [{ minPrice: "asc" }]
+      : sort === "price_desc"
+        ? [{ minPrice: "desc" }]
+        : sort === "newest"
+          ? [{ createdAt: "desc" }]
+          : [{ isFeatured: "desc" }, { createdAt: "desc" }];
   const [total, products] = await Promise.all([
     db.product.count({ where }),
     db.product.findMany({ where, skip: (page - 1) * limit, take: limit,
-      orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+      orderBy,
       select: { ...storeProductSelect, images: { ...storeProductSelect.images, take: 1 } },
     }),
   ]);

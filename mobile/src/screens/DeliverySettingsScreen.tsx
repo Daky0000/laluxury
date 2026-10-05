@@ -192,7 +192,7 @@ export function DeliverySettingsScreen({ onBack, onNotify }: Props) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn} activeOpacity={0.7}>
+        <TouchableOpacity onPress={onBack} style={styles.backBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Back">
           <Feather name="arrow-left" size={20} color={colors.darkText} />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 10 }}>

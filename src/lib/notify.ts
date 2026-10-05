@@ -1,4 +1,5 @@
 import { orderPath } from "@/lib/order-access";
+import { pushToUser } from "@/lib/push";
 import { db } from "./db";
 import { env } from "./env";
 import { formatMoney } from "./money";
@@ -26,6 +27,7 @@ import type { Prisma } from "@/generated/prisma";
 
 const noticeSelect = {
   id: true,
+  userId: true,
   orderNumber: true,
   email: true,
   phone: true,
@@ -296,6 +298,16 @@ export async function notifyOrder(orderId: string, notice: OrderNotice): Promise
       if (!mailed.skipped) outcomes.push(mailed.ok ? "emailed" : "email failed");
     } else if (!order.email && written.emailEnabled) {
       outcomes.push("no email on order");
+    }
+
+    // App push on top of SMS/email, for customers signed in on a phone.
+    if (order.userId) {
+      const pushed = await pushToUser(order.userId, {
+        title: `${settings.storeName} — ${written.subject}`,
+        body: written.sms,
+        data: { type: "order", orderNumber: order.orderNumber },
+      }).catch(() => 0);
+      if (pushed > 0) outcomes.push("pushed");
     }
 
     await db.orderEvent.create({

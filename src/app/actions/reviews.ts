@@ -1,10 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
-import { db } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { postAlert } from "@/lib/agent/slack";
+import { reviewSchema, submitReview } from "@/lib/reviews";
 
 /**
  * Leaving a review, from the product page.
@@ -25,24 +23,6 @@ import { postAlert } from "@/lib/agent/slack";
 
 export type ReviewState = { ok: boolean; message?: string; fieldErrors?: Record<string, string> };
 
-const schema = z.object({
-  rating: z.coerce.number().int().min(1, "Choose a star rating.").max(5, "Choose a star rating."),
-  title: z.string().trim().max(120, "Keep the title under 120 characters.").optional(),
-  body: z
-    .string()
-    .trim()
-    .min(20, "Say a little more - at least a sentence or two.")
-    .max(2000, "Keep it under 2,000 characters."),
-});
-
-/** "Ama M." - a first name and an initial is enough to be somebody, and no more. */
-function authorNameFor(user: { firstName: string | null; lastName: string | null }): string {
-  const first = user.firstName?.trim();
-  const initial = user.lastName?.trim().charAt(0);
-  if (first && initial) return `${first} ${initial.toUpperCase()}.`;
-  return first || "A customer";
-}
-
 export async function submitReviewAction(
   productId: string,
   _prev: ReviewState | null,
@@ -51,7 +31,7 @@ export async function submitReviewAction(
   const user = await currentUser();
   if (!user) return { ok: false, message: "Sign in to leave a review." };
 
-  const parsed = schema.safeParse({
+  const parsed = reviewSchema.safeParse({
     rating: formData.get("rating"),
     title: formData.get("title") || undefined,
     body: formData.get("body"),
@@ -65,62 +45,15 @@ export async function submitReviewAction(
     return { ok: false, fieldErrors };
   }
 
-  const product = await db.product.findFirst({
-    where: { id: productId, status: "ACTIVE" },
-    select: { id: true, title: true, slug: true },
-  });
-  if (!product) return { ok: false, message: "That product is no longer on sale." };
+  const result = await submitReview(user, productId, parsed.data);
+  if (!result.ok) return { ok: false, message: result.message };
 
-  // "Verified purchase" means a paid order of this product on this account.
-  const bought = await db.order.findFirst({
-    where: {
-      userId: user.id,
-      paymentStatus: "SUCCESS",
-      items: { some: { productId: product.id } },
-    },
-    select: { id: true },
-  });
-
-  const data = {
-    authorName: authorNameFor(user),
-    rating: parsed.data.rating,
-    title: parsed.data.title || null,
-    body: parsed.data.body,
-    isVerifiedPurchase: Boolean(bought),
-    // Back to the queue, whether it is new or an edit.
-    isApproved: false,
-  };
-
-  const existing = await db.review.findFirst({
-    where: { productId: product.id, userId: user.id },
-    select: { id: true },
-  });
-
-  if (existing) {
-    await db.review.update({ where: { id: existing.id }, data });
-  } else {
-    await db.review.create({ data: { ...data, productId: product.id, userId: user.id } });
-    await db.customerInteraction.create({
-      data: {
-        userId: user.id,
-        type: "REVIEW_LEFT",
-        subject: product.title,
-        body: `${parsed.data.rating}/5${parsed.data.title ? ` - ${parsed.data.title}` : ""}`,
-        meta: { productId: product.id },
-      },
-    });
-  }
-
-  await postAlert(
-    `:speech_balloon: New ${parsed.data.rating}-star review of ${product.title} from ${data.authorName}, waiting for approval.`,
-  );
-
-  revalidatePath(`/product/${product.slug}`);
+  revalidatePath(`/product/${result.slug}`);
   revalidatePath("/admin/reviews");
 
   return {
     ok: true,
-    message: existing
+    message: result.updated
       ? "Your review has been updated and will show again once it has been checked."
       : "Thank you. Your review will appear once it has been checked.",
   };

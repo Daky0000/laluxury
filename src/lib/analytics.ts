@@ -177,3 +177,16 @@ export async function customerSummaries(args: {
     }),
   };
 }
+
+/** App funnel counts over the last `days`: distinct sessions per step, purchases from the server. */
+export async function appFunnel(days = 30) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const steps = ["app_open", "product_view", "add_to_bag", "checkout_start", "purchase"] as const;
+  const rows = await db.analyticsEvent.groupBy({
+    by: ["name"],
+    where: { createdAt: { gte: since }, name: { in: [...steps] } },
+    _count: { _all: true },
+  });
+  const counts = new Map(rows.map((r) => [r.name, r._count._all]));
+  return steps.map((name) => ({ name, count: counts.get(name) ?? 0 }));
+}

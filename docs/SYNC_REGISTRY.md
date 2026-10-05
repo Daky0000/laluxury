@@ -184,3 +184,16 @@ Web and app share every change listed here through the services in `src/lib/`.
 | App client | 30 s request timeout; switching API host clears the session; logout clears the local bag; payment polling never overlaps. | n/a | `mobile/src/services/api.ts`, `App.tsx` |
 
 `npm run verify:sync` now includes authorization regression checks for these rules.
+
+## Mobile app 1.4.0 — 2026-10-05
+
+| Area | Authoritative source | Web | App |
+| :--- | :--- | :--- | :--- |
+| Wishlist | `src/lib/wishlist.ts` (`WishlistItem`) | Product heart, `/account` | `GET/POST /api/app/wishlist`, heart on shop grid and product page, `WishlistScreen` |
+| Reviews | `src/lib/reviews.ts` (`Review`, moderated in Admin → Reviews) | Product page form | `GET/POST /api/app/products/[id]/reviews`, `ProductReviews` |
+| Push notifications | `src/lib/push.ts` (`PushDevice`, Expo push) | n/a | `POST/DELETE /api/app/devices`; customers get order notices from `notifyOrder`, staff with `orders:read` get new-order pushes from `markOrderPaid` |
+| Funnel analytics | `AnalyticsEvent` (`app_open`, `product_view`, `add_to_bag`, `wishlist_add`, `search`, `checkout_start`; `purchase` is written server-side in `markOrderPaid` for every channel) | Admin → Analytics funnel card | `POST /api/app/events` (batched); pruned after 180 days by the cron sweep |
+| Shop filters | `storeProductList` accepts `sort` (`featured`/`newest`/`price_asc`/`price_desc`), `minPrice`/`maxPrice` (minor units), `inStock=true` | `/api/store/products` | Shop screen sort/price/stock panel; suggestions from `/api/search` |
+| Order tracking | `GET /api/app/orders/[id]` accepts the signed `?t=` token and returns `invoicePath` | `/orders/track` | `OrderTrackingScreen` timeline |
+| Deep links | `nobleenclave://`, `https://nobleenclave.com/product/*`, `/orders/track` | `/.well-known/assetlinks.json` (set `ANDROID_CERT_SHA256`) | React Navigation `linking` |
+| OTA updates | EAS Update, `runtimeVersion` = app version, channels per build profile | n/a | Checked on launch and on resume |

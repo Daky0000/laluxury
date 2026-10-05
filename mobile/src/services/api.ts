@@ -14,6 +14,11 @@ import {
   AppConfig,
   ServerCart,
   ShippingZoneDetail,
+  WishlistItem,
+  ProductReviews,
+  SearchSuggestion,
+  AnalyticsEventInput,
+  ProductSort,
 } from "../types";
 
 
@@ -202,7 +207,7 @@ class ApiService {
     return data;
   }
 
-  async getStoreProducts(params: { page?: number; limit?: number; q?: string; categoryId?: string; isFeatured?: boolean; isPreorder?: boolean } = {}): Promise<{ products: Product[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
+  async getStoreProducts(params: { page?: number; limit?: number; q?: string; categoryId?: string; isFeatured?: boolean; isPreorder?: boolean; minPrice?: number; maxPrice?: number; sort?: ProductSort; inStock?: boolean } = {}): Promise<{ products: Product[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") query.set(key, String(value));
     return this.publicRequest(`/api/store/products?${query}`);
@@ -630,8 +635,9 @@ class ApiService {
     return this.request(`/api/app/orders${qs ? `?${qs}` : ""}`);
   }
 
-  async getOrder(orderId: string): Promise<{ ok: boolean; order: Order }> {
-    return this.request(`/api/app/orders/${encodeURIComponent(orderId)}`);
+  async getOrder(orderId: string, accessToken?: string): Promise<{ ok: boolean; order: Order }> {
+    const qs = accessToken ? `?t=${encodeURIComponent(accessToken)}` : "";
+    return this.request(`/api/app/orders/${encodeURIComponent(orderId)}${qs}`);
   }
 
   async updateOrderStatus(
@@ -868,7 +874,62 @@ class ApiService {
       },
     );
   }
+
+  // --- Wishlist (shared with the website) -----------------------------------
+
+  async getWishlist(): Promise<{ ok: boolean; items: WishlistItem[]; productIds: string[] }> {
+    return this.request("/api/app/wishlist");
+  }
+
+  async toggleWishlist(productId: string): Promise<{ ok: boolean; saved: boolean }> {
+    return this.request("/api/app/wishlist", {
+      method: "POST",
+      body: JSON.stringify({ productId }),
+    });
+  }
+
+  // --- Reviews ----------------------------------------------------------------
+
+  async getProductReviews(productId: string): Promise<ProductReviews> {
+    return this.request(`/api/app/products/${encodeURIComponent(productId)}/reviews`);
+  }
+
+  async submitReview(
+    productId: string,
+    data: { rating: number; title?: string; body: string },
+  ): Promise<{ ok: boolean; message: string }> {
+    return this.request(`/api/app/products/${encodeURIComponent(productId)}/reviews`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // --- Search suggestions (same endpoint as the web header) ------------------
+
+  async searchSuggestions(q: string): Promise<{ results: SearchSuggestion[] }> {
+    return this.publicRequest(`/api/search?q=${encodeURIComponent(q)}`, 60_000);
+  }
+
+  // --- Push devices & analytics ---------------------------------------------
+
+  async registerPushDevice(data: {
+    token: string;
+    platform: "android" | "ios";
+    appVersion?: string;
+  }): Promise<{ ok: boolean }> {
+    return this.request("/api/app/devices", { method: "POST", body: JSON.stringify(data) });
+  }
+
+  async detachPushDevice(token: string): Promise<{ ok: boolean }> {
+    return this.request(`/api/app/devices?token=${encodeURIComponent(token)}`, { method: "DELETE" });
+  }
+
+  async sendEvents(data: {
+    platform: "android" | "ios";
+    events: AnalyticsEventInput[];
+  }): Promise<{ ok: boolean }> {
+    return this.request("/api/app/events", { method: "POST", body: JSON.stringify(data) });
+  }
 }
 
 export const api = new ApiService();
-

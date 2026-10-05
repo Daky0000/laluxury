@@ -15,7 +15,7 @@ export function orderAccessToken(orderNumber: string): string {
     .slice(0, 22);
 }
 
-function tokenMatches(orderNumber: string, token: string): boolean {
+export function orderAccessTokenMatches(orderNumber: string, token: string): boolean {
   const expected = Buffer.from(orderAccessToken(orderNumber));
   const given = Buffer.from(token);
   return expected.length === given.length && timingSafeEqual(expected, given);
@@ -25,7 +25,7 @@ export async function canViewOrder(
   order: { orderNumber: string; email: string; userId: string | null },
   proof: { token?: string | null; email?: string | null },
 ): Promise<boolean> {
-  if (proof.token && tokenMatches(order.orderNumber, proof.token)) return true;
+  if (proof.token && orderAccessTokenMatches(order.orderNumber, proof.token)) return true;
   if (proof.email && proof.email.trim().toLowerCase() === order.email.toLowerCase()) return true;
 
   const user = await currentUser();

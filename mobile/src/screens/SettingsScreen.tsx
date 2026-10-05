@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Linking,
 } from "react-native";
+import { toast } from "../lib/toast";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
 import { User } from "../types";
@@ -80,7 +81,7 @@ export function SettingsScreen({ user, onLogout, onNavigateToDeliverySettings }:
       setStatusMessage(`Connected successfully to ${res.user.email || res.user.role}!`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Connection failed";
-      Alert.alert("Connection Error", msg);
+      toast("Connection Error", msg);
     } finally {
       setTesting(false);
     }
