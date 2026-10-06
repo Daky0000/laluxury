@@ -70,6 +70,12 @@ export default async function BatchReviewPage({
   ]);
 
   const setup = readSetup(batch.setup);
+  const productIds = items.map((it) => it.productId).filter((id): id is string => Boolean(id));
+  const liveProducts = new Set(
+    productIds.length
+      ? (await db.product.findMany({ where: { id: { in: productIds }, status: "ACTIVE" }, select: { id: true } })).map((p) => p.id)
+      : [],
+  );
   const rows: ReviewRow[] = items.map((it) => {
     const draft = (it.data as { draft?: ItemDraft }).draft;
     const enabled = draft?.variants.filter((v) => v.enabled) ?? [];
@@ -91,6 +97,7 @@ export default async function BatchReviewPage({
       action: it.action,
       matchMethod: it.matchMethod,
       productId: it.productId,
+      published: Boolean(it.productId && liveProducts.has(it.productId)),
       aiStatus: it.aiStatus,
       error: it.error,
       options: draft?.options ?? [],

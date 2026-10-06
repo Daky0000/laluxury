@@ -488,6 +488,7 @@ export type BulkImportItem = {
   error: string | null;
   issues: { code: string; message: string; severity: "BLOCK" | "REVIEW" | "INFO" }[];
   productId: string | null;
+  published: boolean;
   title: string | null;
   shortDescription: string | null;
   price: number | null;

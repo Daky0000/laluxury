@@ -46,6 +46,8 @@ const STATUS_LABEL: Record<string, string> = {
   COMPLETED: "Completed",
   FAILED: "Failed",
   CANCELLED: "Cancelled",
+  PUBLISHED: "Published",
+  IMPORTED: "Imported (draft)",
 };
 
 export function BulkAddScreen({ onBack }: Props) {
@@ -278,7 +280,7 @@ function BatchView({ batchId, onBack }: { batchId: string; onBack: () => void })
       const d = await load();
       if (!alive) return;
       const working = d && (d.pending > 0 || BUSY.has(d.batch.status));
-      timer.current = setTimeout(tick, working ? 3000 : 15000);
+      timer.current = setTimeout(tick, working ? 2500 : 8000);
     };
     void tick();
     return () => {
@@ -314,6 +316,7 @@ function BatchView({ batchId, onBack }: { batchId: string; onBack: () => void })
   const ready = counts("READY");
   const attention = items.filter((i) => i.status === "NEEDS_REVIEW" || i.status === "BLOCKED").length;
   const imported = counts("IMPORTED") + counts("UPDATED");
+  const published = items.filter((i) => i.published).length;
   const failed = items.filter((i) => i.status === "FAILED" || i.aiStatus === "FAILED").length;
   const aiQueued = items.filter((i) => i.aiStatus === "PENDING").length;
   const working = detail.pending > 0 || BUSY.has(batch.status);
@@ -329,7 +332,7 @@ function BatchView({ batchId, onBack }: { batchId: string; onBack: () => void })
             {working && <ActivityIndicator color={colors.gold} />}
           </View>
           <Text style={styles.hint}>
-            {detail.photoCount} photo(s) · {items.length} item(s) · {ready} ready · {attention} need a look · {imported} imported
+            {detail.photoCount} photo(s) · {items.length} item(s) · {ready} ready · {attention} need a look · {imported} imported · {published} published
             {failed ? ` · ${failed} failed` : ""}
           </Text>
           {aiQueued > 0 && (
@@ -394,7 +397,7 @@ function BatchView({ batchId, onBack }: { batchId: string; onBack: () => void })
               ))}
               {it.aiStatus === "PENDING" && <Text style={styles.hintSmall}>AI working…</Text>}
             </View>
-            <StatusPill status={it.status} small />
+            <StatusPill status={it.published ? "PUBLISHED" : it.status} small />
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -549,7 +552,7 @@ function ActionBtn({ label, onPress, busy, primary }: { label: string; onPress: 
 
 function StatusPill({ status, small }: { status: string; small?: boolean }) {
   const tone =
-    ["COMPLETED", "IMPORTED", "UPDATED", "READY"].includes(status) ? { bg: colors.successBg, fg: colors.success }
+    ["COMPLETED", "PUBLISHED", "IMPORTED", "UPDATED", "READY"].includes(status) ? { bg: colors.successBg, fg: colors.success }
     : ["FAILED", "BLOCKED", "CANCELLED"].includes(status) ? { bg: colors.errorBg, fg: colors.error }
     : ["NEEDS_REVIEW", "PARTIAL", "READY_FOR_REVIEW"].includes(status) ? { bg: colors.warningBg, fg: colors.warning }
     : { bg: colors.infoBg, fg: colors.info };

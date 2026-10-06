@@ -61,6 +61,13 @@ export const GET = withApiAuth(async (_request: Request, ctx: Ctx) => {
     db.productImportMedia.count({ where: { batchId } }),
   ]);
 
+  const productIds = items.map((it) => it.productId).filter((id): id is string => Boolean(id));
+  const live = new Set(
+    productIds.length
+      ? (await db.product.findMany({ where: { id: { in: productIds }, status: "ACTIVE" }, select: { id: true } })).map((p) => p.id)
+      : [],
+  );
+
   return NextResponse.json({
     ok: true,
     pending,
@@ -78,6 +85,8 @@ export const GET = withApiAuth(async (_request: Request, ctx: Ctx) => {
         error: it.error,
         issues: it.issues,
         productId: it.productId,
+        /** The product is live on the store (publishing changes the product, not the item). */
+        published: Boolean(it.productId && live.has(it.productId)),
         title: draft?.title?.value ?? null,
         shortDescription: draft?.shortDescription?.value ?? null,
         price: prices.length ? Math.min(...prices) : null,

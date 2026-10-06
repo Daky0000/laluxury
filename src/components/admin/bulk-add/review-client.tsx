@@ -31,31 +31,41 @@ export function BatchProgress({ batchId, status: initial, total }: { batchId: st
   });
   const last = useRef<string>("");
 
+  // Always polls while the page is open: quickly while work is queued, slowly
+  // otherwise, so imports and publishing started from here (or from the app)
+  // show up without a manual reload.
   useEffect(() => {
-    if (!PROCESSING.has(state.status) && state.pending === 0) return;
     let stop = false;
+    let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
+      let busy = true;
       try {
-        const res = await fetch(`/api/admin/bulk-import/${batchId}/status`, { cache: "no-store" });
-        const json = await res.json();
-        if (stop || !json.ok) return;
-        setState({ status: json.status, pending: json.pending, failedJob: json.failedJob });
-        const sig = `${json.status}|${json.summary?.updatedAt ?? ""}`;
-        if (sig !== last.current) {
-          last.current = sig;
-          router.refresh();
+        if (document.visibilityState === "visible") {
+          const res = await fetch(`/api/admin/bulk-import/${batchId}/status`, { cache: "no-store" });
+          const json = await res.json();
+          if (stop) return;
+          if (json.ok) {
+            setState({ status: json.status, pending: json.pending, failedJob: json.failedJob });
+            busy = PROCESSING.has(json.status) || json.pending > 0;
+            const sig = [json.status, json.pending, json.summary?.updatedAt ?? "", json.itemsUpdatedAt ?? "", json.published ?? 0].join("|");
+            if (sig !== last.current) {
+              const first = last.current === "";
+              last.current = sig;
+              if (!first) router.refresh();
+            }
+          }
         }
       } catch {
         /* next tick */
       }
-      if (!stop) setTimeout(tick, 2500);
+      if (!stop) timer = setTimeout(tick, busy ? 2000 : 8000);
     };
-    const t = setTimeout(tick, 500);
+    timer = setTimeout(tick, 500);
     return () => {
       stop = true;
-      clearTimeout(t);
+      clearTimeout(timer);
     };
-  }, [batchId, state.status, state.pending, router]);
+  }, [batchId, router]);
 
   if (!PROCESSING.has(state.status) && state.pending === 0) {
     return state.failedJob ? <Alert tone="warning">A {state.failedJob.type.toLowerCase().replace(/_/g, " ")} step failed: {state.failedJob.error}</Alert> : null;
@@ -97,6 +107,8 @@ export type ReviewRow = {
   action: string;
   matchMethod: string | null;
   productId: string | null;
+  /** Its product is live (ACTIVE) on the store. */
+  published: boolean;
   aiStatus: string | null;
   error: string | null;
   options: OptionSpec[];
@@ -384,7 +396,14 @@ function ItemRow({
         <td className="p-2">{row.priceLabel}</td>
         <td className="p-2">{row.stockLabel}</td>
         <td className="p-2">
-          <Badge tone={STATUS_TONE[row.status] ?? "neutral"}>{row.status.replace(/_/g, " ").toLowerCase()}</Badge>
+          {row.published ? (
+            <Badge tone="success">published</Badge>
+          ) : (
+            <Badge tone={STATUS_TONE[row.status] ?? "neutral"}>
+              {row.status.replace(/_/g, " ").toLowerCase()}
+              {row.status === "IMPORTED" || row.status === "UPDATED" ? " · draft" : ""}
+            </Badge>
+          )}
           {row.aiStatus === "PENDING" && <div className="mt-1 text-[10px] text-[var(--text-secondary)]">AI queued</div>}
           {row.productId && (
             <a href={`/admin/products/${row.productId}`} className="mt-1 block text-xs text-[var(--accent)] underline">Open product</a>

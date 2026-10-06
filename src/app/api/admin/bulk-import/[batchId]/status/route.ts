@@ -23,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bat
     await runCatalogWorker(8_000).catch(() => undefined);
     pending = await pendingJobCount(batchId);
   }
-  const [batch, failedJobs] = await Promise.all([
+  const [batch, failedJobs, itemsAgg, published] = await Promise.all([
     db.productImportBatch.findUnique({
       where: { id: batchId },
       select: { status: true, summary: true, aiCalls: true, aiFailures: true, updatedAt: true, error: true },
@@ -33,6 +33,26 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bat
       select: { type: true, error: true },
       orderBy: { updatedAt: "desc" },
     }),
+    // Item edits (AI results, imports) and product publishing both change what
+    // the review grid shows; the client refreshes when either moves.
+    db.productImportItem.aggregate({ where: { batchId }, _max: { updatedAt: true } }),
+    publishedCount(batchId),
   ]);
-  return NextResponse.json({ ok: true, pending, ...batch, failedJob: failedJobs });
+  return NextResponse.json({
+    ok: true,
+    pending,
+    ...batch,
+    failedJob: failedJobs,
+    itemsUpdatedAt: itemsAgg._max.updatedAt,
+    published,
+  });
+}
+
+async function publishedCount(batchId: string): Promise<number> {
+  const rows = await db.productImportItem.findMany({
+    where: { batchId, productId: { not: null } },
+    select: { productId: true },
+  });
+  const ids = rows.map((r) => r.productId!);
+  return ids.length ? db.product.count({ where: { id: { in: ids }, status: "ACTIVE" } }) : 0;
 }
