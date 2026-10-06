@@ -27,6 +27,7 @@ type Props = {
   onNavigateToStoreDesign?: () => void;
   onNavigateToOrders?: () => void;
   onNavigateToDeliverySettings?: () => void;
+  onNavigateToBulkAdd?: () => void;
   onLogout: () => void;
   onNotify?: (data: PopNotificationData) => void;
 };
@@ -40,6 +41,7 @@ export function BackendDashboardScreen({
   onNavigateToStoreDesign,
   onNavigateToOrders,
   onNavigateToDeliverySettings,
+  onNavigateToBulkAdd,
   onLogout,
   onNotify,
 }: Props) {
@@ -238,6 +240,24 @@ export function BackendDashboardScreen({
             <View style={{ flex: 1 }}>
               <Text style={styles.notifActionTitle}>STORE DESIGN</Text>
               <Text style={styles.notifActionSub}>Manage category cards & background photos</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={colors.gold} />
+          </TouchableOpacity>
+        )}
+
+        {/* Bulk Product Add — same imports as the web admin */}
+        {onNavigateToBulkAdd && (
+          <TouchableOpacity
+            style={[styles.actionBtnNotif, { marginTop: 10 }]}
+            onPress={onNavigateToBulkAdd}
+            activeOpacity={0.8}
+          >
+            <View style={styles.notifIconCircle}>
+              <Feather name="layers" size={16} color={colors.gold} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.notifActionTitle}>BULK PRODUCT ADD</Text>
+              <Text style={styles.notifActionSub}>Many photos in, reviewed products out</Text>
             </View>
             <Feather name="chevron-right" size={16} color={colors.gold} />
           </TouchableOpacity>

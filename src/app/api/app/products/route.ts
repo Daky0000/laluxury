@@ -2,10 +2,10 @@ import { publicAssetUrl } from "@/lib/media-url";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { CatalogWriteError, createCatalogProduct } from "@/lib/catalog/create-product";
 import { requireBearerPermission, getOptionalBearerStaff, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { can } from "@/lib/auth/rbac";
-import { uniqueSlug, skuFromTitle } from "@/lib/slug";
-import { buildSearchText } from "@/lib/catalog";
+import { skuFromTitle } from "@/lib/slug";
 import { recordAudit } from "@/lib/audit";
 import { revalidateProductCatalog } from "@/lib/catalog-revalidate";
 import type { Prisma, ProductStatus } from "@/generated/prisma";
@@ -295,7 +295,6 @@ export const POST = withApiAuth(async (request: Request) => {
   const costPrice = data.costPrice != null ? toMinor(data.costPrice) : null;
   const tags = parseTags(data.tags);
 
-  const slug = await uniqueSlug("product", data.slug || data.title);
   let sku = data.sku || `${skuFromTitle(data.title)}-01`;
 
   // Avoid SKU duplicate collisions
@@ -313,63 +312,41 @@ export const POST = withApiAuth(async (request: Request) => {
     if (preorderCat) categorySet.add(preorderCat.id);
   }
 
-  const product = await db.product.create({
-    data: {
+  // Same writer as the web Add Product form and Bulk Product Add.
+  let created: { id: string; slug: string };
+  try {
+    created = await createCatalogProduct({
       title: data.title,
-      slug,
+      slug: data.slug || null,
+      status: data.status,
       shortDescription: data.shortDescription ?? null,
       description: data.description ?? null,
-      status: data.status,
       brand: data.brand ?? null,
       material: data.material ?? null,
       care: data.care ?? null,
       tags,
       isFeatured: data.isFeatured,
       isPreorder: data.isPreorder,
-      preorderLeadTime: data.isPreorder ? (data.preorderLeadTime ?? "4–6 weeks") : null,
-      preorderDepositPercent: data.isPreorder ? (data.preorderDepositPercent ?? 50) : null,
-      preorderNote: data.isPreorder ? (data.preorderNote ?? null) : null,
+      preorderLeadTime: data.preorderLeadTime ?? null,
+      preorderDepositPercent: data.preorderDepositPercent ?? null,
+      preorderNote: data.preorderNote ?? null,
       metaTitle: data.metaTitle ?? null,
       metaDescription: data.metaDescription ?? null,
-      publishedAt: data.status === "ACTIVE" ? new Date() : null,
-      minPrice: price,
-      maxPrice: price,
       compareAtPrice,
-      searchText: buildSearchText({
-        title: data.title,
-        tags,
-        brand: data.brand,
-        material: data.material,
-        shortDescription: data.shortDescription,
-      }),
-      variants: {
-        create: {
-          title: "Default",
-          sku,
-          price,
-          compareAtPrice,
-          costPrice,
-          inventory: {
-            create: {
-              onHand: data.stock,
-              allowBackorder: data.isPreorder,
-            },
-          },
-        },
-      },
-      categories: {
-        create: [...categorySet].map((categoryId) => ({ categoryId })),
-      },
-      collections: {
-        create: data.collectionIds.map((collectionId) => ({ collectionId })),
-      },
-      images: {
-        create: data.imageUrls.map((url, position) => ({
-          url,
-          position,
-        })),
-      },
-    },
+      options: [],
+      variants: [{ values: [], sku, price, compareAtPrice, costPrice, stock: data.stock, allowBackorder: data.isPreorder }],
+      images: data.imageUrls.map((url) => ({ url })),
+      categoryIds: [...categorySet],
+      collectionIds: data.collectionIds,
+    });
+  } catch (error) {
+    if (error instanceof CatalogWriteError) return NextResponse.json({ error: error.message }, { status: 400 });
+    throw error;
+  }
+  const slug = created.slug;
+
+  const product = await db.product.findUniqueOrThrow({
+    where: { id: created.id },
     include: {
       variants: {
         include: { inventory: true },

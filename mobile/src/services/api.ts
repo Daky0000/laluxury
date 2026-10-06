@@ -19,6 +19,8 @@ import {
   SearchSuggestion,
   AnalyticsEventInput,
   ProductSort,
+  BulkImportDetail,
+  BulkImportOverview,
 } from "../types";
 
 
@@ -484,6 +486,58 @@ class ApiService {
 
   async getCollections(): Promise<{ collections: Collection[] }> {
     return this.request<{ collections: Collection[] }>("/api/app/collections");
+  }
+
+  // --- Bulk Product Add (same batches and queue as the web admin) -----------
+
+  async getBulkImports(): Promise<BulkImportOverview> {
+    return this.request<BulkImportOverview>("/api/app/bulk-import");
+  }
+
+  async createBulkImport(data: {
+    name?: string;
+    recipeId?: string | null;
+    categoryIds?: string[];
+    price?: number | null;
+    stock?: number | null;
+    aiEnabled?: boolean;
+    grouping?: "SEPARATE_PRODUCTS" | "SAME_PRODUCT";
+    instruction?: string | null;
+  }): Promise<{ ok: boolean; batchId: string }> {
+    return this.request("/api/app/bulk-import", { method: "POST", body: JSON.stringify(data) });
+  }
+
+  async addBulkImportPhoto(
+    batchId: string,
+    photo: { base64: string; fileName?: string | null; mimeType?: string | null },
+  ): Promise<{ ok: boolean; duplicate: boolean }> {
+    return this.request(`/api/app/bulk-import/${encodeURIComponent(batchId)}/photos`, {
+      method: "POST",
+      body: JSON.stringify({
+        base64: photo.base64,
+        filename: photo.fileName || "photo.jpg",
+        mimeType: photo.mimeType === "image/jpg" ? "image/jpeg" : photo.mimeType || "image/jpeg",
+      }),
+    });
+  }
+
+  async getBulkImport(batchId: string): Promise<BulkImportDetail> {
+    return this.request<BulkImportDetail>(`/api/app/bulk-import/${encodeURIComponent(batchId)}`);
+  }
+
+  async bulkImportAction(
+    batchId: string,
+    body:
+      | { action: "start" | "publish" | "retry" | "cancel" }
+      | { action: "import"; publish: boolean }
+      | { action: "editItem"; itemId: string; changes: { title?: string; price?: number | null; stock?: number | null; skip?: boolean } },
+  ): Promise<{ ok: boolean; data: unknown; message: string | null }> {
+    const res = await this.request<{ ok: boolean; data: unknown; message: string | null }>(
+      `/api/app/bulk-import/${encodeURIComponent(batchId)}`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+    if (body.action === "publish" || body.action === "import") this.publicCache.clear();
+    return res;
   }
 
   // --- Dashboard (Backend) --------------------------------------------------

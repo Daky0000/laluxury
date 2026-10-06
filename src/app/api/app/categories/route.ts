@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getOptionalBearerStaff, requireBearerPermission, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { can } from "@/lib/auth/rbac";
+import { recordAudit } from "@/lib/audit";
+import { revalidateProductCatalog } from "@/lib/catalog-revalidate";
 
 export const runtime = "nodejs";
 
@@ -58,6 +60,9 @@ export const PATCH = withApiAuth(async (req: Request) => {
     },
   });
 
+  await recordAudit({ actorId: staff.id, action: "category.update", entity: "Category", entityId: id, source: "admin", after: updated });
+  // Category names, images and visibility show on the website too.
+  revalidateProductCatalog();
   return NextResponse.json({ ok: true, category: updated });
 });
 

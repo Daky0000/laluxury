@@ -200,14 +200,16 @@ Web and app share every change listed here through the services in `src/lib/`.
 
 ## Bulk Product Add — 2026-10-06
 
-Web admin only (`/admin/products/bulk-add`). No `/api/app/*` contract changes: the mobile app does not expose
-the importer, and products it creates are ordinary `Product`/`Variant` rows that both clients already read.
+Web admin (`/admin/products/bulk-add`) and, since 2026-10-06, the owner app (OWNER/ADMIN, photo imports) via
+`/api/app/bulk-import*`. Both drive the same batches, queue and services; spreadsheet imports stay web-only.
 
 | Area | Authoritative source | Web | App |
 | :--- | :--- | :--- | :--- |
-| Product creation | `src/lib/catalog/create-product.ts` (`createCatalogProduct`) — one transaction per product: options, values, variants, inventory, images (incl. `optionValueId`), categories, collections | Add Product form, agent `create_product`, Bulk Product Add | Unchanged (reads only) |
+| Product creation | `src/lib/catalog/create-product.ts` (`createCatalogProduct`) — one transaction per product: options, values, variants, inventory, images (incl. `optionValueId`), categories, collections | Add Product form, agent `create_product`, Bulk Product Add | `POST /api/app/products` now uses it too; app Bulk Add imports through it |
 | Catalog Inbox | `ProductImportBatch` / `ProductImportItem` / `ProductImportMedia`; nothing reaches `Product` until imported; drafts by default | `/admin/products/bulk-add/[batchId]` | n/a |
 | Recipes & options | `ProductRecipe`, `CatalogOptionDefinition`/`CatalogOptionValueDefinition`, `CatalogNormalizationRule` | `/admin/products/recipes`, `/admin/products/options` | n/a |
 | Supplier identity | `CatalogSource`, `CatalogSourceProfile`, `CatalogSourceProduct` (source + external key → product) | Import profiles | n/a |
 | Work queue | `ProductImportJob` (Postgres, `SKIP LOCKED`); runs after requests, on review-page polls, `POST /api/cron/bulk-import` (`CRON_SECRET`), or `npm run catalog:worker` | Same | n/a |
-| Bulk AI | OpenRouter only, `src/lib/bulk-ai/*`; settings key `bulkAi`; `FREE_ONLY` by default; 3 attempts per model, max 3 models; attempts logged in `ProductImportAiAttempt`, results cached in `BulkAiCache` | `/admin/products/bulk-add/settings` (`settings:manage`) | n/a |
+| Batch operations | `src/lib/bulk-import/batch-ops.ts` (`startBatchProcessing`, `importBatch`, `publishBatch`, `retryFailedItems`, `cancelBatch`, `editImportItem`) — callers check permissions | Server actions in `src/app/actions/admin/bulk-import.ts` wrap them | `GET/POST /api/app/bulk-import`, `GET/POST /api/app/bulk-import/[batchId]` (`action`: start, import, publish, retry, cancel, editItem), `POST /api/app/bulk-import/[batchId]/photos` (one base64 photo per request); `BulkAddScreen` |
+| Bulk AI | OpenRouter or NVIDIA NIM (`bulkAiVendor`), `src/lib/bulk-ai/*`; settings key `bulkAi`; separate model chains per vendor; OpenRouter `FREE_ONLY` by default; rate-limited items requeue with backoff (item stays `PENDING`); 3 attempts per model, max 3 models; attempts logged in `ProductImportAiAttempt`, results cached in `BulkAiCache` | `/admin/products/bulk-add/settings` (`settings:manage`) | Reads `ai.enabled` / `ai.vendor` from `GET /api/app/bulk-import`; settings stay web-only |
+| Sync audit 2026-10-06 | App category edits (`PATCH /api/app/categories`) now audit and revalidate storefront; app shipping zone/rate edits revalidate `/checkout` and admin delivery like the web actions | — | — |

@@ -25,6 +25,7 @@ import { SettingsScreen } from "../screens/SettingsScreen";
 import { StoreDesignScreen } from "../screens/StoreDesignScreen";
 import { OrdersScreen } from "../screens/OrdersScreen";
 import { DeliverySettingsScreen } from "../screens/DeliverySettingsScreen";
+import { BulkAddScreen } from "../screens/BulkAddScreen";
 import { WishlistScreen } from "../screens/WishlistScreen";
 import { OrderTrackingScreen } from "../screens/OrderTrackingScreen";
 
@@ -233,6 +234,7 @@ function DashboardTab() {
         onNavigateToCreate={() => nav.navigate("Backend", { screen: "ADD" })}
         onNavigateToOrders={() => nav.navigate("Backend", { screen: "ORDERS" })}
         onNavigateToDeliverySettings={() => nav.navigate("DeliverySettings")}
+        onNavigateToBulkAdd={["OWNER", "ADMIN"].includes(user.role) ? () => nav.navigate("BulkAdd") : undefined}
         onNavigateToStoreDesign={() => nav.navigate("StoreDesign")}
         onSelectProduct={(id) => nav.navigate("BackendProduct", { id })}
         onSwitchToStorefront={() => nav.navigate("Storefront", { screen: "HOME" })}
@@ -276,10 +278,12 @@ function ProductsTab() {
 }
 
 function AddTab() {
+  const { user } = useApp();
   const nav = useNavigation<RootNav>();
   return (
     <Screen dark withTabBar>
       <CreateProductScreen
+        onBulkAdd={user && ["OWNER", "ADMIN"].includes(user.role) ? () => nav.navigate("BulkAdd") : undefined}
         onBack={() => nav.navigate("Backend", { screen: "PRODUCTS" })}
         onCreated={(id) => nav.navigate("BackendProduct", { id })}
       />
@@ -360,6 +364,15 @@ function StoreDesignRoute() {
   );
 }
 
+function BulkAddRoute() {
+  const nav = useNavigation<RootNav>();
+  return (
+    <Screen dark>
+      <BulkAddScreen onBack={() => nav.goBack()} />
+    </Screen>
+  );
+}
+
 function DeliverySettingsRoute() {
   const { notify } = useApp();
   const nav = useNavigation<RootNav>();
@@ -408,6 +421,7 @@ export function RootNavigator() {
       <Stack.Screen name="BackendProduct" component={BackendProductRoute} />
       <Stack.Screen name="StoreDesign" component={StoreDesignRoute} />
       <Stack.Screen name="DeliverySettings" component={DeliverySettingsRoute} />
+      <Stack.Screen name="BulkAdd" component={BulkAddRoute} />
       <Stack.Screen name="Wishlist" component={WishlistRoute} />
       <Stack.Screen name="OrderTracking" component={OrderTrackingRoute} />
     </Stack.Navigator>

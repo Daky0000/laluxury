@@ -450,3 +450,57 @@ export type AnalyticsEventInput = {
   sessionId?: string;
   props?: Record<string, string | number | boolean | null>;
 };
+
+// --- Bulk Product Add (owner app) ------------------------------------------
+
+export type BulkImportStatus =
+  | "UPLOADING" | "PARSING" | "NORMALIZING" | "MATCHING" | "ENRICHING" | "VALIDATING"
+  | "READY_FOR_REVIEW" | "DRAFT" | "IMPORTING" | "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | string;
+
+export type BulkImportSummary = { total?: number; status?: Record<string, number>; [k: string]: unknown } | null;
+
+export type BulkImportBatch = {
+  id: string;
+  name: string;
+  status: BulkImportStatus;
+  sourceKind: string;
+  summary: BulkImportSummary;
+  createdAt: string;
+  updatedAt: string;
+  error?: string | null;
+  aiCalls?: number;
+  aiFailures?: number;
+};
+
+export type BulkImportOverview = {
+  ok: boolean;
+  batches: BulkImportBatch[];
+  recipes: { id: string; name: string }[];
+  categories: { id: string; name: string }[];
+  ai: { enabled: boolean; vendor: "OPENROUTER" | "NVIDIA" };
+};
+
+export type BulkImportItem = {
+  id: string;
+  status: string;
+  action: string | null;
+  aiStatus: string | null;
+  error: string | null;
+  issues: { code: string; message: string; severity: "BLOCK" | "REVIEW" | "INFO" }[];
+  productId: string | null;
+  title: string | null;
+  shortDescription: string | null;
+  price: number | null;
+  stock: number;
+  variantCount: number;
+  imageUrl: string | null;
+  imageCount: number;
+};
+
+export type BulkImportDetail = {
+  ok: boolean;
+  pending: number;
+  photoCount: number;
+  batch: BulkImportBatch;
+  items: BulkImportItem[];
+};

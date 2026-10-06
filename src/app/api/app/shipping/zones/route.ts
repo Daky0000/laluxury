@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { apiOptionsResponse, requireBearerPermission, withApiAuth } from "@/lib/auth/bearer";
 import { isStaff } from "@/lib/auth/rbac";
 import { GHANA_REGIONS } from "@/lib/constants";
+
+/** Same paths the web delivery settings revalidate, so checkout sees app edits at once. */
+function revalidateShipping() {
+  try {
+    revalidatePath("/admin/settings/delivery");
+    revalidatePath("/checkout");
+  } catch {
+    /* outside a request */
+  }
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,6 +110,8 @@ export const POST = withApiAuth(async (request: Request) => {
       ? await db.shippingRate.update({ where: { id }, data: payload })
       : await db.shippingRate.create({ data: payload });
 
+    revalidateShipping();
+
     return NextResponse.json({
       ok: true,
       message: id ? "Rate updated successfully." : `Created rate ${rate.name}.`,
@@ -121,6 +134,8 @@ export const POST = withApiAuth(async (request: Request) => {
   const zone = id
     ? await db.shippingZone.update({ where: { id }, data: payload })
     : await db.shippingZone.create({ data: payload });
+
+  revalidateShipping();
 
   return NextResponse.json({
     ok: true,
@@ -147,12 +162,14 @@ export const DELETE = withApiAuth(async (request: Request) => {
     const used = await db.order.count({ where: { shippingRateId: targetId } });
     if (used > 0) {
       await db.shippingRate.update({ where: { id: targetId }, data: { isActive: false } });
+      revalidateShipping();
       return NextResponse.json({
         ok: true,
         message: "Rate has past orders; deactivated instead of deleted.",
       });
     }
     await db.shippingRate.delete({ where: { id: targetId } });
+    revalidateShipping();
     return NextResponse.json({ ok: true, message: "Rate deleted successfully." });
   }
 
@@ -161,6 +178,7 @@ export const DELETE = withApiAuth(async (request: Request) => {
   if (used > 0) {
     await db.shippingZone.update({ where: { id: targetId }, data: { isActive: false } });
     await db.shippingRate.updateMany({ where: { zoneId: targetId }, data: { isActive: false } });
+    revalidateShipping();
     return NextResponse.json({
       ok: true,
       message: "Zone has past orders; deactivated instead of deleted.",
@@ -169,5 +187,6 @@ export const DELETE = withApiAuth(async (request: Request) => {
 
   await db.shippingRate.deleteMany({ where: { zoneId: targetId } });
   await db.shippingZone.delete({ where: { id: targetId } });
+  revalidateShipping();
   return NextResponse.json({ ok: true, message: "Zone deleted successfully." });
 });

@@ -6,23 +6,19 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import type { Prisma } from "@/generated/prisma";
-import { revalidateProductCatalog } from "@/lib/catalog-revalidate";
 import { runBulkAiTask } from "@/lib/bulk-ai/router";
 import { normalizeValuesPrompt, parseInstructionPrompt } from "@/lib/bulk-ai/prompts";
 import { batchInstructionSchema, normalizeValueSchema, type BatchInstruction } from "@/lib/bulk-ai/schemas";
 import { errorMessage } from "@/lib/bulk-ai/retry";
 import { getBulkAiConfig } from "@/lib/bulk-ai/model-registry";
 import { createBatch, kickWorker } from "@/lib/bulk-import/create-batch";
-import { cancelBatchJobs, enqueueJobs } from "@/lib/bulk-import/jobs";
-import { forgetBatchContext, getBatchContext, IMPORT_CHUNK, prepareItem, queuePrepare, readSetup, refreshSummary } from "@/lib/bulk-import/pipeline";
+import { forgetBatchContext, getBatchContext, prepareItem, queuePrepare, readSetup, refreshSummary } from "@/lib/bulk-import/pipeline";
 import { itemWhere } from "@/lib/bulk-import/review-query";
 import { simulateImport, type Simulation } from "@/lib/bulk-import/import-simulation";
+import { cancelBatch, editImportItem, importBatch, publishBatch, retryFailedItems, startBatchProcessing } from "@/lib/bulk-import/batch-ops";
 import {
   batchSetupSchema,
   optionSpecSchema,
-  pricingSpecSchema,
-  stockSpecSchema,
-  TARGET_FIELDS,
   type BatchSetup,
   type ItemDraft,
   type ItemOverrides,
@@ -77,99 +73,16 @@ export async function updateBatchSetupAction(batchId: string, setupInput: unknow
   return { ok: true };
 }
 
-const mappingSchema = z.record(
-  z.string(),
-  z.string().refine((v) => v === "ignore" || v.startsWith("option:") || (TARGET_FIELDS as readonly string[]).includes(v), "Unknown field"),
-);
-
 /**
  * "Prepare products": saves the setup and mapping, optionally saves the
  * mapping as an import profile, and queues the work.
  */
 export async function startProcessingAction(
   batchId: string,
-  input: {
-    setup: unknown;
-    columnMapping?: Record<string, string> | null;
-    saveProfile?: { sourceName: string; profileName: string } | null;
-    sourceName?: string | null;
-  },
+  input: Parameters<typeof startBatchProcessing>[2],
 ): Promise<ActionResult> {
   const user = await requirePermission("products:write");
-  const batch = await ownBatch(batchId);
-  const setup = batchSetupSchema.safeParse(input.setup ?? {});
-  if (!setup.success) return fail(setup.error.issues[0]?.message ?? "Check the setup.");
-
-  let mapping = batch.columnMapping as Record<string, string> | null;
-  if (input.columnMapping) {
-    const parsed = mappingSchema.safeParse(input.columnMapping);
-    if (!parsed.success) return fail("The column mapping has an unknown field.");
-    mapping = parsed.data;
-  }
-  if (batch.sourceKind !== "PHOTOS" && !batch.fileData) return fail("Upload the spreadsheet first.");
-  if (batch.sourceKind !== "PHOTOS" && (!mapping || !Object.values(mapping).some((v) => v !== "ignore"))) {
-    return fail("Map at least one column.");
-  }
-  if (batch.sourceKind === "PHOTOS" && !(await db.productImportMedia.count({ where: { batchId } }))) {
-    return fail("Upload some photos first.");
-  }
-
-  // Supplier identity: a named source makes repeat imports update, not duplicate.
-  let sourceId = batch.sourceId;
-  let profileId = batch.profileId;
-  const sourceName = (input.saveProfile?.sourceName || input.sourceName || "").trim();
-  if (sourceName) {
-    const source = await db.catalogSource.upsert({
-      where: { name: sourceName },
-      create: { name: sourceName },
-      update: {},
-      select: { id: true },
-    });
-    sourceId = source.id;
-    if (input.saveProfile?.profileName?.trim()) {
-      const config = {
-        columnMapping: mapping,
-        recipeId: setup.data.recipeId ?? null,
-        imageRole: setup.data.imageRole,
-        pricing: setup.data.pricing,
-        stock: setup.data.stock,
-        options: setup.data.options,
-        fieldAuthority: setup.data.fieldAuthority ?? null,
-        defaults: { material: setup.data.defaults.material ?? null, care: setup.data.defaults.care ?? null },
-      };
-      const profile = await db.catalogSourceProfile.upsert({
-        where: { sourceId_name: { sourceId: source.id, name: input.saveProfile.profileName.trim() } },
-        create: { sourceId: source.id, name: input.saveProfile.profileName.trim(), config: config as Prisma.InputJsonValue },
-        update: { config: config as Prisma.InputJsonValue },
-        select: { id: true },
-      });
-      profileId = profile.id;
-    }
-  }
-
-  await db.productImportBatch.update({
-    where: { id: batchId },
-    data: {
-      setup: { ...setup.data, sourceId } as unknown as Prisma.InputJsonValue,
-      recipeId: setup.data.recipeId ?? null,
-      columnMapping: (mapping ?? undefined) as Prisma.InputJsonValue | undefined,
-      sourceId,
-      profileId,
-      status: batch.sourceKind === "PHOTOS" ? "NORMALIZING" : "PARSING",
-      startedAt: new Date(),
-      error: null,
-    },
-  });
-  forgetBatchContext(batchId);
-
-  await enqueueJobs([
-    batch.sourceKind === "PHOTOS"
-      ? { type: "MATCH_MEDIA", batchId, dedupeKey: `group:${batchId}:${Date.now()}` }
-      : { type: "PARSE_FILE", batchId, dedupeKey: `parse:${batchId}:${Date.now()}`, maxAttempts: 2 },
-  ]);
-  await recordAudit({ actorId: user.id, action: "bulk_import.start", entity: "ProductImportBatch", entityId: batchId });
-  kickWorker();
-  return { ok: true };
+  return startBatchProcessing(batchId, user.id, input);
 }
 
 /** Natural-language setup: the extracted facts are shown to the owner before use. */
@@ -340,41 +253,12 @@ async function mergeOverrides(ids: string[], patch: ItemOverrides) {
   }
 }
 
-const itemEditSchema = z.object({
-  title: z.string().max(160).optional(),
-  shortDescription: z.string().max(400).optional(),
-  description: z.string().max(5000).optional(),
-  metaTitle: z.string().max(80).optional(),
-  metaDescription: z.string().max(200).optional(),
-  material: z.string().max(120).optional(),
-  care: z.string().max(400).optional(),
-  price: z.number().int().nonnegative().nullable().optional(),
-  stock: z.number().int().nonnegative().nullable().optional(),
-  disabledCombinations: z.array(z.string()).optional(),
-  pricing: pricingSpecSchema.optional(),
-  stockSpec: stockSpecSchema.optional(),
-  categoryIds: z.array(z.string()).optional(),
-});
-
 /** One item's edits, re-validated immediately so the row updates in place. */
 export async function updateItemAction(itemId: string, input: unknown): Promise<ActionResult> {
   await requirePermission("products:write");
-  const parsed = itemEditSchema.safeParse(input);
-  if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the values.");
-  const item = await db.productImportItem.findUnique({ where: { id: itemId } });
-  if (!item) return fail("That item no longer exists.");
-  if (["IMPORTED", "UPDATED", "IMPORTING"].includes(item.status)) return fail("That item is already in the catalog.");
-
-  const next: ItemOverrides = { ...((item.overrides ?? {}) as ItemOverrides) };
-  for (const [k, v] of Object.entries(parsed.data)) {
-    if (v === undefined) continue;
-    if (v === null || v === "") delete (next as Record<string, unknown>)[k];
-    else (next as Record<string, unknown>)[k] = v;
-  }
-  const updated = await db.productImportItem.update({ where: { id: itemId }, data: { overrides: next as Prisma.InputJsonValue } });
-  await runPrepareInline(updated.batchId, updated.id);
-  revalidateBatch(updated.batchId);
-  return { ok: true };
+  const result = await editImportItem(itemId, input);
+  if (result.ok && result.data) revalidateBatch(result.data.batchId);
+  return result.ok ? { ok: true } : result;
 }
 
 async function runPrepareInline(batchId: string, itemId: string) {
@@ -435,96 +319,31 @@ export async function simulateAction(batchId: string): Promise<ActionResult<Simu
 
 export async function importBatchAction(batchId: string, opts: { publish: boolean }): Promise<ActionResult<{ queued: number }>> {
   const user = await requirePermission("products:write");
-  const batch = await ownBatch(batchId);
-  if (batch.status === "CANCELLED") return fail("This import was cancelled.");
-  const ready = await db.productImportItem.findMany({ where: { batchId, status: "READY" }, select: { id: true }, orderBy: { rowNumber: "asc" } });
-  if (!ready.length) return fail("No items are ready to import.");
-
-  const stamp = Date.now().toString(36);
-  const jobs = [];
-  for (let i = 0; i < ready.length; i += IMPORT_CHUNK) {
-    jobs.push({
-      type: "IMPORT_ITEMS" as const,
-      batchId,
-      payload: { itemIds: ready.slice(i, i + IMPORT_CHUNK).map((r) => r.id), actorId: user.id, publish: opts.publish },
-      dedupeKey: `import:${batchId}:${stamp}:${i}`,
-      maxAttempts: 3,
-    });
-  }
-  await enqueueJobs(jobs);
-  await db.productImportBatch.update({ where: { id: batchId }, data: { status: "IMPORTING" } });
-  await recordAudit({
-    actorId: user.id,
-    action: "bulk_import.import",
-    entity: "ProductImportBatch",
-    entityId: batchId,
-    after: { items: ready.length, publish: opts.publish },
-  });
-  kickWorker();
-  revalidateBatch(batchId);
-  return { ok: true, data: { queued: ready.length } };
+  const result = await importBatch(batchId, user.id, opts);
+  if (result.ok) revalidateBatch(batchId);
+  return result;
 }
 
 export async function publishBatchAction(batchId: string, selection?: unknown): Promise<ActionResult<{ queued: number }>> {
   const user = await requirePermission("products:write");
-  await ownBatch(batchId);
-  const sel = selectionSchema.safeParse(selection ?? {});
-  const where: Prisma.ProductImportItemWhereInput = { batchId, status: { in: ["IMPORTED", "UPDATED"] }, productId: { not: null } };
-  if (sel.success && sel.data.itemIds?.length) where.id = { in: sel.data.itemIds };
-  const items = await db.productImportItem.findMany({ where, select: { id: true } });
-  if (!items.length) return fail("Nothing has been imported yet.");
-  const stamp = Date.now().toString(36);
-  const jobs = [];
-  for (let i = 0; i < items.length; i += 200) {
-    jobs.push({
-      type: "PUBLISH_PRODUCT" as const,
-      batchId,
-      payload: { itemIds: items.slice(i, i + 200).map((r) => r.id), actorId: user.id },
-      dedupeKey: `publish:${batchId}:${stamp}:${i}`,
-    });
-  }
-  await enqueueJobs(jobs);
-  kickWorker();
-  try {
-    revalidateProductCatalog();
-  } catch {
-    /* best effort */
-  }
-  revalidateBatch(batchId);
-  return { ok: true, data: { queued: items.length } };
+  const result = await publishBatch(batchId, user.id, selection);
+  if (result.ok) revalidateBatch(batchId);
+  return result;
 }
 
 /** Failed imports go back to the review queue; failed AI is tried again. */
 export async function retryFailedAction(batchId: string): Promise<ActionResult<{ count: number }>> {
   await requirePermission("products:write");
-  const batch = await ownBatch(batchId);
-  const failed = await db.productImportItem.findMany({
-    where: { batchId, OR: [{ status: "FAILED" }, { aiStatus: "FAILED" }] },
-    select: { id: true },
-  });
-  if (!failed.length) return fail("Nothing has failed.");
-  await db.productImportItem.updateMany({
-    where: { id: { in: failed.map((f) => f.id) }, aiStatus: "FAILED" },
-    data: { aiStatus: null, attempts: { increment: 1 } },
-  });
-  await db.productImportItem.updateMany({ where: { id: { in: failed.map((f) => f.id) }, status: "FAILED" }, data: { status: "PENDING" } });
-  if (["COMPLETED", "PARTIAL", "FAILED"].includes(batch.status)) {
-    await db.productImportBatch.update({ where: { id: batchId }, data: { status: "VALIDATING" } });
-  }
-  await queuePrepare(batchId, failed.map((f) => f.id));
-  kickWorker();
-  revalidateBatch(batchId);
-  return { ok: true, data: { count: failed.length } };
+  const result = await retryFailedItems(batchId);
+  if (result.ok) revalidateBatch(batchId);
+  return result;
 }
 
 export async function cancelBatchAction(batchId: string): Promise<ActionResult> {
   const user = await requirePermission("products:write");
-  await ownBatch(batchId);
-  await cancelBatchJobs(batchId);
-  await db.productImportBatch.update({ where: { id: batchId }, data: { status: "CANCELLED", fileData: null } });
-  await recordAudit({ actorId: user.id, action: "bulk_import.cancel", entity: "ProductImportBatch", entityId: batchId });
-  revalidateBatch(batchId);
-  return { ok: true };
+  const result = await cancelBatch(batchId, user.id);
+  if (result.ok) revalidateBatch(batchId);
+  return result;
 }
 
 /** AI suggestions for supplier spellings the catalog does not know yet. */

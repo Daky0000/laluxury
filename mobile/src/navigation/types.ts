@@ -23,6 +23,7 @@ export type RootStackParamList = {
   BackendProduct: { id: string };
   StoreDesign: undefined;
   DeliverySettings: undefined;
+  BulkAdd: undefined;
   Wishlist: undefined;
   OrderTracking: { order: string; t?: string; email?: string };
 };

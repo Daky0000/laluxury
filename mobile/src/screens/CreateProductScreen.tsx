@@ -20,9 +20,11 @@ import { Category } from "../types";
 type Props = {
   onBack: () => void;
   onCreated: (newProductId: string) => void;
+  /** Owners and admins: many photos at once through Bulk Product Add. */
+  onBulkAdd?: () => void;
 };
 
-export function CreateProductScreen({ onBack, onCreated }: Props) {
+export function CreateProductScreen({ onBack, onCreated, onBulkAdd }: Props) {
   const [title, setTitle] = useState("");
   const [priceGHS, setPriceGHS] = useState("");
   const [stock, setStock] = useState("5");
@@ -173,6 +175,12 @@ export function CreateProductScreen({ onBack, onCreated }: Props) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {onBulkAdd && (
+          <TouchableOpacity style={styles.bulkLink} onPress={onBulkAdd}>
+            <Text style={styles.bulkLinkText}>Adding many pieces? Use Bulk Add →</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Photo Box */}
         <TouchableOpacity style={styles.photoBox} onPress={handlePickPhoto}>
           {photo?.uri ? (
@@ -349,6 +357,19 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     paddingBottom: 100,
+  },
+  bulkLink: {
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  bulkLinkText: {
+    color: colors.gold,
+    fontSize: 13,
+    fontWeight: "700",
   },
   photoBox: {
     width: "100%",
