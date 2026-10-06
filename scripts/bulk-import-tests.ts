@@ -239,6 +239,11 @@ async function main() {
     );
   }
 
+  {
+    const eol = "The model 'meta/llama-3.3-70b-instruct' has reached its end of life on 2026-08-26T09:00:00Z and is no longer available.";
+    check("end-of-life model skipped at once (any status)", [400, 404, 410, 500, 503].every((s) => classifyHttpStatus(s, eol) === "SKIP_MODEL"));
+  }
+
   console.log("\nSpreadsheets");
   const csv = 'Item Name,Item Code,Qty,Retail,Colour,Drop\n"Grey ""Botanical"" Sheet",DUB-1,4,180,Grey,S-KING\n';
   const rows = readCsv(csv);

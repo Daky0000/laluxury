@@ -35,14 +35,14 @@ export const DEFAULT_MODELS: Record<AiProfile, string[]> = {
  */
 export const NVIDIA_DEFAULT_MODELS: Record<AiProfile, string[]> = {
   FAST_TEXT: [
-    "meta/llama-3.3-70b-instruct",
     "mistralai/mistral-small-3.1-24b-instruct-2503",
     "qwen/qwen3-next-80b-a3b-instruct",
+    "nvidia/llama-3.3-nemotron-super-49b-v1.5",
   ],
   COMPLEX_TEXT: [
     "qwen/qwen3-next-80b-a3b-instruct",
-    "meta/llama-3.3-70b-instruct",
     "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+    "mistralai/mistral-small-3.1-24b-instruct-2503",
   ],
   VISION: [
     "meta/llama-4-maverick-17b-128e-instruct",

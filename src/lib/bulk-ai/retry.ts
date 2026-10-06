@@ -45,14 +45,18 @@ const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 /** Errors about one model (restricted, withdrawn, not free) — try the next model, don't stop. */
 const MODEL_UNAVAILABLE = /only available|not available|no endpoints|not a valid model|model not found|does not exist|not supported|agentic|data policy|guardrail|restricted/i;
 
+/** A model that is gone for good — never worth a second attempt, whatever the status code. */
+const MODEL_RETIRED = /end of life|no longer available|deprecated|decommissioned|has been removed|retired/i;
+
 export function classifyHttpStatus(status: number, message = ""): AiFailureKind {
+  if (MODEL_RETIRED.test(message)) return "SKIP_MODEL";
   if (RETRYABLE_STATUS.has(status)) return "RETRYABLE";
   if (status !== 401 && status !== 402 && status !== 403 && RATE_LIMITED.test(message)) return "RETRYABLE";
   if (MODEL_UNAVAILABLE.test(message)) return "SKIP_MODEL";
   if (status === 401) return "FATAL"; // invalid key
   if (status === 403) return /key|auth|credential/i.test(message) ? "FATAL" : "SKIP_MODEL";
   if (status === 402) return "SKIP_MODEL"; // credits needed: never pay silently
-  if (status === 404) return "SKIP_MODEL"; // model withdrawn
+  if (status === 404 || status === 410) return "SKIP_MODEL"; // model withdrawn
   if (status === 400 && /model|not a valid model|no endpoints/i.test(message)) return "SKIP_MODEL";
   if (status === 400) return "FATAL"; // we built an invalid request
   return status >= 500 ? "RETRYABLE" : "FATAL";

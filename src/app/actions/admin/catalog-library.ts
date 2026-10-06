@@ -13,9 +13,12 @@ import {
   envBulkAiConfig,
   getBulkAiConfig,
   invalidateBulkAiConfig,
+  nvidiaKey,
+  openRouterKey,
   type BulkAiConfig,
 } from "@/lib/bulk-ai/model-registry";
 import { runBulkAiTask } from "@/lib/bulk-ai/router";
+import { listVendorModels, type CatalogModel } from "@/lib/bulk-ai/model-catalog";
 import { errorMessage } from "@/lib/bulk-ai/retry";
 
 type Result<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; message: string };
@@ -218,6 +221,18 @@ export async function testBulkAiAction(): Promise<Result<{ model: string; ms: nu
       user: 'Option: Size. Canonical values: ["Superking","King","Double"]. Supplier values: ["S-KING"].',
     });
     return { ok: true, data: { model, ms: Date.now() - started }, message: `Got ${value.suggestions.length} suggestion(s).` };
+  } catch (error) {
+    return fail(errorMessage(error));
+  }
+}
+
+/** The provider's live model list, for choosing models in the settings form. */
+export async function listBulkAiModelsAction(vendor: "OPENROUTER" | "NVIDIA"): Promise<Result<CatalogModel[]>> {
+  await requirePermission("settings:manage");
+  const key = vendor === "NVIDIA" ? await nvidiaKey() : await openRouterKey();
+  if (vendor === "NVIDIA" && !key) return fail("Add an NVIDIA API key under Settings → Integrations first.");
+  try {
+    return { ok: true, data: await listVendorModels(vendor, key) };
   } catch (error) {
     return fail(errorMessage(error));
   }
