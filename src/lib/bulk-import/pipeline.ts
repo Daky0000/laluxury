@@ -6,7 +6,7 @@ import { getBulkAiConfig } from "@/lib/bulk-ai/model-registry";
 import { imageAnalysisPrompt, productCopyPrompt } from "@/lib/bulk-ai/prompts";
 import { imageAnalysisSchema, optionMatchSchema, productCopySchema } from "@/lib/bulk-ai/schemas";
 import { prepareAiImage } from "@/lib/bulk-ai/image-prep";
-import { BulkAiDisabledError, errorMessage } from "@/lib/bulk-ai/retry";
+import { BulkAiDisabledError, BulkAiExhaustedError, errorMessage } from "@/lib/bulk-ai/retry";
 import { createCatalogProduct } from "@/lib/catalog/create-product";
 import { registerExternalUrl } from "@/lib/media";
 import { skuFromTitle } from "@/lib/slug";
@@ -322,7 +322,7 @@ export async function prepareItem(
   if (wantAi && opts.allowAiQueue && aiStatus !== "PENDING") {
     aiStatus = "PENDING";
     await enqueueJobs([
-      { type: "AI_ANALYZE", batchId: ctx.batch.id, payload: { itemId: item.id }, dedupeKey: `ai:${item.id}:${item.attempts}`, maxAttempts: 2 },
+      { type: "AI_ANALYZE", batchId: ctx.batch.id, payload: { itemId: item.id }, dedupeKey: `ai:${item.id}:${item.attempts}`, maxAttempts: AI_JOB_ATTEMPTS },
     ]);
   } else if (!wantAi && aiStatus === "PENDING") {
     aiStatus = "SKIPPED";
@@ -365,7 +365,14 @@ async function prepareItems(batchId: string, itemIds: string[]) {
 
 // --- Enrich: AI -------------------------------------------------------------------
 
-async function aiAnalyze(batchId: string, itemId: string) {
+/**
+ * Rate-limited free models are the normal case, not an error: when every model
+ * was only busy, the job goes back on the queue (10s, 20s, 40s, 80s later)
+ * and the item stays PENDING instead of showing a failure.
+ */
+const AI_JOB_ATTEMPTS = 5;
+
+async function aiAnalyze(batchId: string, itemId: string, job?: ClaimedJob) {
   const ctx = await batchContext(batchId);
   const item = await db.productImportItem.findUnique({ where: { id: itemId } });
   if (!item || item.aiStatus === "DONE" || ["IMPORTED", "UPDATED"].includes(item.status)) return;
@@ -469,6 +476,11 @@ async function aiAnalyze(batchId: string, itemId: string) {
       result = { model, ...value, title: undefined };
     }
   } catch (error) {
+    const canRequeue = job ? job.attempts < job.maxAttempts : false;
+    if (error instanceof BulkAiExhaustedError && error.transient && canRequeue) {
+      await db.productImportItem.update({ where: { id: itemId }, data: { aiStatus: "PENDING", error: null } });
+      throw error; // failJob requeues with backoff
+    }
     if (!(error instanceof BulkAiDisabledError)) failure = errorMessage(error);
   }
 
@@ -646,7 +658,7 @@ export async function handleJob(job: ClaimedJob): Promise<void> {
       await prepareItems(batchId, p.itemIds ?? (p.itemId ? [p.itemId] : []));
       break;
     case "AI_ANALYZE":
-      if (p.itemId) await aiAnalyze(batchId, p.itemId);
+      if (p.itemId) await aiAnalyze(batchId, p.itemId, job);
       break;
     case "IMPORT_ITEMS":
     case "CREATE_PRODUCT":

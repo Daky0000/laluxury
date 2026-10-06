@@ -205,6 +205,40 @@ async function main() {
     check("restricted model (403) skipped once, next model used", out.model === "B" && calls.join("") === "AB", calls.join(""));
   }
 
+  {
+    // Free models answering "slow down" in their own words: 3 tries each, longer waits, then a transient exhaustion.
+    const msgs = [
+      "Provider returned error [Google AI Studio]: google/gemma-4-26b-a4b-it:free is temporarily rate-limited upstream. Please retry shortly",
+      "Upstream error from Nvidia: ResourceExhausted: Worker local total request limit reached (16/16)",
+    ];
+    const calls: string[] = [];
+    const waits: (number | undefined)[] = [];
+    let transient = false;
+    try {
+      await runWithFailover(
+        {
+          models: ["A", "B", "C"],
+          attemptsPerModel: 3,
+          wait: async (_n, ms) => void waits.push(ms),
+          log: () => undefined,
+          call: async (m) => {
+            calls.push(m);
+            const msg = msgs[calls.length % 2];
+            throw new BulkAiError(msg, classifyHttpStatus(502, msg), 502);
+          },
+        },
+        (x) => x,
+      );
+    } catch (e) {
+      transient = e instanceof BulkAiExhaustedError && e.transient;
+    }
+    check(
+      "rate limits: 3 tries per model, 3 models, longer waits, retried later",
+      calls.join("") === "AAABBBCCC" && transient && waits.length === 6 && waits.every((w) => (w ?? 0) >= 4000),
+      `${calls.join("")} ${transient} ${waits}`,
+    );
+  }
+
   console.log("\nSpreadsheets");
   const csv = 'Item Name,Item Code,Qty,Retail,Colour,Drop\n"Grey ""Botanical"" Sheet",DUB-1,4,180,Grey,S-KING\n';
   const rows = readCsv(csv);

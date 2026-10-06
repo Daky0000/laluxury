@@ -6,7 +6,7 @@ import { SectionHeading, Badge } from "@/components/ui";
 import { BulkAddWizard } from "@/components/admin/bulk-add/bulk-add-wizard";
 import { BulkAddNav, DesktopOnly } from "@/components/admin/bulk-add/desktop-only";
 import { recipeConfigSchema } from "@/lib/bulk-import/schema";
-import { getBulkAiConfig, openRouterKey } from "@/lib/bulk-ai/model-registry";
+import { getBulkAiConfig, vendorKey } from "@/lib/bulk-ai/model-registry";
 
 export const metadata: Metadata = { title: "Bulk Product Add" };
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function BulkProductAddPage() {
   await requirePermission("products:write");
 
-  const [recipes, library, categories, collections, profiles, recent, aiConfig, aiKey] = await Promise.all([
+  const [recipes, library, categories, collections, profiles, recent, aiConfig] = await Promise.all([
     db.productRecipe.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     db.catalogOptionDefinition.findMany({ orderBy: [{ position: "asc" }, { name: "asc" }], include: { values: { orderBy: { position: "asc" } } } }),
     db.category.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -27,8 +27,8 @@ export default async function BulkProductAddPage() {
       select: { id: true, name: true, status: true, createdAt: true },
     }),
     getBulkAiConfig(),
-    openRouterKey(),
   ]);
+  const aiKey = await vendorKey(aiConfig);
 
   return (
     <div className="flex flex-col gap-6">

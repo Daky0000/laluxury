@@ -7,6 +7,7 @@ import {
   envModels,
   type AiPolicy,
   type AiProfile,
+  type AiVendor,
 } from "./default-models";
 
 /**
@@ -18,10 +19,15 @@ export const BULK_AI_SETTING_KEY = "bulkAi";
 
 export type BulkAiConfig = {
   bulkAiEnabled: boolean;
+  /** OpenRouter or NVIDIA NIM; each keeps its own three model chains. */
+  bulkAiVendor: AiVendor;
   bulkAiPolicy: AiPolicy;
   bulkAiFastModels: string[];
   bulkAiComplexModels: string[];
   bulkAiVisionModels: string[];
+  bulkAiNvidiaFastModels: string[];
+  bulkAiNvidiaComplexModels: string[];
+  bulkAiNvidiaVisionModels: string[];
   bulkAiAttemptsPerModel: number;
   bulkAiFastConcurrency: number;
   bulkAiComplexConcurrency: number;
@@ -32,10 +38,14 @@ export function envBulkAiConfig(): BulkAiConfig {
   const policy = process.env.BULK_AI_POLICY;
   return {
     bulkAiEnabled: process.env.BULK_AI_ENABLED !== "false",
+    bulkAiVendor: process.env.BULK_AI_VENDOR === "NVIDIA" ? "NVIDIA" : "OPENROUTER",
     bulkAiPolicy: policy === "FREE_THEN_PAID" || policy === "PAID_ONLY" ? policy : "FREE_ONLY",
     bulkAiFastModels: envModels("FAST_TEXT"),
     bulkAiComplexModels: envModels("COMPLEX_TEXT"),
     bulkAiVisionModels: envModels("VISION"),
+    bulkAiNvidiaFastModels: envModels("FAST_TEXT", "NVIDIA"),
+    bulkAiNvidiaComplexModels: envModels("COMPLEX_TEXT", "NVIDIA"),
+    bulkAiNvidiaVisionModels: envModels("VISION", "NVIDIA"),
     bulkAiAttemptsPerModel: DEFAULT_ATTEMPTS_PER_MODEL,
     bulkAiFastConcurrency: DEFAULT_CONCURRENCY.FAST_TEXT,
     bulkAiComplexConcurrency: DEFAULT_CONCURRENCY.COMPLEX_TEXT,
@@ -82,6 +92,17 @@ export function isFreeModel(id: string): boolean {
  * not silently used.
  */
 export function modelsFor(config: BulkAiConfig, profile: AiProfile): string[] {
+  if (config.bulkAiVendor === "NVIDIA") {
+    const raw =
+      profile === "FAST_TEXT"
+        ? config.bulkAiNvidiaFastModels
+        : profile === "COMPLEX_TEXT"
+          ? config.bulkAiNvidiaComplexModels
+          : config.bulkAiNvidiaVisionModels;
+    const clean = [...new Set((raw ?? []).map((m) => m.trim()).filter(Boolean))];
+    // NVIDIA's hosted models carry no ":free" suffix and cost nothing on a developer key.
+    return (clean.length ? clean : envModels(profile, "NVIDIA")).slice(0, MAX_MODELS_PER_TASK);
+  }
   const raw =
     profile === "FAST_TEXT"
       ? config.bulkAiFastModels
@@ -125,7 +146,20 @@ export async function openRouterKey(): Promise<string> {
   return integrations.ai.openrouterApiKey;
 }
 
+/** The NVIDIA NIM key: BULK_AI_NVIDIA_API_KEY, else Settings → Integrations (NVIDIA_API_KEY). */
+export async function nvidiaKey(): Promise<string> {
+  const dedicated = process.env.BULK_AI_NVIDIA_API_KEY?.trim();
+  if (dedicated) return dedicated;
+  const integrations = await getIntegrations();
+  return integrations.ai.nvidiaApiKey ?? "";
+}
+
+/** The key for whichever vendor is switched on. */
+export async function vendorKey(config: BulkAiConfig): Promise<string> {
+  return config.bulkAiVendor === "NVIDIA" ? nvidiaKey() : openRouterKey();
+}
+
 /** Models known to accept image input. Anything in the VISION chain is assumed to. */
 export function supportsImages(config: BulkAiConfig, model: string): boolean {
-  return config.bulkAiVisionModels.includes(model);
+  return config.bulkAiVisionModels.includes(model) || config.bulkAiNvidiaVisionModels.includes(model);
 }

@@ -35,6 +35,7 @@ const SHAPE: Record<string, string[]> = {
     "openrouterApiKey",
     "openrouterModel",
     "openrouterFallbackModel",
+    "nvidiaApiKey",
   ],
   slack: ["botToken", "signingSecret", "alertChannel"],
   whatsapp: ["accessToken", "phoneNumberId", "verifyToken", "appSecret"],

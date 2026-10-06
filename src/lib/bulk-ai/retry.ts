@@ -13,6 +13,8 @@ export class BulkAiError extends Error {
     message: string,
     readonly kind: AiFailureKind,
     readonly status?: number,
+    /** From the provider's Retry-After header, when it sent one. */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = "BulkAiError";
@@ -21,7 +23,11 @@ export class BulkAiError extends Error {
 
 /** All models in the chain failed (or none were usable). The item is kept for retry. */
 export class BulkAiExhaustedError extends Error {
-  constructor(message = "AI could not complete this task. The item was kept so it can be retried.") {
+  constructor(
+    message = "AI could not complete this task. The item was kept so it can be retried.",
+    /** Every failure was temporary (rate limits, busy or down providers): worth a later retry. */
+    readonly transient = false,
+  ) {
     super(message);
     this.name = "BulkAiExhaustedError";
   }
@@ -41,6 +47,7 @@ const MODEL_UNAVAILABLE = /only available|not available|no endpoints|not a valid
 
 export function classifyHttpStatus(status: number, message = ""): AiFailureKind {
   if (RETRYABLE_STATUS.has(status)) return "RETRYABLE";
+  if (status !== 401 && status !== 402 && status !== 403 && RATE_LIMITED.test(message)) return "RETRYABLE";
   if (MODEL_UNAVAILABLE.test(message)) return "SKIP_MODEL";
   if (status === 401) return "FATAL"; // invalid key
   if (status === 403) return /key|auth|credential/i.test(message) ? "FATAL" : "SKIP_MODEL";
@@ -49,6 +56,28 @@ export function classifyHttpStatus(status: number, message = ""): AiFailureKind 
   if (status === 400 && /model|not a valid model|no endpoints/i.test(message)) return "SKIP_MODEL";
   if (status === 400) return "FATAL"; // we built an invalid request
   return status >= 500 ? "RETRYABLE" : "FATAL";
+}
+
+/** Free endpoints' "slow down" answers, however each provider words them. */
+const RATE_LIMITED = /rate.?limit|too many requests|resource.?exhausted|request limit|quota|temporarily|overloaded|capacity|try again|retry shortly/i;
+
+export function isRateLimited(error: unknown): boolean {
+  if (!(error instanceof BulkAiError)) return false;
+  return error.status === 429 || RATE_LIMITED.test(error.message);
+}
+
+/** Temporary failures: rate limits, timeouts, network, 5xx. Not bad JSON or a withdrawn model. */
+export function isTransient(error: unknown): boolean {
+  if (!(error instanceof BulkAiError)) return false;
+  if (isRateLimited(error)) return true;
+  return error.kind === "RETRYABLE" && (error.status === undefined || error.status >= 500 || error.status === 408);
+}
+
+/** Waits for a rate-limited model: the provider's Retry-After, else 5s, 10s, 20s … capped at 30s. */
+export function rateLimitWaitMs(attempt: number, error: unknown): number {
+  const hinted = error instanceof BulkAiError ? error.retryAfterMs : undefined;
+  const base = Math.min(30_000, 5_000 * 2 ** (attempt - 1));
+  return Math.max(hinted ?? 0, Math.round(base * (0.8 + Math.random() * 0.4)));
 }
 
 export function isRetryable(error: unknown): boolean {
@@ -67,9 +96,9 @@ export function backoffMs(attempt: number): number {
   return Math.round(base * (0.75 + Math.random() * 0.5));
 }
 
-export function waitWithBackoff(attempt: number, signal?: AbortSignal): Promise<void> {
+export function waitWithBackoff(attempt: number, signal?: AbortSignal, ms = backoffMs(attempt)): Promise<void> {
   return new Promise((resolve) => {
-    const t = setTimeout(resolve, backoffMs(attempt));
+    const t = setTimeout(resolve, ms);
     signal?.addEventListener("abort", () => {
       clearTimeout(t);
       resolve();

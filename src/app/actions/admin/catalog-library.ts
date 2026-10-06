@@ -157,10 +157,14 @@ export async function deleteRuleAction(id: string): Promise<Result> {
 const modelList = z.array(z.string().trim().max(120)).max(3);
 const aiSettingsInput = z.object({
   bulkAiEnabled: z.boolean(),
+  bulkAiVendor: z.enum(["OPENROUTER", "NVIDIA"]),
   bulkAiPolicy: z.enum(["FREE_ONLY", "FREE_THEN_PAID", "PAID_ONLY"]),
   bulkAiFastModels: modelList,
   bulkAiComplexModels: modelList,
   bulkAiVisionModels: modelList,
+  bulkAiNvidiaFastModels: modelList,
+  bulkAiNvidiaComplexModels: modelList,
+  bulkAiNvidiaVisionModels: modelList,
   bulkAiAttemptsPerModel: z.number().int().min(1).max(5),
   bulkAiFastConcurrency: z.number().int().min(1).max(20),
   bulkAiComplexConcurrency: z.number().int().min(1).max(20),
@@ -176,6 +180,9 @@ export async function saveBulkAiSettingsAction(input: unknown): Promise<Result> 
     bulkAiFastModels: parsed.data.bulkAiFastModels.filter(Boolean),
     bulkAiComplexModels: parsed.data.bulkAiComplexModels.filter(Boolean),
     bulkAiVisionModels: parsed.data.bulkAiVisionModels.filter(Boolean),
+    bulkAiNvidiaFastModels: parsed.data.bulkAiNvidiaFastModels.filter(Boolean),
+    bulkAiNvidiaComplexModels: parsed.data.bulkAiNvidiaComplexModels.filter(Boolean),
+    bulkAiNvidiaVisionModels: parsed.data.bulkAiNvidiaVisionModels.filter(Boolean),
   } satisfies BulkAiConfig;
   await db.setting.upsert({
     where: { key: BULK_AI_SETTING_KEY },

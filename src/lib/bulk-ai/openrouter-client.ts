@@ -11,6 +11,8 @@ import { BulkAiError, classifyHttpStatus } from "./retry";
  */
 
 export const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+/** NVIDIA NIM's OpenAI-compatible endpoint (build.nvidia.com). */
+export const NVIDIA_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions";
 
 export type ContentPart =
   | { type: "text"; text: string }
@@ -31,6 +33,8 @@ const g = globalThis as unknown as { bulkAiNoSchema?: Set<string> };
 const noStructured = (g.bulkAiNoSchema ??= new Set());
 
 export async function callOpenRouter(args: {
+  /** Defaults to OpenRouter. NVIDIA gets plain JSON-by-prompt (no response_format). */
+  vendor?: "OPENROUTER" | "NVIDIA";
   apiKey: string;
   model: string;
   messages: ChatMessage[];
@@ -39,9 +43,10 @@ export async function callOpenRouter(args: {
   timeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<OpenRouterResult> {
-  if (!args.apiKey) throw new BulkAiError("No OpenRouter API key is configured.", "FATAL");
+  const nvidia = args.vendor === "NVIDIA";
+  if (!args.apiKey) throw new BulkAiError(`No ${nvidia ? "NVIDIA" : "OpenRouter"} API key is configured.`, "FATAL");
 
-  const useSchema = Boolean(args.jsonSchema) && !noStructured.has(args.model);
+  const useSchema = !nvidia && Boolean(args.jsonSchema) && !noStructured.has(args.model);
   try {
     return await send(args, useSchema);
   } catch (error) {
@@ -71,24 +76,30 @@ async function send(
   const timeout = AbortSignal.timeout(args.timeoutMs ?? 90_000);
   const signal = args.signal ? AbortSignal.any([args.signal, timeout]) : timeout;
 
+  const nvidia = args.vendor === "NVIDIA";
   let response: Response;
   try {
-    response = await fetch(OPENROUTER_ENDPOINT, {
+    response = await fetch(nvidia ? NVIDIA_ENDPOINT : OPENROUTER_ENDPOINT, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${args.apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": env.siteUrl(),
-        "X-Title": "Noble Enclave Bulk Product Add",
+        Accept: "application/json",
+        ...(nvidia ? {} : { "HTTP-Referer": env.siteUrl(), "X-Title": "Noble Enclave Bulk Product Add" }),
       },
       body: JSON.stringify({
         model: args.model,
         messages: args.messages,
         temperature: 0.2,
         max_tokens: args.maxTokens ?? 1500,
-        usage: { include: true },
-        // Provider-level failover only; never another model.
-        provider: { allow_fallbacks: true },
+        stream: false,
+        ...(nvidia
+          ? {}
+          : {
+              usage: { include: true },
+              // Provider-level failover only; never another model.
+              provider: { allow_fallbacks: true },
+            }),
         ...(useSchema && args.jsonSchema
           ? {
               response_format: {
@@ -111,18 +122,25 @@ async function send(
     choices?: { message?: { content?: string | null } }[];
     model?: string;
     usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
-    error?: { message?: string; code?: number; metadata?: { raw?: unknown; provider_name?: string } };
+    error?: { message?: string; code?: number; metadata?: { raw?: unknown; provider_name?: string } } | string;
+    // NVIDIA NIM reports failures as RFC 7807 problem details.
+    detail?: string;
+    title?: string;
   } | null;
 
+  const retryAfterMs = parseRetryAfter(response.headers.get("retry-after"));
+  const err = typeof payload?.error === "string" ? { message: payload.error } : payload?.error;
+
   if (!response.ok) {
-    const message = describeError(payload?.error, `OpenRouter request failed (${response.status}).`);
-    throw new BulkAiError(message, classifyHttpStatus(response.status, message), response.status);
+    const fallback = payload?.detail || payload?.title || `${nvidia ? "NVIDIA" : "OpenRouter"} request failed (${response.status}).`;
+    const message = describeError(err, fallback);
+    throw new BulkAiError(message, classifyHttpStatus(response.status, message), response.status, retryAfterMs);
   }
   // OpenRouter can answer 200 with an error body when the upstream failed mid-way.
-  if (payload?.error) {
-    const status = Number(payload.error.code) || 502;
-    const message = describeError(payload.error, "Provider error.");
-    throw new BulkAiError(message, classifyHttpStatus(status, message), status);
+  if (err) {
+    const status = Number((err as { code?: number }).code) || 502;
+    const message = describeError(err, "Provider error.");
+    throw new BulkAiError(message, classifyHttpStatus(status, message), status, retryAfterMs);
   }
 
   const content = payload?.choices?.[0]?.message?.content?.trim() ?? "";
@@ -135,6 +153,14 @@ async function send(
     completionTokens: payload?.usage?.completion_tokens,
     cost: payload?.usage?.cost,
   };
+}
+
+/** Retry-After as seconds or an HTTP date; capped at a minute. */
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const secs = Number(value);
+  const ms = Number.isFinite(secs) ? secs * 1000 : Date.parse(value) - Date.now();
+  return ms > 0 ? Math.min(60_000, ms) : undefined;
 }
 
 /**
@@ -154,6 +180,8 @@ function describeError(
 
 /** Pulls the first JSON object out of a reply, tolerating code fences and prose. */
 export function extractJson(content: string): unknown {
+  // Reasoning models may think out loud first.
+  content = content.replace(/<think>[\s\S]*?<\/think>/gi, "");
   const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const text = (fenced ? fenced[1] : content).trim();
   try {

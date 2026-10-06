@@ -8,7 +8,7 @@ import {
   concurrencyFor,
   getBulkAiConfig,
   modelsFor,
-  openRouterKey,
+  vendorKey,
 } from "./model-registry";
 import { isDegraded, recordFailure, recordSuccess, withSlot } from "./health";
 import { BulkAiDisabledError, BulkAiError, BulkAiExhaustedError, waitWithBackoff } from "./retry";
@@ -67,8 +67,14 @@ export async function runBulkAiTask<S extends z.ZodType>(
     }
   }
 
-  const apiKey = await openRouterKey();
-  if (!apiKey) throw new BulkAiError("Add an OpenRouter API key under Settings → Integrations.", "FATAL");
+  const vendor = config.bulkAiVendor;
+  const apiKey = await vendorKey(config);
+  if (!apiKey) {
+    throw new BulkAiError(
+      `Add ${vendor === "NVIDIA" ? "an NVIDIA" : "an OpenRouter"} API key under Settings → Integrations.`,
+      "FATAL",
+    );
+  }
 
   const profile = resolveTaskProfile(args.task);
   const models = modelsFor(config, profile);
@@ -97,10 +103,11 @@ export async function runBulkAiTask<S extends z.ZodType>(
         skipModel: isDegraded,
         onModelFailure: recordFailure,
         onModelSuccess: recordSuccess,
-        wait: (n) => waitWithBackoff(n, args.signal),
+        wait: (n, ms) => waitWithBackoff(n, args.signal, ms),
         call: (model) =>
           withSlot(profile, limit, () =>
             callOpenRouter({
+              vendor,
               apiKey,
               model,
               messages,

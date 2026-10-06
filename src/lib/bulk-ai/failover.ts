@@ -1,5 +1,14 @@
 import { extractJson, type OpenRouterResult } from "./openrouter-client";
-import { BulkAiExhaustedError, errorMessage, isFatal, isRetryable, waitWithBackoff } from "./retry";
+import {
+  BulkAiExhaustedError,
+  errorMessage,
+  isFatal,
+  isRateLimited,
+  isRetryable,
+  isTransient,
+  rateLimitWaitMs,
+  waitWithBackoff,
+} from "./retry";
 import type { AiTask } from "./task-registry";
 
 /**
@@ -26,7 +35,8 @@ export type FailoverDeps = {
   attemptsPerModel: number;
   call: (model: string) => Promise<OpenRouterResult>;
   log: (entry: Omit<AttemptLog, "task">) => Promise<void> | void;
-  wait?: (attempt: number) => Promise<void>;
+  /** `ms` is set when the model asked us to slow down; honour it. */
+  wait?: (attempt: number, ms?: number) => Promise<void>;
   skipModel?: (model: string) => boolean;
   onModelFailure?: (model: string) => void;
   onModelSuccess?: (model: string) => void;
@@ -36,12 +46,13 @@ export async function runWithFailover<T>(
   deps: FailoverDeps,
   parse: (raw: unknown) => T,
 ): Promise<{ value: T; model: string }> {
-  const wait = deps.wait ?? ((n: number) => waitWithBackoff(n));
+  const wait = deps.wait ?? ((n: number, ms?: number) => waitWithBackoff(n, undefined, ms));
   const usable = deps.models.filter((m) => !deps.skipModel?.(m));
   // If every model is tripped, probe them anyway rather than fail outright.
   const chain = usable.length ? usable : deps.models;
 
   let lastError = "";
+  let allTransient = true;
   for (const model of chain) {
     for (let attempt = 1; attempt <= deps.attemptsPerModel; attempt++) {
       const started = Date.now();
@@ -68,14 +79,20 @@ export async function runWithFailover<T>(
           latencyMs: Date.now() - started,
         });
         lastError = `${model}: ${errorMessage(error)}`;
+        if (!isTransient(error)) allTransient = false;
         if (isFatal(error)) throw error;
         if (!isRetryable(error)) break; // SKIP_MODEL: go straight to the next model
         deps.onModelFailure?.(model);
-        if (attempt < deps.attemptsPerModel) await wait(attempt);
+        if (attempt < deps.attemptsPerModel) {
+          await wait(attempt, isRateLimited(error) ? rateLimitWaitMs(attempt, error) : undefined);
+        }
       }
     }
   }
   throw new BulkAiExhaustedError(
-    `AI could not complete this task; the item was kept for retry.${lastError ? ` Last error — ${lastError}` : ""}`,
+    allTransient && lastError
+      ? `AI providers are busy right now (rate-limited); this item will be retried automatically. Last error — ${lastError}`
+      : `AI could not complete this task; the item was kept for retry.${lastError ? ` Last error — ${lastError}` : ""}`,
+    allTransient && Boolean(lastError),
   );
 }

@@ -37,6 +37,8 @@ export type Integrations = {
     openrouterApiKey: string;
     openrouterModel: string;
     openrouterFallbackModel: string;
+    /** NVIDIA NIM (build.nvidia.com) — used only by Bulk Product Add. */
+    nvidiaApiKey: string;
   };
   slack: { botToken: string; signingSecret: string; alertChannel: string };
   whatsapp: {
@@ -64,6 +66,7 @@ export const SECRET_FIELDS = new Set([
   "paystack.testSecretKey",
   "ai.anthropicApiKey",
   "ai.openrouterApiKey",
+  "ai.nvidiaApiKey",
   "slack.botToken",
   "slack.signingSecret",
   "whatsapp.accessToken",
@@ -94,6 +97,7 @@ function fromEnv(): Integrations {
       openrouterApiKey: env.openrouter.apiKey(),
       openrouterModel: env.openrouter.model(),
       openrouterFallbackModel: env.openrouter.fallbackModel(),
+      nvidiaApiKey: process.env.NVIDIA_API_KEY ?? "",
     },
     slack: {
       botToken: env.slack.botToken(),
@@ -361,6 +365,7 @@ export async function integrationsView(): Promise<IntegrationGroup[]> {
         field("ai", "openrouterApiKey", "OpenRouter API key", "openrouter.ai"),
         field("ai", "openrouterModel", "OpenRouter model"),
         field("ai", "openrouterFallbackModel", "OpenRouter fallback model"),
+        field("ai", "nvidiaApiKey", "NVIDIA API key (Bulk Product Add)", "build.nvidia.com"),
       ],
     },
     {

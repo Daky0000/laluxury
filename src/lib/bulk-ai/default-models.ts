@@ -8,6 +8,8 @@
 
 export type AiProfile = "FAST_TEXT" | "COMPLEX_TEXT" | "VISION";
 export type AiPolicy = "FREE_ONLY" | "FREE_THEN_PAID" | "PAID_ONLY";
+/** Where Bulk Product Add sends its AI calls. The owner switches in settings. */
+export type AiVendor = "OPENROUTER" | "NVIDIA";
 
 export const DEFAULT_MODELS: Record<AiProfile, string[]> = {
   FAST_TEXT: [
@@ -24,6 +26,28 @@ export const DEFAULT_MODELS: Record<AiProfile, string[]> = {
     "google/gemma-4-31b-it:free",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
     "google/gemma-4-26b-a4b-it:free",
+  ],
+};
+
+/**
+ * NVIDIA NIM (build.nvidia.com) hosted models. Free with an NVIDIA developer
+ * key; no ":free" suffix, so the spending policy does not apply to them.
+ */
+export const NVIDIA_DEFAULT_MODELS: Record<AiProfile, string[]> = {
+  FAST_TEXT: [
+    "meta/llama-3.3-70b-instruct",
+    "mistralai/mistral-small-3.1-24b-instruct-2503",
+    "qwen/qwen3-next-80b-a3b-instruct",
+  ],
+  COMPLEX_TEXT: [
+    "qwen/qwen3-next-80b-a3b-instruct",
+    "meta/llama-3.3-70b-instruct",
+    "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+  ],
+  VISION: [
+    "meta/llama-4-maverick-17b-128e-instruct",
+    "nvidia/nemotron-nano-12b-v2-vl",
+    "meta/llama-3.2-90b-vision-instruct",
   ],
 };
 
@@ -44,6 +68,13 @@ export const MODEL_LABELS: Record<string, string> = {
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": "Nemotron 3 Nano Omni",
   "google/gemma-4-31b-it:free": "Gemma 4 31B",
   "google/gemma-4-26b-a4b-it:free": "Gemma 4 26B A4B",
+  "meta/llama-3.3-70b-instruct": "Llama 3.3 70B (NVIDIA)",
+  "mistralai/mistral-small-3.1-24b-instruct-2503": "Mistral Small 3.1 (NVIDIA)",
+  "qwen/qwen3-next-80b-a3b-instruct": "Qwen3 Next 80B (NVIDIA)",
+  "nvidia/llama-3.3-nemotron-super-49b-v1.5": "Nemotron Super 49B (NVIDIA)",
+  "meta/llama-4-maverick-17b-128e-instruct": "Llama 4 Maverick (NVIDIA)",
+  "nvidia/nemotron-nano-12b-v2-vl": "Nemotron Nano 12B VL (NVIDIA)",
+  "meta/llama-3.2-90b-vision-instruct": "Llama 3.2 90B Vision (NVIDIA)",
 };
 
 export function modelLabel(id: string): string {
@@ -51,14 +82,19 @@ export function modelLabel(id: string): string {
 }
 
 const ENV_PREFIX: Record<AiProfile, string> = {
-  FAST_TEXT: "BULK_AI_FAST_MODEL_",
-  COMPLEX_TEXT: "BULK_AI_COMPLEX_MODEL_",
-  VISION: "BULK_AI_VISION_MODEL_",
+  FAST_TEXT: "FAST_MODEL_",
+  COMPLEX_TEXT: "COMPLEX_MODEL_",
+  VISION: "VISION_MODEL_",
 };
 
-/** The default chain for a profile with any environment overrides applied. */
-export function envModels(profile: AiProfile): string[] {
-  return DEFAULT_MODELS[profile].map(
-    (fallback, i) => process.env[`${ENV_PREFIX[profile]}${i + 1}`]?.trim() || fallback,
+/**
+ * The default chain for a profile with any environment overrides applied:
+ * BULK_AI_FAST_MODEL_1 … for OpenRouter, BULK_AI_NVIDIA_FAST_MODEL_1 … for NVIDIA.
+ */
+export function envModels(profile: AiProfile, vendor: AiVendor = "OPENROUTER"): string[] {
+  const defaults = vendor === "NVIDIA" ? NVIDIA_DEFAULT_MODELS : DEFAULT_MODELS;
+  const prefix = vendor === "NVIDIA" ? "BULK_AI_NVIDIA_" : "BULK_AI_";
+  return defaults[profile].map(
+    (fallback, i) => process.env[`${prefix}${ENV_PREFIX[profile]}${i + 1}`]?.trim() || fallback,
   );
 }
