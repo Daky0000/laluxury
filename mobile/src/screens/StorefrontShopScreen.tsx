@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FlashList } from "@shopify/flash-list";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import { SmartImage } from "../components/SmartImage";
 import { track } from "../lib/analytics";
 import { formatCurrency } from "../utils/format";
 import { getProductGridMetrics } from "../utils/layout";
+import { Pager } from "../components/Pager";
 
 type Props = {
   initialFilter?: string;
@@ -33,14 +34,9 @@ type Props = {
   onAddToCart: (product: Product) => void;
 };
 
-const FILTER_PILLS = [
-  { id: "ALL", label: "ALL" },
-  { id: "RECENTLY_STOCKED", label: "RECENTLY STOCKED" },
-  { id: "BEDDING", label: "BEDDING" },
-  { id: "CURTAINS", label: "CURTAINS" },
-  { id: "CARPETS", label: "CARPETS" },
-  { id: "CUSHIONS", label: "CUSHIONS" },
-];
+/** "ALL" and "NEW" are fixed; every other pill is a live store category, filtered on the server. */
+const ALL = "ALL";
+const NEW_IN = "NEW";
 
 const SORTS: { id: ProductSort; label: string }[] = [
   { id: "featured", label: "Featured" },
@@ -69,30 +65,6 @@ function useDebounced<T>(value: T, ms: number): T {
   return debounced;
 }
 
-/** Category pills match on title, tags and category names (catalogue has no fixed taxonomy). */
-function matchesPill(p: Product, pill: string): boolean {
-  if (pill === "ALL" || pill === "RECENTLY_STOCKED") return true;
-  const title = (p.title || "").toLowerCase();
-  const tags = (p.tags || []).map((t) => t.toLowerCase());
-  const cats = (p.categories || []).map((c) => (c.name || "").toLowerCase());
-  const any = (...words: string[]) =>
-    words.some((w) => title.includes(w) || tags.includes(w) || cats.includes(w));
-  switch (pill) {
-    case "CURTAINS":
-      return any("curtain", "blind", "blinds", "rod", "curtains", "windows");
-    case "CARPETS":
-      return any("carpet", "rug", "doormat", "carpets");
-    case "CUSHIONS":
-      return any("cushion", "cushions") || (title.includes("pillow") && !title.includes("bed") && !title.includes("sleep"));
-    case "BEDDING":
-      return any("bed", "duvet", "blanket", "sheet", "topper", "pillow", "bedding");
-    default: {
-      const term = pill.toLowerCase();
-      return title.includes(term) || tags.some((t) => t.includes(term)) || cats.some((c) => c.includes(term));
-    }
-  }
-}
-
 export function StorefrontShopScreen({
   initialFilter,
   cartCount,
@@ -102,7 +74,11 @@ export function StorefrontShopScreen({
   onAddToCart,
 }: Props) {
   const { wishlistIds, toggleWishlist } = useApp();
-  const [activeFilter, setActiveFilter] = useState(initialFilter ? initialFilter.toUpperCase() : "ALL");
+  // Category id, or ALL / NEW. A name from the home screen is resolved once categories load.
+  const [activeFilter, setActiveFilter] = useState<string>(ALL);
+  const [pendingName, setPendingName] = useState(initialFilter?.trim() || "");
+  const [page, setPage] = useState(1);
+  const listRef = useRef<{ scrollToOffset: (o: { offset: number; animated?: boolean }) => void } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
@@ -115,7 +91,34 @@ export function StorefrontShopScreen({
   const { width: windowWidth } = useWindowDimensions();
   const gridMetrics = getProductGridMetrics(windowWidth);
   const band = PRICE_BANDS.find((b) => b.id === priceBand) ?? PRICE_BANDS[0];
-  const effectiveSort: ProductSort = activeFilter === "RECENTLY_STOCKED" ? "newest" : sort;
+  const effectiveSort: ProductSort = activeFilter === NEW_IN ? "newest" : sort;
+  const categoryId = activeFilter !== ALL && activeFilter !== NEW_IN ? activeFilter : undefined;
+
+  const categories = useQuery({
+    queryKey: ["store-categories"],
+    queryFn: () => api.getStoreCategories(),
+    staleTime: 15 * 60 * 1000,
+  });
+  const categoryList = useMemo(() => categories.data?.categories ?? [], [categories.data]);
+
+  // Home screen opens the shop with a category name; match it to an id.
+  if (pendingName && categoryList.length) {
+    const wanted = pendingName.toLowerCase();
+    const hit = categoryList.find((c) => c.name.toLowerCase() === wanted || c.slug.toLowerCase() === wanted);
+    setPendingName("");
+    if (hit) setActiveFilter(hit.id);
+    else if (/new|recent/.test(wanted)) setActiveFilter(NEW_IN);
+  }
+
+  // Any change to what is being looked at starts again from page 1.
+  const filterKey = `${activeFilter}|${effectiveSort}|${priceBand}|${inStock}`;
+  const [lastKey, setLastKey] = useState(filterKey);
+  const [lastTerm, setLastTerm] = useState("");
+  if (filterKey !== lastKey || term !== lastTerm) {
+    setLastKey(filterKey);
+    setLastTerm(term);
+    if (page !== 1) setPage(1);
+  }
 
   useEffect(() => {
     AsyncStorage.getItem(RECENT_KEY)
@@ -134,22 +137,26 @@ export function StorefrontShopScreen({
     });
   }, []);
 
-  const products = useInfiniteQuery({
-    queryKey: ["store-products", term, effectiveSort, band.id, inStock],
-    initialPageParam: 1,
-    queryFn: ({ pageParam }) =>
+  const products = useQuery({
+    queryKey: ["store-products", term, effectiveSort, band.id, inStock, categoryId ?? "", page],
+    queryFn: () =>
       api.getStoreProducts({
         q: term || undefined,
-        page: pageParam,
+        page,
         limit: PAGE_SIZE,
         sort: effectiveSort,
+        categoryId,
         minPrice: band.min,
         maxPrice: band.max,
         inStock: inStock || undefined,
       }),
-    getNextPageParam: (last) =>
-      last.pagination.page < last.pagination.totalPages ? last.pagination.page + 1 : undefined,
+    placeholderData: keepPreviousData,
   });
+
+  const goToPage = (p: number) => {
+    setPage(p);
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  };
 
   const suggestions = useQuery({
     queryKey: ["suggest", term],
@@ -157,16 +164,22 @@ export function StorefrontShopScreen({
     enabled: focused && term.length >= 2,
   });
 
-  const displayedProducts = useMemo(
-    () => (products.data?.pages.flatMap((p) => p.products) ?? []).filter((p) => matchesPill(p, activeFilter)),
-    [products.data, activeFilter],
+  const displayedProducts = useMemo(() => products.data?.products ?? [], [products.data]);
+  const total = products.data?.pagination.total ?? 0;
+  const totalPages = products.data?.pagination.totalPages ?? 1;
+  const pills = useMemo(
+    () => [
+      { id: ALL, label: "ALL" },
+      { id: NEW_IN, label: "NEW IN" },
+      ...categoryList.map((c) => ({ id: c.id, label: c.name.toUpperCase() })),
+    ],
+    [categoryList],
   );
-  const total = products.data?.pages[0]?.pagination.total ?? 0;
   const filtersActive = sort !== "featured" || priceBand !== "any" || inStock;
 
   const resetAll = () => {
     setSearchQuery("");
-    setActiveFilter("ALL");
+    setActiveFilter(ALL);
     setSort("featured");
     setPriceBand("any");
     setInStock(false);
@@ -304,7 +317,7 @@ export function StorefrontShopScreen({
       ) : null}
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScroll}>
-        {FILTER_PILLS.map((pill) => {
+        {pills.map((pill) => {
           const isActive = activeFilter === pill.id;
           return (
             <TouchableOpacity
@@ -323,9 +336,10 @@ export function StorefrontShopScreen({
 
       <View style={styles.countRow}>
         <Text style={styles.countText}>
-          {activeFilter === "ALL" ? `${total} ${total === 1 ? "piece" : "pieces"}` : `Showing ${displayedProducts.length} pieces`}
+          {`${total} ${total === 1 ? "piece" : "pieces"}`}
+          {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
         </Text>
-        {activeFilter !== "ALL" || filtersActive ? (
+        {activeFilter !== ALL || filtersActive || term ? (
           <TouchableOpacity onPress={resetAll} accessibilityRole="button">
             <Text style={styles.resetFilterText}>Reset filters</Text>
           </TouchableOpacity>
@@ -369,6 +383,7 @@ export function StorefrontShopScreen({
       </View>
 
       <FlashList
+        ref={listRef as never}
         data={products.isLoading ? [] : displayedProducts}
         numColumns={2}
         keyExtractor={(item) => item.id}
@@ -376,17 +391,16 @@ export function StorefrontShopScreen({
         contentContainerStyle={styles.scrollContent}
         ListHeaderComponent={header}
         refreshControl={
-          <RefreshControl refreshing={products.isRefetching && !products.isFetchingNextPage} onRefresh={() => products.refetch()} tintColor={colors.primary} />
+          <RefreshControl refreshing={products.isRefetching && !products.isPlaceholderData} onRefresh={() => products.refetch()} tintColor={colors.primary} />
         }
-        onEndReachedThreshold={0.6}
-        onEndReached={() => {
-          if (products.hasNextPage && !products.isFetchingNextPage) products.fetchNextPage();
-        }}
         ListFooterComponent={
-          products.isLoading || products.isFetchingNextPage ? (
+          products.isLoading ? (
             <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 30 }} />
           ) : (
-            <View style={{ height: 40 }} />
+            <View style={{ paddingBottom: 40 }}>
+              {products.isPlaceholderData && <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 12 }} />}
+              <Pager page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onChange={goToPage} disabled={products.isPlaceholderData} />
+            </View>
           )
         }
         ListEmptyComponent={

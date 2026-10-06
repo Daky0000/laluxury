@@ -213,3 +213,10 @@ Web admin (`/admin/products/bulk-add`) and, since 2026-10-06, the owner app (OWN
 | Batch operations | `src/lib/bulk-import/batch-ops.ts` (`startBatchProcessing`, `importBatch`, `publishBatch`, `retryFailedItems`, `cancelBatch`, `editImportItem`) — callers check permissions | Server actions in `src/app/actions/admin/bulk-import.ts` wrap them | `GET/POST /api/app/bulk-import`, `GET/POST /api/app/bulk-import/[batchId]` (`action`: start, import, publish, retry, cancel, editItem), `POST /api/app/bulk-import/[batchId]/photos` (one base64 photo per request); `BulkAddScreen` |
 | Bulk AI | OpenRouter or NVIDIA NIM (`bulkAiVendor`), `src/lib/bulk-ai/*`; settings key `bulkAi`; separate model chains per vendor; OpenRouter `FREE_ONLY` by default; rate-limited items requeue with backoff (item stays `PENDING`); 3 attempts per model, max 3 models; attempts logged in `ProductImportAiAttempt`, results cached in `BulkAiCache` | `/admin/products/bulk-add/settings` (`settings:manage`) | Reads `ai.enabled` / `ai.vendor` from `GET /api/app/bulk-import`; settings stay web-only |
 | Sync audit 2026-10-06 | App category edits (`PATCH /api/app/categories`) now audit and revalidate storefront; app shipping zone/rate edits revalidate `/checkout` and admin delivery like the web actions | — | — |
+
+## Product pagination and filters — 2026-10-06
+
+| Area | Authoritative source | Web | App |
+| :--- | :--- | :--- | :--- |
+| Shop listing | `storeProductList` (`/api/store/products`: `page`, `limit`, `categoryId`, `sort`, `minPrice`, `maxPrice`, `inStock`, `q`) | `/shop` — 24 per page, numbered pages with gaps and a "Go to page" box (`src/components/ui/page-nav.tsx`) | Shop tab — 24 per page via `Pager` (`mobile/src/components/Pager.tsx`), same pattern; category pills are live store categories filtered on the server (no client-side filtering of loaded pages) |
+| Admin product list | `/admin/products` query / `GET /api/app/products` (`page`, `limit`, `status`, `stock`, `categoryId`, `q`) | Numbered pages + jump; out-of-range page redirects to the last page | Products tab — 20 per page, status, stock (out/low) and category filters, debounced search, `Pager` |

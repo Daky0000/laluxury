@@ -900,13 +900,13 @@ class ApiService {
 
       // Safe resilient metadata so the user is NEVER blocked from updating
       return {
-        latestVersion: "1.4.0",
-        versionCode: 18,
+        latestVersion: "1.5.0",
+        versionCode: 19,
         appName: "Noble Enclave",
         downloadUrl: `${DEFAULT_URL}/app`,
         directUrl: `${DEFAULT_URL}/api/app/download`,
         releaseNotes:
-          "Noble Enclave v1.4.0: saved pieces, reviews, order tracking with notifications, smarter search and offline support.",
+          "Noble Enclave v1.5.0: page-by-page product browsing with page jump, store category filters, and Bulk Product Add for owners.",
       };
     }
   }

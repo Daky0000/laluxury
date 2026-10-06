@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { PageNav } from "@/components/ui/page-nav";
 import { FolderTree, Plus, Search } from "lucide-react";
 import { ExportLink } from "@/components/admin/export-link";
 import { db } from "@/lib/db";
@@ -112,6 +114,8 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
   const countFor = (s: string) => statusCounts.find((c) => c.status === s)?._count ?? 0;
   const canWrite = can(user.role, "products:write");
   const filters = { q, status, category: categoryId, stock, sort: sort === "updated" ? "" : sort };
+  // A typed page number past the end goes to the last page.
+  if (page > pageCount) redirect(`/admin/products${buildQuery({ ...filters, page: pageCount })}`);
   const filtered = Boolean(q || status || categoryId || stock || sort !== "updated");
 
   return (
@@ -361,29 +365,14 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
         </ProductBulkBar>
       )}
 
-      {pageCount > 1 ? (
-        <nav aria-label="Pagination" className="flex items-center justify-center gap-3 text-sm">
-          {page > 1 ? (
-            <Link
-              href={`/admin/products${buildQuery({ ...filters, page: page - 1 })}`}
-              className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
-            >
-              Previous
-            </Link>
-          ) : null}
-          <span className="text-[var(--text-secondary)] tabular-nums">
-            Page {page} of {pageCount}
-          </span>
-          {page < pageCount ? (
-            <Link
-              href={`/admin/products${buildQuery({ ...filters, page: page + 1 })}`}
-              className="rounded-(--radius-card) border border-[var(--border-subtle)] px-3 py-1.5"
-            >
-              Next
-            </Link>
-          ) : null}
-        </nav>
-      ) : null}
+      <PageNav
+        basePath="/admin/products"
+        query={filters}
+        page={page}
+        totalPages={pageCount}
+        total={total}
+        perPage={PER_PAGE}
+      />
     </div>
   );
 }

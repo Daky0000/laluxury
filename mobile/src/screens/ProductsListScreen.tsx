@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,8 @@ import { Image } from "expo-image";
 import { FlashList } from "@shopify/flash-list";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
-import { Product, User } from "../types";
+import { Category, Product, User } from "../types";
+import { Pager } from "../components/Pager";
 
 type Props = {
   user: User;
@@ -22,7 +23,8 @@ type Props = {
   onLogout: () => void;
 };
 
-const FILTERS = ["ALL", "ACTIVE", "DRAFT", "ARCHIVED", "OUT OF STOCK"];
+const FILTERS = ["ALL", "ACTIVE", "DRAFT", "ARCHIVED", "OUT OF STOCK", "LOW STOCK"];
+const PAGE_SIZE = 20;
 
 export function ProductsListScreen({
   user,
@@ -36,21 +38,42 @@ export function ProductsListScreen({
   const [search, setSearch] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("ALL");
   const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
+  const [term, setTerm] = useState("");
+  const listRef = useRef<{ scrollToOffset: (o: { offset: number; animated?: boolean }) => void } | null>(null);
+
+  // Search waits for typing to pause instead of firing on every key.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setTerm(search.trim());
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    api.getCategories().then((r) => setCategories(r.categories)).catch(() => {});
+  }, []);
 
   const fetchProducts = useCallback(async () => {
     setError(null);
     try {
-      const isStockFilter = selectedFilter === "OUT OF STOCK";
-      const status = isStockFilter ? undefined : selectedFilter;
-      const stock = isStockFilter ? "out" : undefined;
+      const stock = selectedFilter === "OUT OF STOCK" ? "out" : selectedFilter === "LOW STOCK" ? "low" : undefined;
+      const status = stock ? undefined : selectedFilter;
 
       const res = await api.getProducts({
-        q: search.trim() || undefined,
+        q: term || undefined,
         status,
         stock,
-        limit: 50,
+        categoryId: categoryId ?? undefined,
+        page,
+        limit: PAGE_SIZE,
       });
       setProducts(res.products);
+      setPagination({ total: res.pagination.total, totalPages: Math.max(1, res.pagination.totalPages) });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load products.";
       setError(msg);
@@ -58,7 +81,7 @@ export function ProductsListScreen({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search, selectedFilter]);
+  }, [term, selectedFilter, categoryId, page]);
 
   useEffect(() => {
     setLoading(true);
@@ -209,7 +232,10 @@ export function ProductsListScreen({
             return (
               <TouchableOpacity
                 style={[styles.filterChip, isSelected && styles.filterChipSelected]}
-                onPress={() => setSelectedFilter(item)}
+                onPress={() => {
+                  setSelectedFilter(item);
+                  setPage(1);
+                }}
               >
                 <Text
                   style={[
@@ -224,6 +250,29 @@ export function ProductsListScreen({
           }}
           contentContainerStyle={styles.filterListContent}
         />
+        {categories.length > 0 && (
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={[{ id: "", name: "All categories" } as Category, ...categories]}
+            keyExtractor={(item) => item.id || "all"}
+            renderItem={({ item }) => {
+              const isSelected = (categoryId ?? "") === item.id;
+              return (
+                <TouchableOpacity
+                  style={[styles.filterChip, isSelected && styles.filterChipSelected]}
+                  onPress={() => {
+                    setCategoryId(item.id || null);
+                    setPage(1);
+                  }}
+                >
+                  <Text style={[styles.filterChipText, isSelected && styles.filterChipTextSelected]}>{item.name}</Text>
+                </TouchableOpacity>
+              );
+            }}
+            contentContainerStyle={[styles.filterListContent, { paddingTop: 6 }]}
+          />
+        )}
       </View>
 
       {/* Product List */}
@@ -248,10 +297,25 @@ export function ProductsListScreen({
         </View>
       ) : (
         <FlashList
+          ref={listRef as never}
           data={products}
           keyExtractor={(item) => item.id}
           renderItem={renderProductItem}
           contentContainerStyle={styles.listContent}
+          ListFooterComponent={
+            <View style={{ paddingBottom: 80 }}>
+              <Pager
+                page={page}
+                totalPages={pagination.totalPages}
+                total={pagination.total}
+                pageSize={PAGE_SIZE}
+                onChange={(p) => {
+                  setPage(p);
+                  listRef.current?.scrollToOffset({ offset: 0, animated: true });
+                }}
+              />
+            </View>
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

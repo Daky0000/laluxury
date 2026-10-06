@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageNav } from "@/components/ui/page-nav";
 import { Search } from "lucide-react";
 import { catalogFacets, searchProducts, PRODUCT_SORTS, type ProductSort } from "@/lib/catalog";
 import { toTile } from "@/lib/product-view";
@@ -6,16 +7,12 @@ import { ProductTile } from "@/components/shop/product-tile";
 import { SortSelect } from "@/components/shop/sort-select";
 import { FilterRail, ActiveFilters, OPTION_PREFIX } from "@/components/shop/filter-rail";
 import { FilterDrawer } from "@/components/shop/filter-drawer";
-import { buildQuery } from "@/lib/utils";
 
 /** The awaited `searchParams` of whichever page is showing the catalog. */
 export type CatalogParams = Record<string, string | string[] | undefined>;
 
-/** The grid grows to 48 products, then navigates pages instead of retransmitting the whole catalog. */
-const FIRST_PAGE = 12;
-const LOAD_MORE_STEP = 9;
-/** Matches the ceiling `searchProducts` will honour. */
-const MAX_SHOWN = 48;
+/** Products per page; numbered pages below the grid. */
+const PER_PAGE = 24;
 
 /** searchParams values arrive as string | string[]; normalise to an array. */
 function toArray(value: string | string[] | undefined): string[] {
@@ -53,13 +50,9 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
   const inStockOnly = toSingle(params.inStock) === "1";
   const onSaleOnly = toSingle(params.onSale) === "1";
 
-  const showRaw = Number(toSingle(params.show));
   const pageRaw = Number(toSingle(params.page));
   const page = Number.isInteger(pageRaw) && pageRaw > 0 ? Math.min(10_000, pageRaw) : 1;
-  const show = page > 1 ? MAX_SHOWN : Math.min(
-    MAX_SHOWN,
-    Number.isFinite(showRaw) && showRaw > 0 ? Math.floor(showRaw) : FIRST_PAGE,
-  );
+  const show = PER_PAGE;
 
   const minRaw = Number(toSingle(params.min));
   const maxRaw = Number(toSingle(params.max));
@@ -99,7 +92,7 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
     ),
   };
 
-  const remaining = Math.max(0, results.total - ((page - 1) * show + results.items.length));
+  const totalPages = Math.max(1, Math.ceil(results.total / PER_PAGE));
 
   // Shown on the phone's filter button, so a filtered grid never looks
   // unfiltered while the rail is folded away behind it.
@@ -235,30 +228,9 @@ export async function ProductCatalog({ params }: { params: CatalogParams }) {
                 ))}
               </div>
 
-              {remaining > 0 || page > 1 ? (
-                <div className="mt-9 flex justify-center sm:mt-11">
-                  {page > 1 ? <Link prefetch={false}
-                    href={`/shop${buildQuery({ ...carried, sort, show, page: page - 1 })}`}
-                    className="mr-4 border border-[var(--border-strong)] px-6 py-4 text-sm uppercase tracking-[0.14em]">
-                    Previous
-                  </Link> : null}
-                  {remaining > 0 ?
-                  <Link
-                    prefetch={false}
-                    href={`/shop${buildQuery({
-                      ...carried,
-                      sort,
-                      show: Math.min(MAX_SHOWN, show + LOAD_MORE_STEP),
-                      page: show >= MAX_SHOWN ? page + 1 : page,
-                    })}`}
-                    scroll={false}
-                    className="flex w-full items-center justify-center border border-[var(--border-strong)] px-6 py-4 text-sm uppercase tracking-[0.14em] transition-colors hover:bg-[var(--surface-sunken)] sm:w-auto sm:px-10"
-                  >
-                    {show >= MAX_SHOWN ? "Next page" : "Load more"} ({remaining})
-                  </Link>
-                  : null}
-                </div>
-              ) : null}
+              <div className="mt-9 sm:mt-11">
+                <PageNav basePath="/shop" query={{ ...carried, sort }} page={page} totalPages={totalPages} total={results.total} perPage={PER_PAGE} />
+              </div>
             </>
           )}
         </div>

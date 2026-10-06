@@ -26,7 +26,7 @@ import type { BulkImportDetail, BulkImportItem, BulkImportOverview } from "../ty
  * round. Spreadsheet imports stay on the web.
  */
 
-type Props = { onBack: () => void };
+type Props = { onBack: () => void; onOpenProduct?: (productId: string) => void };
 
 type Photo = { uri: string; base64: string; mimeType?: string | null; fileName?: string | null };
 
@@ -50,10 +50,10 @@ const STATUS_LABEL: Record<string, string> = {
   IMPORTED: "Imported (draft)",
 };
 
-export function BulkAddScreen({ onBack }: Props) {
+export function BulkAddScreen({ onBack, onOpenProduct }: Props) {
   const [batchId, setBatchId] = useState<string | null>(null);
   return batchId ? (
-    <BatchView batchId={batchId} onBack={() => setBatchId(null)} />
+    <BatchView batchId={batchId} onBack={() => setBatchId(null)} onOpenProduct={onOpenProduct} />
   ) : (
     <SetupView onBack={onBack} onOpen={setBatchId} />
   );
@@ -256,7 +256,7 @@ function SetupView({ onBack, onOpen }: { onBack: () => void; onOpen: (id: string
 
 // --- One import: progress, review, import, publish --------------------------
 
-function BatchView({ batchId, onBack }: { batchId: string; onBack: () => void }) {
+function BatchView({ batchId, onBack, onOpenProduct }: { batchId: string; onBack: () => void; onOpenProduct?: (id: string) => void }) {
   const [detail, setDetail] = useState<BulkImportDetail | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<BulkImportItem | null>(null);
@@ -378,8 +378,11 @@ function BatchView({ batchId, onBack }: { batchId: string; onBack: () => void })
           <TouchableOpacity
             key={it.id}
             style={styles.itemRow}
-            disabled={["IMPORTED", "UPDATED", "IMPORTING"].includes(it.status)}
-            onPress={() => setEditing(it)}
+            disabled={it.status === "IMPORTING" || (["IMPORTED", "UPDATED"].includes(it.status) && !(it.productId && onOpenProduct))}
+            onPress={() => {
+              if (["IMPORTED", "UPDATED"].includes(it.status) && it.productId) onOpenProduct?.(it.productId);
+              else setEditing(it);
+            }}
           >
             {it.imageUrl ? (
               <Image source={{ uri: it.imageUrl }} style={styles.itemThumb} contentFit="cover" />

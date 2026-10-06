@@ -368,7 +368,7 @@ function BulkAddRoute() {
   const nav = useNavigation<RootNav>();
   return (
     <Screen dark>
-      <BulkAddScreen onBack={() => nav.goBack()} />
+      <BulkAddScreen onBack={() => nav.goBack()} onOpenProduct={(id) => nav.navigate("BackendProduct", { id })} />
     </Screen>
   );
 }

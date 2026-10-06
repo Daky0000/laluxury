@@ -3,7 +3,7 @@
     "name": "Noble Enclave",
     "slug": "danny",
     "owner": "danny1999s-team",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -19,11 +19,11 @@
         "NSCameraUsageDescription": "Allow Noble Enclave to capture inventory photos directly with camera.",
         "NSPhotoLibraryUsageDescription": "Allow Noble Enclave to access your photos to attach product imagery."
       },
-      "buildNumber": "18"
+      "buildNumber": "19"
     },
     "android": {
       "package": "com.laluxury.management",
-      "versionCode": 18,
+      "versionCode": 19,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#7A2E3C",
