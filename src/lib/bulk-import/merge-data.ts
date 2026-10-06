@@ -140,7 +140,12 @@ export function buildItemDraft(args: {
   const pricing = o.pricing ?? setup.pricing;
   const stockSpec = o.stockSpec ?? setup.stock;
   const disabled = new Set([...(setup.disabledCombinations ?? []), ...(o.disabledCombinations ?? [])]);
-  const stem = (first.parentSku || d.skuPrefix || recipe?.skuPrefix || args.skuStem).toUpperCase();
+  // A shared prefix (batch default or recipe) is the same for every item, so it
+  // gets the item's own suffix; otherwise every product in the batch would
+  // generate identical SKUs.
+  const prefix = d.skuPrefix || recipe?.skuPrefix;
+  const itemSuffix = args.skuStem.split("-").pop() ?? args.skuStem;
+  const stem = (first.parentSku || (prefix ? `${prefix}-${itemSuffix}` : args.skuStem)).toUpperCase();
 
   const variants: VariantDraft[] = combos.map((combo, index) => {
     const src = combo.row?.fields ?? {};

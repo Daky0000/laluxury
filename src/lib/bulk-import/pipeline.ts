@@ -7,7 +7,7 @@ import { imageAnalysisPrompt, productCopyPrompt } from "@/lib/bulk-ai/prompts";
 import { imageAnalysisSchema, optionMatchSchema, productCopySchema } from "@/lib/bulk-ai/schemas";
 import { prepareAiImage } from "@/lib/bulk-ai/image-prep";
 import { BulkAiDisabledError, BulkAiExhaustedError, errorMessage } from "@/lib/bulk-ai/retry";
-import { createCatalogProduct } from "@/lib/catalog/create-product";
+import { createCatalogProduct, uniquifySkus } from "@/lib/catalog/create-product";
 import { registerExternalUrl } from "@/lib/media";
 import { skuFromTitle } from "@/lib/slug";
 import { parseSpreadsheet } from "./parse-spreadsheet";
@@ -533,7 +533,9 @@ async function importItems(batchId: string, itemIds: string[], actorId: string |
         // between them can never produce the product twice on retry.
         productId = await db.$transaction(
           async (tx) => {
-            const p = await createCatalogProduct(draftToProductInput(draft), tx);
+            // Another item in this batch (or a product added meanwhile) may
+            // already hold a generated SKU; take the next free one instead of failing.
+            const p = await createCatalogProduct(await uniquifySkus(draftToProductInput(draft), tx), tx);
             await tx.productImportItem.update({
               where: { id: item.id },
               data: { status: "IMPORTED", productId: p.id, error: null },

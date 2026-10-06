@@ -63,6 +63,25 @@ export type NewProductInput = {
 
 export class CatalogWriteError extends Error {}
 
+/**
+ * Makes every SKU in the input unique — within the product and against the
+ * catalog — by adding -2, -3 … to clashing ones. For generated SKUs (imports),
+ * where a clash means "pick another", not "this is the same item".
+ */
+export async function uniquifySkus(input: NewProductInput, client?: Prisma.TransactionClient): Promise<NewProductInput> {
+  const variant = (client?.variant ?? db.variant) as typeof db.variant;
+  const isTaken = async (sku: string) => Boolean(await variant.findUnique({ where: { sku }, select: { id: true } }));
+  const used = new Set<string>();
+  const variants = [];
+  for (const v of input.variants) {
+    let sku = v.sku;
+    for (let n = 2; used.has(sku) || (await isTaken(sku)); n++) sku = `${v.sku}-${n}`;
+    used.add(sku);
+    variants.push({ ...v, sku });
+  }
+  return { ...input, variants };
+}
+
 /** Throws when a SKU is repeated in the input or already used by another variant. */
 export async function assertSkusFree(skus: string[]): Promise<void> {
   const seen = new Set<string>();

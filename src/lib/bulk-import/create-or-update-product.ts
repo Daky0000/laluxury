@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { refreshPriceRange, buildSearchText } from "@/lib/catalog";
-import { createCatalogProduct, type NewProductInput } from "@/lib/catalog/create-product";
+import { createCatalogProduct, uniquifySkus, type NewProductInput } from "@/lib/catalog/create-product";
 import { registerExternalUrl } from "@/lib/media";
 import type { Prisma } from "@/generated/prisma";
 import { FIELD_AUTHORITY_DEFAULTS, type FieldAuthority, type ItemDraft } from "./schema";
@@ -68,7 +68,7 @@ export async function createFromDraft(draft: ItemDraft, actorId: string | null):
       }
     }
   }
-  const product = await createCatalogProduct(draftToProductInput(draft));
+  const product = await createCatalogProduct(await uniquifySkus(draftToProductInput(draft)));
   return { action: "CREATED", productId: product.id, changes: ["created"] };
 }
 
