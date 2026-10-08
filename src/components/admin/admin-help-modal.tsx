@@ -14,9 +14,7 @@ import {
   Lightbulb,
   CheckCircle2,
   ArrowRight,
-  TrendingUp,
   Tag,
-  ShieldCheck,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";

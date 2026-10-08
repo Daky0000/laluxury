@@ -141,7 +141,12 @@ async function main() {
   console.log("Seeding Noble Enclave...");
 
   // --- Owners --------------------------------------------------------------
-  const ownerPassword = process.env.SEED_OWNER_PASSWORD || "NobleEnclave2026!";
+  const ownerPassword = process.env.SEED_OWNER_PASSWORD;
+  if (!ownerPassword) {
+    throw new Error(
+      "SEED_OWNER_PASSWORD environment variable is required to seed owner accounts. Please set it in your .env file.",
+    );
+  }
   const passwordHash = await bcrypt.hash(ownerPassword, 12);
 
   const ownersToSeed = [

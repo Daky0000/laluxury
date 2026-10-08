@@ -9,7 +9,6 @@ import { integrationsView } from "@/lib/integrations";
 import { env } from "@/lib/env";
 import { formatMoney } from "@/lib/money";
 import { Card, SectionHeading, Badge } from "@/components/ui";
-import { SettingsForm } from "@/components/admin/settings-form";
 import { IntegrationsForm } from "@/components/admin/integrations-form";
 import { getFxRates, updateFxRatesAction } from "@/app/actions/admin/fx";
 

@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/auth/rbac";
 import { availableOf } from "@/lib/inventory";
 import { formatDate } from "@/lib/utils";
-import { Card, Badge, EmptyState, SectionHeading, Stat, InfoTooltip } from "@/components/ui";
+import { Card, Badge, EmptyState, Stat, InfoTooltip } from "@/components/ui";
 import { StockRow } from "@/components/admin/stock-row";
 import { StockBulkBar } from "@/components/admin/stock-bulk-bar";
 import type { Prisma } from "@/generated/prisma";

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
   ApiAuthError,
@@ -43,9 +43,10 @@ export const GET = withApiAuth(async (
   // A signed tracking link (?t=) from SMS/email also opens it, for guests.
   const token = new URL(_request.url).searchParams.get("t");
   const viewer = await getOptionalBearerUser();
+  const isPrivilegedStaff = Boolean(viewer && isStaff(viewer.role) && can(viewer.role, "orders:read"));
   const allowed =
     order &&
-    ((viewer && ((isStaff(viewer.role) && can(viewer.role, "orders:read")) || order.userId === viewer.id)) ||
+    ((viewer && (isPrivilegedStaff || order.userId === viewer.id)) ||
       (token ? orderAccessTokenMatches(order.orderNumber, token) : false));
   if (!order || !allowed) {
     return NextResponse.json({ ok: false, error: "Order not found." }, { status: 404 });
@@ -73,7 +74,7 @@ export const GET = withApiAuth(async (
       hasPreorderItems: order.hasPreorderItems,
       preorderStage: order.preorderStage,
       customerNote: order.customerNote,
-      staffNote: order.staffNote,
+      staffNote: isPrivilegedStaff ? order.staffNote : null,
       trackingNumber: order.trackingNumber,
       trackingCompany: order.trackingCompany,
       placedAt: order.placedAt.toISOString(),

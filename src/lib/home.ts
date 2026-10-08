@@ -83,7 +83,7 @@ export async function roomCards(section: Pick<HomeSection, "categorySlugs" | "li
     });
 
     return rows.map(toRoomCard);
-  } catch (err) {
+  } catch {
     recordDbFailure();
     return [];
   }
@@ -141,7 +141,7 @@ export async function sectionProducts(section: HomeSection): Promise<ProductTile
     });
 
     return rows.map(toTile);
-  } catch (err) {
+  } catch {
     recordDbFailure();
     return [];
   }
@@ -172,7 +172,7 @@ export async function sectionTabs(section: HomeSection) {
     return section.categorySlugs
       .filter((slug) => bySlug.has(slug))
       .map((slug) => ({ label: bySlug.get(slug)!, slug }));
-  } catch (err) {
+  } catch {
     recordDbFailure();
     return [];
   }

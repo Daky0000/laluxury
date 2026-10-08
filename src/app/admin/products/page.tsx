@@ -10,7 +10,7 @@ import { can } from "@/lib/auth/rbac";
 import { formatMoney } from "@/lib/money";
 import { availableOf } from "@/lib/inventory";
 import { buildQuery } from "@/lib/utils";
-import { Card, Badge, LinkButton, EmptyState, SectionHeading, InfoTooltip } from "@/components/ui";
+import { Card, Badge, LinkButton, EmptyState, InfoTooltip } from "@/components/ui";
 import { ProductBulkBar } from "@/components/admin/product-bulk-bar";
 import type { Prisma, ProductStatus } from "@/generated/prisma";
 import { Thumb } from "@/components/shop/photo";

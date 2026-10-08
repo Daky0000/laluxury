@@ -6,8 +6,6 @@ import { db } from "@/lib/db";
 import {
   createSessionCookie,
   destroySessionCookie,
-  hashPassword,
-  passwordProblems,
   verifyPassword,
 } from "@/lib/auth";
 import {
@@ -25,18 +23,6 @@ import { sendOtp, verifyOtp } from "@/lib/sms";
 import { getSettings } from "@/lib/settings";
 
 export type AuthState = { ok: boolean; message?: string; fieldErrors?: Record<string, string> };
-
-/**
- * Sign-in takes a phone number or an email in one field.
- *
- * Customers register by phone; staff accounts predate that and are still keyed
- * on email. Asking which kind of account someone has before they can sign in is
- * a question only we care about, so the field takes either and works it out.
- */
-const loginSchema = z.object({
-  phone: z.string().min(1, "Enter your phone number."),
-  password: z.string().optional(),
-});
 
 const registerSchema = z.object({
   name: z.string().trim().min(2, "Enter your name."),
@@ -71,10 +57,20 @@ export async function loginAction(
     return { ok: false, fieldErrors: { phone: "Enter your phone number." } };
   }
 
+  const address = await requestAddress();
+  const perAddress = rateLimit(`login-ip:${address}`, { limit: 100, windowMs: 15 * 60 * 1000 });
+  if (!perAddress.ok) return { ok: false, message: retryMessage(perAddress.retryAfterSeconds) };
+
   const phone = normalisePhone(rawIdentifier);
   if (!phone) {
     // Support email login for legacy staff fallback if password provided
     if (rawIdentifier.includes("@") && password) {
+      const perEmail = rateLimit(`login:${rawIdentifier.toLowerCase()}`, {
+        limit: 10,
+        windowMs: 15 * 60 * 1000,
+      });
+      if (!perEmail.ok) return { ok: false, message: retryMessage(perEmail.retryAfterSeconds) };
+
       const user = await db.user.findUnique({ where: { email: rawIdentifier.toLowerCase() } });
       const valid = await verifyPassword(password, user?.passwordHash ?? null);
       if (!user || !valid) {
@@ -98,14 +94,11 @@ export async function loginAction(
     };
   }
 
-  const address = await requestAddress();
   const perAccount = rateLimit(`login:${phone}`, {
     limit: 10,
     windowMs: 15 * 60 * 1000,
   });
-  const perAddress = rateLimit(`login-ip:${address}`, { limit: 100, windowMs: 15 * 60 * 1000 });
   if (!perAccount.ok) return { ok: false, message: retryMessage(perAccount.retryAfterSeconds) };
-  if (!perAddress.ok) return { ok: false, message: retryMessage(perAddress.retryAfterSeconds) };
 
   const user = await db.user.findUnique({ where: { phone } });
   if (!user) {

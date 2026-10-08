@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { apiOptionsResponse, requireBearerPermission, withApiAuth } from "@/lib/auth/bearer";
-import { isStaff } from "@/lib/auth/rbac";
 import { GHANA_REGIONS } from "@/lib/constants";
 
 /** Same paths the web delivery settings revalidate, so checkout sees app edits at once. */

@@ -54,6 +54,15 @@ export async function initiateMomoPinPush(args: {
   if (!order) {
     return { ok: false, error: "Order not found." };
   }
+  if (order.status === "CANCELLED" || order.status === "REFUNDED") {
+    return { ok: false, error: "This order has been cancelled or refunded." };
+  }
+  if (order.paidAt && (!order.depositAmount || order.balancePaidAt || order.depositAmount >= order.total)) {
+    return { ok: false, error: "This order is already paid. Refresh the order status." };
+  }
+  if (order.paidAt && args.chargeScope !== "REMAINING_BALANCE") {
+    return { ok: false, error: "The deposit is already paid. Select the remaining balance." };
+  }
 
   const cleanPhone = normaliseGhanaMomoPhone(args.phone || order.phone || "");
   if (cleanPhone.length < 10) {

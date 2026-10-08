@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
-import { Card, Badge, SectionHeading, Stat, InfoTooltip } from "@/components/ui";
+import { Card, Badge, Stat, InfoTooltip } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Financial & Margin Analytics" };
 export const dynamic = "force-dynamic";

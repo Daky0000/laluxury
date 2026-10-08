@@ -6,7 +6,7 @@ import { getOptionalBearerUser, apiOptionsResponse, withApiAuth } from "@/lib/au
 import { can, isStaff } from "@/lib/auth/rbac";
 import { orderPath } from "@/lib/order-access";
 import { availableOf, InsufficientStockError, reserveStock } from "@/lib/inventory";
-import { logOrderEvent, sweepStalePendingOrdersSoon, uniqueOrderNumber } from "@/lib/orders";
+import { cancelOrder, logOrderEvent, sweepStalePendingOrdersSoon, uniqueOrderNumber } from "@/lib/orders";
 import { normalisePhone } from "@/lib/phone";
 import { quoteShipping } from "@/lib/shipping";
 import { recordRedemption, validateDiscount, type DiscountLine } from "@/lib/discounts";
@@ -142,7 +142,7 @@ export const GET = withApiAuth(async (request: Request) => {
       email: o.email,
       phone: o.phone,
       customerNote: o.customerNote,
-      staffNote: o.staffNote,
+      staffNote: isStaffMember ? o.staffNote : null,
       depositAmount: o.depositAmount,
       balancePaidAt: o.balancePaidAt?.toISOString() || null,
       subtotal: o.subtotal,
@@ -783,6 +783,9 @@ export const POST = withApiAuth(async (request: Request) => {
               `A prompt has been sent to ${momoPhone}. Please enter your 4-digit MoMo PIN on your phone screen to authorize. (For MTN, you can also dial *170# > 6 > 3).`,
         };
     } catch (chargeErr) {
+        await cancelOrder(order.id, "Payment gateway initialization failed.", null, { notify: false }).catch((err) =>
+          console.error("[app.checkout] cancelOrder after charge error:", err),
+        );
         const rawErr =
           chargeErr instanceof Error
             ? chargeErr.message
@@ -835,6 +838,9 @@ export const POST = withApiAuth(async (request: Request) => {
         console.error("[notify] order.placed hosted error:", err),
       );
     } catch (paystackErr) {
+      await cancelOrder(order.id, "Payment gateway initialization failed.", null, { notify: false }).catch((err) =>
+        console.error("[app.checkout] cancelOrder after paystack error:", err),
+      );
       const rawErr =
         paystackErr instanceof Error
           ? paystackErr.message

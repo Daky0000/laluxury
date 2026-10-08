@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Send, Smartphone, Volume2, Loader2, Sparkles, CheckCircle2 } from "lucide-react";
-import { Card, Badge, Alert } from "@/components/ui";
+import { Send, Smartphone, Volume2, Loader2, Sparkles } from "lucide-react";
+import { Card, Alert } from "@/components/ui";
 import { sendCustomSmsAction, updateStoreAnnouncementAction, type NotificationActionState } from "@/app/actions/admin/notifications";
 
 export function CustomNotificationPanel({ storeName }: { storeName: string }) {

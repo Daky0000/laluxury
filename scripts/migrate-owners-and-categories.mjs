@@ -29,7 +29,11 @@ async function run() {
     console.log("All previous users removed.");
 
     // 2. Create the two owner accounts
-    const passwordHash = await bcrypt.hash("NobleEnclave2026!", 12);
+    const seedPassword = process.env.SEED_OWNER_PASSWORD;
+    if (!seedPassword) {
+      throw new Error("SEED_OWNER_PASSWORD must be configured in environment.");
+    }
+    const passwordHash = await bcrypt.hash(seedPassword, 12);
 
     const owners = [
       {

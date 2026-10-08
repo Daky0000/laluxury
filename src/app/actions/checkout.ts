@@ -192,67 +192,78 @@ export async function placeOrderAction(
     const chargeAmount = order.depositAmount ?? order.total;
     const reference = `${order.orderNumber}-${Date.now().toString(36).toUpperCase()}`;
 
-    await db.payment.create({
-      data: {
-        orderId: order.id,
-        reference,
-        provider: "paystack",
-        channel: paymentMethod,
-        amount: chargeAmount,
-        currency: order.currency,
-        status: "PENDING",
-      },
-    });
-
-    if (isDirectDebit) {
-      const momoPhone = normaliseGhanaMomoPhone(phone);
-      await db.payment.update({
-        where: { reference },
-        data: { channel: "mobile_money", mobileMoneyNumber: momoPhone },
-      });
-      await chargeMobileMoney({
-        email,
-        amount: chargeAmount,
-        phone: momoPhone,
-        provider: detectGhanaMomoProvider(momoPhone),
-        reference,
-        metadata: {
+    try {
+      await db.payment.create({
+        data: {
           orderId: order.id,
-          orderNumber: order.orderNumber,
-          source: "web_storefront",
-          channel: "direct_debit",
+          reference,
+          provider: "paystack",
+          channel: paymentMethod,
+          amount: chargeAmount,
+          currency: order.currency,
+          status: "PENDING",
         },
       });
-      await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
-        console.error("[notify] web direct debit order.placed error:", err),
-      );
-      redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}`;
-    } else {
-      const init = await initializeTransaction({
-            email,
-            amount: chargeAmount,
-            reference,
-            callbackUrl: `${env.siteUrl()}/checkout/confirm`,
-            channels: paymentMethod === "mobile_money" ? ["mobile_money"] : ["card"],
-            metadata: {
-              orderId: order.id,
-              orderNumber: order.orderNumber,
-              depositAmount: order.depositAmount,
-              custom_fields: [
-                {
-                  display_name: "Order",
-                  variable_name: "order_number",
-                  value: order.orderNumber,
-                },
-              ],
-            },
-          });
 
-      if (init?.authorization_url) {
-        redirectUrl = init.authorization_url;
+      if (isDirectDebit) {
+        const momoPhone = normaliseGhanaMomoPhone(phone);
+        await db.payment.update({
+          where: { reference },
+          data: { channel: "mobile_money", mobileMoneyNumber: momoPhone },
+        });
+        await chargeMobileMoney({
+          email,
+          amount: chargeAmount,
+          phone: momoPhone,
+          provider: detectGhanaMomoProvider(momoPhone),
+          reference,
+          metadata: {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            source: "web_storefront",
+            channel: "direct_debit",
+          },
+        });
+        await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
+          console.error("[notify] web direct debit order.placed error:", err),
+        );
+        redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}`;
       } else {
-        throw new Error("Unable to obtain a payment authorization link.");
+        const init = await initializeTransaction({
+              email,
+              amount: chargeAmount,
+              reference,
+              callbackUrl: `${env.siteUrl()}/checkout/confirm`,
+              channels: paymentMethod === "mobile_money" ? ["mobile_money"] : ["card"],
+              metadata: {
+                orderId: order.id,
+                orderNumber: order.orderNumber,
+                depositAmount: order.depositAmount,
+                custom_fields: [
+                  {
+                    display_name: "Order",
+                    variable_name: "order_number",
+                    value: order.orderNumber,
+                  },
+                ],
+              },
+            });
+
+        if (init?.authorization_url) {
+          redirectUrl = init.authorization_url;
+        } else {
+          throw new Error("Unable to obtain a payment authorization link.");
+        }
       }
+    } catch (gatewayError) {
+      // Compensate: cancel order immediately to release reserved stock and restore discounts
+      const { cancelOrder } = await import("@/lib/orders");
+      await cancelOrder(order.id, "Payment gateway initialization failed.", null, { notify: false }).catch((err) =>
+        console.error("[checkout] failed to cancel order after gateway error:", err),
+      );
+      // Re-enable cart
+      await db.cart.update({ where: { id: cart.id }, data: { convertedOrderId: null } }).catch(() => {});
+      throw gatewayError;
     }
   } catch (error) {
     if (error instanceof InsufficientStockError) {

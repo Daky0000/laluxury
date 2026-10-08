@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Loader2, Pencil, Check, Image as ImageIcon } from "lucide-react";
 import { saveCategoryAction } from "@/app/actions/admin/catalog-ops";
 import type { AdminState } from "@/app/actions/admin/products";
-import { Alert, Badge, Card, Field } from "@/components/ui";
+import { Alert, Card, Field } from "@/components/ui";
 import { ImageUrlField } from "./image-url-field";
 
 export type CategoryDesignItem = {

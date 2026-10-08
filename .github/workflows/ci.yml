@@ -23,6 +23,8 @@ jobs:
       - run: npm run lint
       - run: npm run verify:sync
       - run: npm run verify:egress
+      - run: npm run test:bulk-import
+      - run: npm run build
 
   mobile:
     runs-on: ubuntu-latest

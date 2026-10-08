@@ -150,6 +150,15 @@ export function StorefrontCartScreen({
   const [otpInput, setOtpInput] = useState("");
   const [submittingOtp, setSubmittingOtp] = useState(false);
   const [verifyingManual, setVerifyingManual] = useState(false);
+  const [resendingMomo, setResendingMomo] = useState(false);
+  const [momoResendAt, setMomoResendAt] = useState(0);
+  const [momoNow, setMomoNow] = useState(0);
+  useEffect(() => {
+    if (!momoResendAt) return;
+    const timer = setInterval(() => setMomoNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [momoResendAt]);
+  const momoResendSeconds = Math.max(0, Math.ceil((momoResendAt - momoNow) / 1000));
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Clean up interval on unmount
@@ -315,6 +324,7 @@ export function StorefrontCartScreen({
           done = true;
           stopPolling();
           setMomoPolling(false);
+          setMomoErrorMessage("Still waiting for approval. Check your Mobile Money approvals. If you have already approved or been debited, check payment status before resending.");
         }
       }
     };
@@ -367,6 +377,36 @@ export function StorefrontCartScreen({
       setMomoErrorMessage(msg);
     } finally {
       setVerifyingManual(false);
+    }
+  };
+
+  const handleResendMoMo = async () => {
+    if (!momoPushData?.reference || !pendingOrderNumber || resendingMomo || verifyingManual || submittingOtp || momoVerified || momoResendSeconds > 0) return;
+    setResendingMomo(true);
+    setMomoErrorMessage(null);
+    try {
+      const check = await api.verifyOrderPayment(momoPushData.reference);
+      if (!check.ok) throw new Error("Could not confirm payment status. Check payment status before resending.");
+      if (check.paid) {
+        await handleManualVerifyMoMo();
+        return;
+      }
+      const sentAt = Date.now();
+      setMomoNow(sentAt);
+      setMomoResendAt(sentAt + 30000);
+      const res = await api.pushMomoPin(pendingOrderNumber, {
+        phone: momoPushData.phone,
+        provider: momoPushData.provider,
+        chargeScope: is50PercentDeposit ? "DEPOSIT_50" : "FULL",
+      });
+      if (!res.ok || !res.reference) throw new Error(res.error || "Could not resend the prompt. Please try again.");
+      setMomoPushData({ ...momoPushData, ...res, reference: res.reference, status: res.status || "pending" });
+      setOtpInput("");
+      startMoMoPolling(res.reference, pendingOrderNumber, res.phone || momoPushData.phone);
+    } catch (err) {
+      setMomoErrorMessage(err instanceof Error ? err.message : "Could not resend the prompt. Please try again.");
+    } finally {
+      setResendingMomo(false);
     }
   };
 
@@ -589,6 +629,9 @@ export function StorefrontCartScreen({
 
         // Direct Mobile Money USSD prompt path
         if (res.momoPush) {
+          const sentAt = Date.now();
+          setMomoNow(sentAt);
+          setMomoResendAt(sentAt + 30000);
           setMomoPushData(res.momoPush);
           setPendingOrderNumber(res.order.orderNumber);
           setMomoVerified(false);
@@ -1739,7 +1782,7 @@ export function StorefrontCartScreen({
                 </View>
 
                 <Text style={styles.momoPromptEyebrow}>
-                  {momoVerified ? "PAYMENT SUCCESSFUL" : "USSD PROMPT DISPATCHED"}
+                  {momoVerified ? "PAYMENT SUCCESSFUL" : "AWAITING PAYMENT APPROVAL"}
                 </Text>
                 <Text style={styles.momoPromptAmount}>
                   {momoPushData?.amountFormatted || formatCurrency(amountDueNow)}
@@ -1762,7 +1805,7 @@ export function StorefrontCartScreen({
                 <View style={styles.instructionStepRow}>
                   <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>1</Text></View>
                   <Text style={styles.instructionStepText}>
-                    Check your phone screen for the payment authorization prompt.
+                    Check your phone screen for the payment authorization prompt. No pop-up? {momoPushData?.provider === "mtn" ? "Dial *170#, select My Wallet, then My Approvals." : "Check pending approvals in your network’s Mobile Money menu."}
                   </Text>
                 </View>
                 <View style={styles.instructionStepRow}>
@@ -1780,6 +1823,21 @@ export function StorefrontCartScreen({
               </View>
 
               {/* Error Message if payment failed */}
+              {!momoVerified && (
+                <>
+                  <Text style={styles.instructionStepText}>
+                    Approve only one request. If you have already approved or been debited, check payment status instead of resending.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.modalActionBtn, (resendingMomo || verifyingManual || submittingOtp || momoResendSeconds > 0) && { opacity: 0.5 }]}
+                    onPress={handleResendMoMo}
+                    disabled={resendingMomo || verifyingManual || submittingOtp || momoResendSeconds > 0}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.modalActionBtnText}>{resendingMomo ? "Checking and resending…" : momoResendSeconds > 0 ? `Resend in ${momoResendSeconds}s` : "Resend MoMo Prompt"}</Text>
+                  </TouchableOpacity>
+                </>
+              )}
               {momoErrorMessage ? (
                 <View style={styles.momoErrorBox}>
                   <Feather name="alert-triangle" size={16} color="#B91C1C" />
@@ -1801,7 +1859,7 @@ export function StorefrontCartScreen({
               <TouchableOpacity
                 style={[styles.modalActionBtn, (verifyingManual || momoVerified) && { opacity: 0.7 }]}
                   onPress={handleManualVerifyMoMo}
-                disabled={verifyingManual || momoVerified}
+                disabled={verifyingManual || momoVerified || resendingMomo}
                 activeOpacity={0.85}
               >
                 {verifyingManual ? (

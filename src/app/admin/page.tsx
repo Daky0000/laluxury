@@ -6,9 +6,6 @@ import {
   Plus,
   Calculator,
   PackageCheck,
-  Settings,
-  ArrowRight,
-  TrendingUp,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
@@ -16,7 +13,7 @@ import { dashboardMetrics, revenueSeries, topProducts } from "@/lib/analytics";
 import { lowStockItems } from "@/lib/inventory";
 import { integrationStatus } from "@/lib/integrations";
 import { formatMoney } from "@/lib/money";
-import { daysAgo, formatDate, relativeTime } from "@/lib/utils";
+import { daysAgo, relativeTime } from "@/lib/utils";
 import { Card, Stat, Badge, EmptyState, InfoTooltip } from "@/components/ui";
 import { RevenueChart } from "@/components/admin/revenue-chart";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth/password";
 import { signSession } from "@/lib/auth/session";
-import { isStaff, permissionsFor } from "@/lib/auth/rbac";
+import { permissionsFor } from "@/lib/auth/rbac";
 import { normalisePhone } from "@/lib/phone";
 
 import { apiOptionsResponse } from "@/lib/auth/bearer";

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { getSettings } from "@/lib/settings";
 import { getNavCategories } from "@/lib/catalog";
 import { CookieSettingsLink } from "./cookie-consent";
@@ -66,7 +67,7 @@ export async function Footer() {
       <div className="lx-container grid gap-x-8 gap-y-10 py-14 sm:py-20 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
           <div className="flex items-center gap-3">
-            <img
+            <Image
               src="/emblem.png"
               alt={settings.storeName}
               width={32}

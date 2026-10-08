@@ -120,6 +120,9 @@ export async function customerInitiateMomoPushAction(args: {
   if (order.status === "CANCELLED" || order.status === "REFUNDED") {
     return { ok: false, error: "This order has been cancelled or refunded." };
   }
+  if (order.paidAt && (!order.depositAmount || order.balancePaidAt || order.depositAmount >= order.total)) {
+    return { ok: false, error: "This order is already paid. Refresh the order status." };
+  }
 
   const cleanPhone = normaliseGhanaMomoPhone(args.phone || order.phone || "");
   if (cleanPhone.length < 10) {
@@ -261,7 +264,7 @@ export async function customerCheckMomoPinAction(args: {
     include: { order: true },
   });
 
-  if (!payment) {
+  if (!payment || payment.orderId !== args.orderId) {
     return { ok: false, paid: false, message: "Payment record not found." };
   }
 
@@ -316,9 +319,9 @@ export async function customerCheckMomoPinAction(args: {
       };
     } catch {
       return {
-        ok: true,
+        ok: false,
         paid: false,
-        message: "Waiting for your 4-digit MoMo PIN authorization...",
+        message: "Could not confirm payment status. Check your approvals and try checking again before resending.",
       };
     }
   }

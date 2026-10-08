@@ -46,6 +46,15 @@ export function OrderPaymentCard({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [confirmedPaid, setConfirmedPaid] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [resendAvailableAt, setResendAvailableAt] = useState(0);
+  const [now, setNow] = useState(0);
+
+  useEffect(() => {
+    if (!resendAvailableAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [resendAvailableAt]);
+  const resendSeconds = Math.max(0, Math.ceil((resendAvailableAt - now) / 1000));
 
   // Poll every 4.5s while waiting for customer PIN entry
   useEffect(() => {
@@ -59,7 +68,7 @@ export function OrderPaymentCard({
       if (attempts > MAX_ATTEMPTS) {
         clearInterval(timer);
         setStatusMessage(
-          "Polling timed out. Click 'Check PIN Status' once you have entered your PIN on your phone.",
+          "Still waiting for approval. Check your Mobile Money approvals, then select Check PIN Status. If you have not approved or been debited, you can resend the prompt.",
         );
         return;
       }
@@ -79,18 +88,43 @@ export function OrderPaymentCard({
     return () => clearInterval(timer);
   }, [pushState, confirmedPaid, orderId, router]);
 
-  function handleSendPush(e: React.FormEvent) {
-    e.preventDefault();
+  function handleSendPush(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (isPending || resendSeconds > 0) return;
     setStatusMessage(null);
     setConfirmedPaid(false);
 
     startTransition(async () => {
+      try {
+      if (pushState?.reference) {
+        const check = await customerCheckMomoPinAction({ orderId, reference: pushState.reference });
+        if (check.paid) {
+          setConfirmedPaid(true);
+          setStatusMessage(check.message);
+          router.refresh();
+          return;
+        }
+        if (!check.ok) {
+          setStatusMessage("Could not confirm payment status. Check PIN Status before resending.");
+          return;
+        }
+      }
+      const sentAt = Date.now();
+      setNow(sentAt);
+      setResendAvailableAt(sentAt + 30000);
       const res = await customerInitiateMomoPushAction({
         orderId,
         phone,
         provider,
       });
-      setPushState(res);
+      if (res.ok) setPushState(res);
+      else if (pushState?.reference) setStatusMessage(res.error ?? "Could not resend. Please try again.");
+      else setPushState(res);
+      } catch {
+        const message = "Could not reach the payment service. Check your approvals and payment status before trying again.";
+        if (pushState?.reference) setStatusMessage(message);
+        else setPushState({ ok: false, error: message });
+      }
     });
   }
 
@@ -104,7 +138,7 @@ export function OrderPaymentCard({
         reference: pushState.reference!,
         otp: otpCode,
       });
-      setPushState(res);
+      setPushState((previous) => ({ ...previous, ...res }));
       setOtpCode("");
     });
   }
@@ -255,7 +289,7 @@ export function OrderPaymentCard({
 
                 <button
                   type="submit"
-                  disabled={isPending}
+                  disabled={isPending || resendSeconds > 0}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent-contrast)] transition hover:opacity-95 disabled:opacity-50"
                 >
                   {isPending ? (
@@ -266,7 +300,7 @@ export function OrderPaymentCard({
                   ) : (
                     <>
                       <Send className="h-4 w-4" />
-                      Send MoMo PIN Prompt ({formatMoney(amountDueMinor)}) to My Phone
+                      {resendSeconds > 0 ? `Wait ${resendSeconds}s before resending` : pushState?.reference ? "Resend MoMo Prompt" : `Send MoMo PIN Prompt (${formatMoney(amountDueMinor)}) to My Phone`}
                     </>
                   )}
                 </button>
@@ -283,15 +317,13 @@ export function OrderPaymentCard({
                         <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-[var(--accent)]" />
                         <div className="flex-1">
                           <p className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
-                            Prompt Active on {pushState.phone} ({pushState.providerLabel})
+                            Awaiting payment approval on {pushState.phone} ({pushState.providerLabel})
                           </p>
                           <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
                             {pushState.displayText}
                           </p>
-                          <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">
-                            Tip: If the prompt did not appear automatically on your phone, dial{" "}
-                            <strong>*170# → 6 (My Wallet) → 3 (My Approvals)</strong> to enter your
-                            PIN.
+                          <p role="status" className="mt-1.5 text-xs text-[var(--text-secondary)]">
+                            No pop-up? {pushState.providerLabel?.includes("MTN") ? "Dial *170#, select My Wallet, then My Approvals." : "Check pending approvals in your network’s Mobile Money menu."} Approve only one request. If you have already approved or been debited, select Check PIN Status instead of resending.
                           </p>
                         </div>
                       </div>
@@ -322,6 +354,10 @@ export function OrderPaymentCard({
                       ) : null}
 
                       <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border-subtle)] pt-3">
+                        <button type="button" disabled={isPending || resendSeconds > 0} onClick={() => handleSendPush()} className="inline-flex items-center gap-1.5 rounded border border-[var(--border-subtle)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface-sunken)] disabled:opacity-50">
+                          <Send className="h-3 w-3" />
+                          {resendSeconds > 0 ? `Resend in ${resendSeconds}s` : "Resend MoMo Prompt"}
+                        </button>
                         <button
                           type="button"
                           disabled={isPending}

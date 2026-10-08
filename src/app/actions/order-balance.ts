@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getIntegrations, isReady } from "@/lib/integrations";
 import { initializeTransaction } from "@/lib/paystack";
+import { canViewOrder } from "@/lib/order-access";
 
 export async function payRemainingBalanceAction(formData: FormData): Promise<void> {
   const orderId = String(formData.get("orderId") ?? "");
@@ -12,6 +13,13 @@ export async function payRemainingBalanceAction(formData: FormData): Promise<voi
 
   const order = await db.order.findUnique({ where: { id: orderId } });
   if (!order || !order.depositAmount || order.balancePaidAt) return;
+
+  const token = String(formData.get("token") ?? "");
+  const email = String(formData.get("email") ?? "");
+  const allowed = await canViewOrder(order, { token, email });
+  if (!allowed) {
+    throw new Error("Authorization required to pay remaining balance on this order.");
+  }
 
   const remainingAmount = Math.max(0, order.total - order.depositAmount);
   if (remainingAmount <= 0) return;
