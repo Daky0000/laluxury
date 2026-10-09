@@ -11,6 +11,7 @@ type Props = {
   variantId: string | null;
   /** Product page, used when the shopper has to pick a size first. */
   href: string;
+  minimumOrderQuantity?: number;
   label?: string;
   soldOut?: boolean;
 };
@@ -28,7 +29,7 @@ type Props = {
  * Multi-variant products cannot be added blind, so the same bar becomes a link
  * to the product page rather than disappearing and breaking the grid rhythm.
  */
-export function AddToBag({ variantId, href, label = "Add to bag", soldOut = false }: Props) {
+export function AddToBag({ variantId, href, label = "Add to bag", soldOut = false, minimumOrderQuantity = 1 }: Props) {
   const [pending, startTransition] = useTransition();
   const [buying, startBuying] = useTransition();
   const [added, setAdded] = useState(false);
@@ -84,7 +85,7 @@ export function AddToBag({ variantId, href, label = "Add to bag", soldOut = fals
   function add() {
     setError(null);
     startTransition(async () => {
-      const result = await addToCartAction(variantId!, 1);
+      const result = await addToCartAction(variantId!, minimumOrderQuantity);
       if (!result.ok) {
         setError(result.message ?? "Could not add that.");
         return;
@@ -99,7 +100,7 @@ export function AddToBag({ variantId, href, label = "Add to bag", soldOut = fals
   function buyNow() {
     setError(null);
     startBuying(async () => {
-      const result = await buyNowAction(variantId!, 1);
+      const result = await buyNowAction(variantId!, minimumOrderQuantity);
       if (result && !result.ok) setError(result.message ?? "Could not start that order.");
     });
   }
@@ -170,7 +171,7 @@ export function AddToBag({ variantId, href, label = "Add to bag", soldOut = fals
  * The compact outlined "+" used on the student essentials row, where the price
  * and the control share one line.
  */
-export function AddToBagIcon({ variantId, href, soldOut = false }: Props) {
+export function AddToBagIcon({ variantId, href, soldOut = false, minimumOrderQuantity = 1 }: Props) {
   const [pending, startTransition] = useTransition();
   const [added, setAdded] = useState(false);
 
@@ -195,7 +196,7 @@ export function AddToBagIcon({ variantId, href, soldOut = false }: Props) {
 
   function add() {
     startTransition(async () => {
-      const result = await addToCartAction(variantId!, 1);
+      const result = await addToCartAction(variantId!, minimumOrderQuantity);
       if (!result.ok) return;
       setAdded(true);
       setTimeout(() => setAdded(false), 1800);

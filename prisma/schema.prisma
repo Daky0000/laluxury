@@ -175,6 +175,9 @@ model Product {
   material String?
   care     String?
 
+  // Minimum units required for each variant in a customer order.
+  minimumOrderQuantity Int @default(1)
+
   // Merchandising
   isFeatured Boolean  @default(false)
   tags       String[] @default([])

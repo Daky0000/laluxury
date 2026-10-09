@@ -356,6 +356,7 @@ class ApiService {
     material?: string | null;
     tags?: string[];
     isFeatured?: boolean;
+    minimumOrderQuantity?: number;
     isPreorder?: boolean;
     categoryIds?: string[];
   }): Promise<{ ok: boolean; product: Product }> {
@@ -378,6 +379,7 @@ class ApiService {
       material: string | null;
       tags: string[];
       isFeatured: boolean;
+      minimumOrderQuantity: number;
       isPreorder: boolean;
     }>,
   ): Promise<{ ok: boolean; product: ProductDetail }> {

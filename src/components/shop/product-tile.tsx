@@ -76,6 +76,7 @@ export function ProductTile({
 
         {product.inStock || product.isPreorder ? (
           <AddToBag
+            minimumOrderQuantity={product.minimumOrderQuantity}
             variantId={product.variantId}
             href={`/product/${product.slug}`}
             label={product.isPreorder ? "Pre-order" : "Add to bag"}
@@ -90,6 +91,7 @@ export function ProductTile({
               {product.title}
             </Link>
           </h3>
+          {product.minimumOrderQuantity > 1 ? <p className="mt-1 text-xs text-[var(--text-muted)]">Minimum {product.minimumOrderQuantity} units per variant</p> : null}
           <div className="mt-1 flex flex-wrap items-center gap-2">
             {product.category ? (
               <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">

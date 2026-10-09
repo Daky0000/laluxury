@@ -7,6 +7,7 @@ import type { Prisma } from "@/generated/prisma";
 export const storeProductSelect = {
   id: true, title: true, slug: true, status: true,
   minPrice: true, maxPrice: true, compareAtPrice: true,
+  minimumOrderQuantity: true,
   brand: true, material: true, isFeatured: true, isPreorder: true,
   preorderLeadTime: true, preorderDepositPercent: true, preorderNote: true,
   tags: true, createdAt: true, updatedAt: true,
@@ -34,7 +35,7 @@ export function storeProduct(product: Prisma.ProductGetPayload<{ select: typeof 
     images: product.images.map((image) => ({ ...image, url: publicAssetUrl(image.url) })),
     imageUrl: product.images[0] ? publicAssetUrl(product.images[0].url) : null,
     variants,
-    inStock: product.isPreorder || variants.some((variant) => variant.available === null || variant.available > 0),
+    inStock: product.isPreorder || variants.some((variant) => variant.available === null || variant.available >= product.minimumOrderQuantity),
     // Existing mobile cards use these aggregates; raw inventory stays private.
     totalStock: variants.reduce((sum, variant) => sum + (variant.available ?? 1), 0),
     variantCount: variants.length, imageCount: product.images.length,

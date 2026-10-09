@@ -52,6 +52,7 @@ export type EditorProduct = {
   care: string | null;
   tags: string[];
   isFeatured: boolean;
+  minimumOrderQuantity?: number;
   isPreorder?: boolean;
   preorderLeadTime?: string | null;
   preorderDepositPercent?: number | null;
@@ -481,6 +482,12 @@ function DetailsTab({
             </div>
           </div>
         </Card>
+
+        <div className="grid gap-2">
+          <label htmlFor="minimumOrderQuantity" className="text-sm font-medium">Minimum order quantity</label>
+          <input id="minimumOrderQuantity" name="minimumOrderQuantity" type="number" min={1} max={2147483647} step={1} required defaultValue={product.minimumOrderQuantity ?? 1} className="lx-field" />
+          <p className="text-xs text-[var(--text-secondary)]">Customers must order at least this many units of each selected variant. Use 1 for no minimum restriction.</p>
+        </div>
 
         <Card className="flex flex-col gap-4 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">

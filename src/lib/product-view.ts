@@ -22,6 +22,7 @@ export type ProductTileData = {
   /** True when several variants are priced differently, so the price reads "from ₵x". */
   hasRange: boolean;
   badge: string | null;
+  minimumOrderQuantity: number;
   isPreorder: boolean;
   preorderLeadTime: string | null;
   preorderDepositPercent: number | null;
@@ -87,6 +88,7 @@ export function toTile(product: ProductCard): ProductTileData {
         : product.compareAtPrice && product.compareAtPrice > product.minPrice
           ? "Sale"
           : null,
+    minimumOrderQuantity: product.minimumOrderQuantity,
     isPreorder,
     preorderLeadTime: product.preorderLeadTime ?? (isPreorder ? "2–3 weeks" : null),
     preorderDepositPercent: product.preorderDepositPercent ?? null,

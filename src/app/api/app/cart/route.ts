@@ -77,6 +77,7 @@ function formatCartResponse(cart: AppCart | null) {
           id: item.variant.product.id,
           title: item.variant.product.title,
           slug: item.variant.product.slug,
+          minimumOrderQuantity: item.variant.product.minimumOrderQuantity,
           isPreorder: item.variant.product.isPreorder,
           imageUrl: item.variant.product.images[0]?.url ?? null,
         },

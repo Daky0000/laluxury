@@ -80,6 +80,7 @@ export function VariantPicker({
   productId,
   productTitle = "",
   isSaved,
+  minimumOrderQuantity = 1,
   isPreorder = false,
   preorderLeadTime = null,
   preorderDepositPercent = null,
@@ -95,6 +96,7 @@ export function VariantPicker({
   productId: string;
   productTitle?: string;
   isSaved: boolean;
+  minimumOrderQuantity?: number;
   isPreorder?: boolean;
   preorderLeadTime?: string | null;
   preorderDepositPercent?: number | null;
@@ -114,8 +116,8 @@ export function VariantPicker({
   });
 
   const [queued, setQueued] = useState<Record<string, number>>(() => {
-    if (options.length === 0 && variants[0]) {
-      return { [variants[0].id]: 1 };
+    if (options.length === 0 && variants[0] && (isPreorder || variants[0].available === null || variants[0].available >= minimumOrderQuantity)) {
+      return { [variants[0].id]: minimumOrderQuantity };
     }
     return {};
   });
@@ -143,7 +145,7 @@ export function VariantPicker({
       (v) =>
         v.optionValueIds.includes(valueId) &&
         others.every(([, id]) => v.optionValueIds.includes(id)) &&
-        (isPreorder || v.available === null || v.available > 0),
+        (isPreorder || v.available === null || v.available >= minimumOrderQuantity),
     );
   }
 
@@ -163,13 +165,13 @@ export function VariantPicker({
 
       onSelectionChange?.(Object.values(next));
 
-      // As soon as all options are selected, default the resolved variant's quantity to 1
+      // As soon as all options are selected, default to the product minimum
       // if no quantity was queued yet, so the customer can click "Add to bag" in one tap!
       const chosenIds = Object.values(next);
       if (chosenIds.length === options.length) {
         const resolved = variants.find((v) => chosenIds.every((id) => v.optionValueIds.includes(id)));
-        if (resolved && (isPreorder || resolved.available === null || resolved.available > 0)) {
-          setQueued((qPrev) => (qPrev[resolved.id] ? qPrev : { ...qPrev, [resolved.id]: 1 }));
+        if (resolved && (isPreorder || resolved.available === null || resolved.available >= minimumOrderQuantity)) {
+          setQueued((qPrev) => (qPrev[resolved.id] ? qPrev : { ...qPrev, [resolved.id]: minimumOrderQuantity }));
         }
       }
 
@@ -202,18 +204,18 @@ export function VariantPicker({
     return map;
   }, [options]);
 
-  const maxQuantity = isPreorder ? 99 : (activeVariant?.available ?? 99);
-  const soldOut = !isPreorder && activeVariant !== null && activeVariant.available === 0;
+  const maxQuantity = isPreorder ? Math.max(99, minimumOrderQuantity) : (activeVariant?.available ?? Math.max(99, minimumOrderQuantity));
+  const soldOut = !isPreorder && activeVariant !== null && activeVariant.available !== null && activeVariant.available < minimumOrderQuantity;
 
-  /** The stepper defaults to 1 when an active in-stock variant is selected. */
-  const quantity = activeVariant ? (queued[activeVariant.id] ?? (soldOut ? 0 : 1)) : 0;
+  /** The stepper starts at the minimum for a sellable variant. */
+  const quantity = activeVariant ? (queued[activeVariant.id] ?? (soldOut ? 0 : minimumOrderQuantity)) : 0;
 
   function setQuantity(next: number) {
     if (!activeVariant) return;
     setError(null);
     setAdded(false);
-    const limit = isPreorder ? 99 : (activeVariant.available ?? 99);
-    const clamped = Math.max(0, Math.min(next, limit));
+    const limit = isPreorder ? Math.max(99, minimumOrderQuantity) : (activeVariant.available ?? Math.max(99, minimumOrderQuantity));
+    const clamped = next <= 0 ? 0 : Math.min(Math.max(minimumOrderQuantity, next), limit);
     setQueued((prev) => {
       const copy = { ...prev };
       if (clamped === 0) delete copy[activeVariant.id];
@@ -222,17 +224,17 @@ export function VariantPicker({
     });
   }
 
-  /** Queued lines, or the currently selected variant at quantity 1 if none explicitly stepped yet. */
+  /** Queued lines, or the current variant at its minimum quantity. */
   const lines = useMemo(() => {
     const explicit = variants
       .filter((v) => (queued[v.id] ?? 0) > 0)
       .map((v) => ({ variant: v, quantity: queued[v.id] }));
     if (explicit.length > 0) return explicit;
     if (activeVariant && !soldOut) {
-      return [{ variant: activeVariant, quantity: 1 }];
+      return [{ variant: activeVariant, quantity: minimumOrderQuantity }];
     }
     return [];
-  }, [queued, variants, activeVariant, soldOut]);
+  }, [queued, variants, activeVariant, soldOut, minimumOrderQuantity]);
 
   const totalItems = lines.reduce((sum, line) => sum + line.quantity, 0);
   const totalPrice = lines.reduce((sum, line) => sum + line.quantity * line.variant.price, 0);
@@ -252,7 +254,7 @@ export function VariantPicker({
           : null;
 
   const blockedFromBag =
-    lines.length > 0
+    lines.some((line) => line.quantity < minimumOrderQuantity) ? `Minimum ${minimumOrderQuantity} units per variant.` : lines.length > 0
       ? null
       : (blockedFromBuying ?? "Set a quantity - tap + or type a number.");
 
@@ -352,6 +354,7 @@ export function VariantPicker({
       </p>
 
       {/* Pre-Order Concierge Banner */}
+      {minimumOrderQuantity > 1 ? <p className="text-sm text-[var(--text-secondary)]">Minimum order: {minimumOrderQuantity} units per variant.</p> : null}
       {isPreorder ? (
         <div className="mt-4 border border-amber-800/30 bg-[#231B12] p-4 text-sm text-[#F4E6C8]">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#D4AF37]">
@@ -536,7 +539,7 @@ export function VariantPicker({
             <button
               type="button"
               onClick={() => setQuantity(quantity - 1)}
-              disabled={!activeVariant || quantity <= 0}
+              disabled={!activeVariant || quantity <= minimumOrderQuantity}
               className="lx-tap-tight text-lg text-[var(--accent)] disabled:opacity-30"
               aria-label="Decrease quantity"
             >
@@ -547,7 +550,7 @@ export function VariantPicker({
             <input
               type="number"
               inputMode="numeric"
-              min={0}
+              min={minimumOrderQuantity}
               max={maxQuantity}
               value={quantity}
               disabled={!activeVariant || soldOut}

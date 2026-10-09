@@ -1,3 +1,4 @@
+import { minimumOrderProblem } from "@/lib/minimum-order";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -433,6 +434,8 @@ export const POST = withApiAuth(async (request: Request) => {
   for (const item of data.items) {
     const v = variantMap.get(item.variantId);
     if (!v) continue;
+    const minimumProblem = minimumOrderProblem(v.product.title, item.quantity, v.product.minimumOrderQuantity);
+    if (minimumProblem) return NextResponse.json({ error: minimumProblem }, { status: 400 });
     const inv = v.inventory;
     const tracked = Boolean(inv && inv.trackInventory && !inv.allowBackorder && !v.product.isPreorder);
     const available = inv ? Math.max(0, availableOf(inv)) : 0;

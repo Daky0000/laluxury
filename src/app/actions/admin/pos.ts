@@ -1,5 +1,7 @@
 "use server";
 
+import { assertMinimumOrderQuantity } from "@/lib/minimum-order";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -65,6 +67,7 @@ export async function createPosShowroomOrderAction(formData: FormData): Promise<
     .map((input) => {
       const v = variantMap.get(input.variantId);
       if (!v) return null;
+      assertMinimumOrderQuantity(v.product.title, input.quantity, v.product.minimumOrderQuantity);
       const lineTotal = v.price * input.quantity;
       subtotal += lineTotal;
       if (v.product.isPreorder) hasPreorderItems = true;

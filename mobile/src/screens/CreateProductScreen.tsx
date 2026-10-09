@@ -31,6 +31,7 @@ export function CreateProductScreen({ onBack, onCreated, onBulkAdd }: Props) {
   const [status, setStatus] = useState<"ACTIVE" | "DRAFT">("ACTIVE");
   const [brand, setBrand] = useState("Noble Enclave");
   const [material, setMaterial] = useState("");
+  const [minimumOrderQuantity, setMinimumOrderQuantity] = useState("1");
   const [isPreorder, setIsPreorder] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
@@ -109,6 +110,11 @@ export function CreateProductScreen({ onBack, onCreated, onBulkAdd }: Props) {
       return;
     }
 
+    const minimum = Number(minimumOrderQuantity);
+    if (!Number.isSafeInteger(minimum) || minimum < 1 || minimum > 2147483647) {
+      toast("Invalid minimum", "Minimum order quantity must be a positive whole number.");
+      return;
+    }
     const numPrice = parseFloat(priceGHS);
     if (isNaN(numPrice) || numPrice <= 0) {
       toast("Invalid Price", "Enter a valid selling price in GHS.");
@@ -129,6 +135,7 @@ export function CreateProductScreen({ onBack, onCreated, onBulkAdd }: Props) {
         status,
         brand: brand.trim() || undefined,
         material: material.trim() || undefined,
+        minimumOrderQuantity: minimum,
         isPreorder,
         categoryIds: selectedCategoryId ? [selectedCategoryId] : [],
       });
@@ -282,6 +289,11 @@ export function CreateProductScreen({ onBack, onCreated, onBulkAdd }: Props) {
               value={material}
               onChangeText={setMaterial}
             />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>MINIMUM ORDER QUANTITY (PER VARIANT)</Text>
+            <TextInput style={styles.input} value={minimumOrderQuantity} onChangeText={setMinimumOrderQuantity} keyboardType="number-pad" accessibilityLabel="Minimum order quantity per variant" />
           </View>
 
           {/* Status & Preorder Switches */}

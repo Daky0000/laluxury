@@ -37,6 +37,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
   const [comparePriceGHS, setComparePriceGHS] = useState("");
   const [stock, setStock] = useState("");
   const [status, setStatus] = useState<"DRAFT" | "ACTIVE" | "ARCHIVED">("DRAFT");
+  const [minimumOrderQuantity, setMinimumOrderQuantity] = useState("1");
   const [isPreorder, setIsPreorder] = useState(false);
   const [brand, setBrand] = useState("");
   const [material, setMaterial] = useState("");
@@ -79,6 +80,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
       }
 
       setStatus(p.status);
+      setMinimumOrderQuantity(String(p.minimumOrderQuantity ?? 1));
       setIsPreorder(p.isPreorder);
       setBrand(p.brand || "");
       setMaterial(p.material || "");
@@ -172,6 +174,11 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
   };
 
   const handleSave = async () => {
+    const minimum = Number(minimumOrderQuantity);
+    if (!Number.isSafeInteger(minimum) || minimum < 1 || minimum > 2147483647) {
+      toast("Invalid minimum", "Minimum order quantity must be a positive whole number.");
+      return;
+    }
     const numPrice = parseFloat(priceGHS);
     if (isNaN(numPrice) || numPrice < 0) {
       toast("Invalid Price", "Please enter a valid price in GHS.");
@@ -195,6 +202,7 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
         shortDescription: shortDesc.trim() || null,
         brand: brand.trim() || null,
         material: material.trim() || null,
+        minimumOrderQuantity: minimum,
         isPreorder,
       });
 
@@ -362,6 +370,11 @@ export function ProductDetailScreen({ productId, onBack, onDeleted }: Props) {
         {/* Pricing & Inventory */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>PRICING & STOCK</Text>
+          <View style={styles.inputCol}>
+            <Text style={styles.inputLabel}>MINIMUM ORDER QUANTITY (PER VARIANT)</Text>
+            <TextInput style={styles.input} value={minimumOrderQuantity} onChangeText={setMinimumOrderQuantity} keyboardType="number-pad" accessibilityLabel="Minimum order quantity per variant" />
+          </View>
+
           <View style={styles.row}>
             <View style={[styles.inputCol, { flex: 1, marginRight: 8 }]}>
               <Text style={styles.inputLabel}>PRICE (GHS)</Text>

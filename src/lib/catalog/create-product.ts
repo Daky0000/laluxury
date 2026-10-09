@@ -47,6 +47,7 @@ export type NewProductInput = {
   care?: string | null;
   tags?: string[];
   isFeatured?: boolean;
+  minimumOrderQuantity?: number;
   isPreorder?: boolean;
   preorderLeadTime?: string | null;
   preorderDepositPercent?: number | null;
@@ -97,6 +98,7 @@ export async function createCatalogProduct(
   input: NewProductInput,
   tx?: Prisma.TransactionClient,
 ): Promise<{ id: string; slug: string }> {
+  if (!Number.isSafeInteger(input.minimumOrderQuantity ?? 1) || (input.minimumOrderQuantity ?? 1) < 1) throw new CatalogWriteError("Minimum order quantity must be a positive whole number.");
   if (!input.title.trim()) throw new CatalogWriteError("A product needs a title.");
   if (!input.variants.length) throw new CatalogWriteError("A product needs at least one version.");
   for (const v of input.variants) {
@@ -128,6 +130,7 @@ async function write(tx: Prisma.TransactionClient, input: NewProductInput, slug:
       care: input.care ?? null,
       tags,
       isFeatured: Boolean(input.isFeatured),
+      minimumOrderQuantity: input.minimumOrderQuantity ?? 1,
       isPreorder: Boolean(input.isPreorder),
       preorderLeadTime: input.isPreorder ? (input.preorderLeadTime ?? "4–6 weeks") : null,
       preorderDepositPercent: input.isPreorder ? (input.preorderDepositPercent ?? 50) : null,

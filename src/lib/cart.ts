@@ -1,3 +1,4 @@
+import { assertMinimumOrderQuantity, minimumOrderProblem } from "./minimum-order";
 import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { getCartToken, setCartToken, getSession } from "./auth/session";
@@ -42,6 +43,7 @@ export type CartLineView = {
   variantTitle: string;
   sku: string;
   imageUrl: string | null;
+  minimumOrderQuantity: number;
   quantity: number;
   unitPrice: number;
   lineTotal: number;
@@ -76,12 +78,13 @@ export async function validateCartVariantQuantity(variantId: string, quantity: n
 
   const variant = await db.variant.findUnique({
     where: { id: variantId },
-    include: { inventory: true, product: { select: { status: true, isPreorder: true } } },
+    include: { inventory: true, product: { select: { status: true, title: true, minimumOrderQuantity: true, isPreorder: true } } },
   });
 
   if (!variant || !variant.isActive) throw new Error("That item is unavailable.");
   if (variant.product.status !== "ACTIVE") throw new Error("That product is not on sale.");
 
+  assertMinimumOrderQuantity(variant.product.title, quantity, variant.product.minimumOrderQuantity);
   const inv = variant.inventory;
   if (inv && inv.trackInventory && !inv.allowBackorder && !variant.product.isPreorder) {
     const available = availableOf(inv);
@@ -209,7 +212,7 @@ async function touch(cartId: string): Promise<void> {
 }
 
 export async function addToCart(variantId: string, quantity = 1): Promise<CartWithItems> {
-  if (quantity < 1) throw new Error("Quantity must be at least 1.");
+  if (!Number.isSafeInteger(quantity) || quantity < 1) throw new Error("Quantity must be at least 1.");
 
   const cart = await getOrCreateCart();
   const existing = cart.items.find((i) => i.variantId === variantId);
@@ -237,6 +240,7 @@ export async function addManyToCart(
 ): Promise<CartWithItems> {
   const wanted = new Map<string, number>();
   for (const item of items) {
+    if (!Number.isSafeInteger(item.quantity)) throw new Error("Quantity must be a whole number.");
     if (item.quantity < 1) continue;
     wanted.set(item.variantId, (wanted.get(item.variantId) ?? 0) + item.quantity);
   }
@@ -245,7 +249,7 @@ export async function addManyToCart(
   const cart = await getOrCreateCart();
   const variants = await db.variant.findMany({
     where: { id: { in: [...wanted.keys()] } },
-    include: { inventory: true, product: { select: { status: true, title: true, isPreorder: true } } },
+    include: { inventory: true, product: { select: { status: true, title: true, minimumOrderQuantity: true, isPreorder: true } } },
   });
 
   const planned: { variantId: string; quantity: number; unitPrice: number }[] = [];
@@ -259,6 +263,7 @@ export async function addManyToCart(
 
     const existing = cart.items.find((i) => i.variantId === variantId);
     const desired = (existing?.quantity ?? 0) + quantity;
+    assertMinimumOrderQuantity(variant.product.title, desired, variant.product.minimumOrderQuantity);
 
     const inv = variant.inventory;
     if (inv && inv.trackInventory && !inv.allowBackorder && !variant.product.isPreorder) {
@@ -298,13 +303,11 @@ export async function updateCartLine(itemId: string, quantity: number): Promise<
   const item = cart.items.find((i) => i.id === itemId);
   if (!item) throw new Error("That line is no longer in your bag.");
 
+  if (!Number.isSafeInteger(quantity)) throw new Error("Quantity must be a whole number.");
   if (quantity <= 0) {
     await db.cartItem.delete({ where: { id: itemId } });
   } else {
-    const inv = item.variant.inventory;
-    if (inv && inv.trackInventory && !inv.allowBackorder && quantity > availableOf(inv)) {
-      throw new Error(`Only ${Math.max(0, availableOf(inv))} left in stock.`);
-    }
+    await validateCartVariantQuantity(item.variantId, quantity);
     await db.cartItem.update({ where: { id: itemId }, data: { quantity } });
   }
 
@@ -358,7 +361,8 @@ export async function computeCartTotals(cart: CartWithItems): Promise<CartTotals
     const tracked = Boolean(inv && inv.trackInventory && !inv.allowBackorder && !isPreorder);
     const available = tracked && inv ? Math.max(0, availableOf(inv)) : null;
 
-    let stockProblem: string | null = null;
+    let stockProblem = minimumOrderProblem(item.variant.product.title, item.quantity, item.variant.product.minimumOrderQuantity);
+    if (stockProblem) problems.push(stockProblem);
     if (available !== null && item.quantity > available) {
       stockProblem =
         available === 0
@@ -376,6 +380,7 @@ export async function computeCartTotals(cart: CartWithItems): Promise<CartTotals
       variantTitle: item.variant.title,
       sku: item.variant.sku,
       imageUrl: item.variant.product.images[0]?.url ?? null,
+      minimumOrderQuantity: item.variant.product.minimumOrderQuantity,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       lineTotal: item.unitPrice * item.quantity,

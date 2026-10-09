@@ -135,6 +135,7 @@ export const POST = withApiAuth(async (request: Request) => {
           id: line.variant.product.id,
           title: line.variant.product.title,
           slug: line.variant.product.slug,
+          minimumOrderQuantity: line.variant.product.minimumOrderQuantity,
           isPreorder: line.variant.product.isPreorder,
           imageUrl: line.variant.product.images[0]?.url ?? null,
         },

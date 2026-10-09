@@ -93,6 +93,7 @@ export type Product = {
   brand: string | null;
   material: string | null;
   isFeatured: boolean;
+  minimumOrderQuantity?: number;
   isPreorder: boolean;
   tags: string[];
   totalStock: number;
@@ -357,6 +358,7 @@ export type ServerCartItem = {
       id: string;
       title: string;
       slug: string;
+      minimumOrderQuantity?: number;
       isPreorder: boolean;
       imageUrl: string | null;
     };
@@ -400,6 +402,7 @@ export type WishlistItem = {
   slug: string;
   title: string;
   brand: string | null;
+  minimumOrderQuantity?: number;
   isPreorder: boolean;
   imageUrl: string | null;
   price: number | null;

@@ -19,6 +19,7 @@ export function serverCartToLocalCart(items: ServerCartItem[]): CartItem[] {
       brand: null,
       material: null,
       isFeatured: false,
+      minimumOrderQuantity: item.variant.product.minimumOrderQuantity ?? 1,
       isPreorder: Boolean(item.variant.product.isPreorder),
       tags: [],
       totalStock: item.availableStock ?? 10,
@@ -98,6 +99,7 @@ export function changeQuantity(
     .map((item) => {
       if (item.variant.id !== variantId) return item;
       quantity = item.quantity + delta;
+      if ((item.product.minimumOrderQuantity ?? 1) > 1) quantity = Math.max(item.product.minimumOrderQuantity!, quantity);
       return quantity > 0 ? { ...item, quantity } : null;
     })
     .filter((item): item is CartItem => item !== null);

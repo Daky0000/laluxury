@@ -31,6 +31,7 @@ const updateProductSchema = z.object({
   care: z.string().trim().nullable().optional(),
   tags: z.union([z.array(z.string()), z.string()]).optional(),
   isFeatured: z.boolean().optional(),
+  minimumOrderQuantity: z.number().int().min(1).max(2147483647).optional(),
   isPreorder: z.boolean().optional(),
   preorderLeadTime: z.string().trim().nullable().optional(),
   preorderDepositPercent: z.number().int().min(10).max(100).nullable().optional(),
@@ -224,6 +225,7 @@ export const PATCH = withApiAuth(
           care: data.care !== undefined ? data.care : existing.care,
           tags,
           isFeatured: data.isFeatured ?? existing.isFeatured,
+          minimumOrderQuantity: data.minimumOrderQuantity ?? existing.minimumOrderQuantity,
           isPreorder,
           preorderLeadTime: isPreorder
             ? data.preorderLeadTime ?? existing.preorderLeadTime ?? "4–6 weeks"
@@ -311,8 +313,8 @@ export const PATCH = withApiAuth(
       entity: "Product",
       entityId: id,
       source: "admin",
-      before: { title: existing.title, status: existing.status, isPreorder: existing.isPreorder },
-      after: { title, status: data.status ?? existing.status, isPreorder },
+      before: { minimumOrderQuantity: existing.minimumOrderQuantity, title: existing.title, status: existing.status, isPreorder: existing.isPreorder },
+      after: { minimumOrderQuantity: data.minimumOrderQuantity ?? existing.minimumOrderQuantity, title, status: data.status ?? existing.status, isPreorder },
     });
 
     revalidateProductCatalog(id, slug);

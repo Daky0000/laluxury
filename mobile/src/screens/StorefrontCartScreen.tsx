@@ -892,6 +892,7 @@ export function StorefrontCartScreen({
                 <Text style={styles.itemSubtitle}>
                   {item.variant.title !== "Default" ? item.variant.title : (item.product.material || "Standard")}
                 </Text>
+                {(item.product.minimumOrderQuantity ?? 1) > 1 ? <Text style={styles.itemSubtitle}>Minimum {item.product.minimumOrderQuantity} units per variant</Text> : null}
                 <Text style={styles.itemPrice}>
                   {formatCurrency(item.variant.price * item.quantity)}
                 </Text>
@@ -902,6 +903,7 @@ export function StorefrontCartScreen({
                 <View style={styles.quantityPill}>
                   <TouchableOpacity
                     style={styles.qtyBtn}
+                    disabled={item.quantity <= (item.product.minimumOrderQuantity ?? 1)}
                     onPress={() => onUpdateQuantity(item.variant.id, -1)}
                     activeOpacity={0.7}
                   >

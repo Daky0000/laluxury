@@ -101,3 +101,13 @@ describe("bag operations", () => {
     expect(line.product.images[0].url).toBe("/catalog/duvet.jpg");
   });
 });
+
+
+describe("minimum order quantity", () => {
+  it("keeps a variant at its minimum when decreasing quantity", () => {
+    const p = { ...product("minimum"), minimumOrderQuantity: 4 };
+    const cart = addLine([], p, variant("minimum-v", 100), 4).cart;
+    expect(changeQuantity(cart, "minimum-v", -1).quantity).toBe(4);
+    expect(changeQuantity(cart, "minimum-v", 1).quantity).toBe(5);
+  });
+});

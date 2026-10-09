@@ -18,6 +18,7 @@ export type LookbookSpot = {
   slug: string;
   price: number;
   imageUrl: string | null;
+  minimumOrderQuantity: number;
   isPreorder: boolean;
   preorderLeadTime: string | null;
   xPercent: number;
@@ -49,7 +50,7 @@ export function RoomLookbook({ scenes }: { scenes: LookbookScene[] }) {
 
   function addSinglePiece(variantId: string, id: string) {
     startTransition(async () => {
-      const result = await addToCartAction(variantId, 1);
+      const result = await addToCartAction(variantId, scene?.spots.find((spot) => spot.variantId === variantId)?.minimumOrderQuantity ?? 1);
       if (!result.ok) return;
       notifyCartChanged();
       setAddedId(id);
@@ -61,7 +62,7 @@ export function RoomLookbook({ scenes }: { scenes: LookbookScene[] }) {
     if (!scene) return;
     startTransition(async () => {
       for (const spot of scene.spots) {
-        await addToCartAction(spot.variantId, 1);
+        await addToCartAction(spot.variantId, spot.minimumOrderQuantity);
       }
       notifyCartChanged();
       setAddedId("ALL_ROOM");
@@ -71,7 +72,7 @@ export function RoomLookbook({ scenes }: { scenes: LookbookScene[] }) {
 
   if (!scene) return null;
 
-  const totalRoomPrice = scene.spots.reduce((sum, s) => sum + s.price, 0);
+  const totalRoomPrice = scene.spots.reduce((sum, s) => sum + s.price * s.minimumOrderQuantity, 0);
 
   return (
     <div className="space-y-10">

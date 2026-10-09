@@ -87,7 +87,7 @@ export function ProductRow({
                   <span className="font-display text-base tabular-nums">
                     {formatPrice(product.price)}
                   </span>
-                  <AddToBagIcon
+                  <AddToBagIcon minimumOrderQuantity={product.minimumOrderQuantity}
                     variantId={product.inStock ? product.variantId : null}
                     href={`/product/${product.slug}`}
                     soldOut={!product.inStock}

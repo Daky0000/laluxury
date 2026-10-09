@@ -49,6 +49,7 @@ export const productCardSelect = {
   maxPrice: true,
   compareAtPrice: true,
   isFeatured: true,
+  minimumOrderQuantity: true,
   isPreorder: true,
   preorderLeadTime: true,
   preorderDepositPercent: true,
@@ -193,6 +194,7 @@ function buildWhere(filters: CatalogFilters, status: ProductStatus | null = "ACT
 
 export function isInStock(
   product: Pick<ProductCard, "variants"> & {
+    minimumOrderQuantity?: number;
     isPreorder?: boolean;
     categories?: { category: { slug: string } }[];
   },
@@ -202,7 +204,7 @@ export function isInStock(
   return product.variants.some((v) => {
     const inv = v.inventory;
     if (!inv || !inv.trackInventory || inv.allowBackorder) return true;
-    return inv.onHand - inv.reserved > 0;
+    return inv.onHand - inv.reserved >= (product.minimumOrderQuantity ?? 1);
   });
 }
 

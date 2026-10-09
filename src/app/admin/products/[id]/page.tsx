@@ -87,6 +87,7 @@ export default async function EditProductPage({ params }: PageProps<"/admin/prod
     care: product.care,
     tags: product.tags,
     isFeatured: product.isFeatured,
+    minimumOrderQuantity: product.minimumOrderQuantity,
     isPreorder: product.isPreorder,
     preorderLeadTime: product.preorderLeadTime,
     preorderDepositPercent: product.preorderDepositPercent,

@@ -136,7 +136,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [resync, refreshWishlist, setUser]);
 
   const addToCart = useCallback(
-    (product: Product, variant?: Variant, qty = 1) => {
+    (product: Product, variant?: Variant, qty = product.minimumOrderQuantity ?? 1) => {
+      const existing = cartRef.current.find((item) => item.variant.id === (variant?.id ?? product.variants?.[0]?.id));
+      if ((existing?.quantity ?? 0) + qty < (product.minimumOrderQuantity ?? 1)) {
+        notify({ title: "Minimum order quantity", message: `Minimum ${product.minimumOrderQuantity} units per variant.`, type: "warning" });
+        return;
+      }
       const { cart: next, variant: line } = addLine(cartRef.current, product, variant, qty);
       saveCart(next);
       track("add_to_bag", { productId: product.id, quantity: qty });
@@ -177,6 +182,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const bulkAddToCart = useCallback(
     (items: { product: Product; variant: Variant; quantity: number }[]) => {
       if (!items.length) return;
+      if (items.some((item) => item.quantity + (cartRef.current.find((line) => line.variant.id === item.variant.id)?.quantity ?? 0) < (item.product.minimumOrderQuantity ?? 1))) {
+        notify({ title: "Minimum order quantity", message: "Each selected variant must meet its product minimum.", type: "warning" });
+        return;
+      }
       saveCart(addLines(cartRef.current, items));
       if (user) {
         Promise.all(

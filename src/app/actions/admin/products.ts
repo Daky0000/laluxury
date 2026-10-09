@@ -49,6 +49,7 @@ const productSchema = z.object({
   care: z.string().optional(),
   tags: z.string().optional(),
   isFeatured: z.boolean().optional(),
+  minimumOrderQuantity: z.coerce.number().int().min(1).max(2147483647).default(1),
   isPreorder: z.boolean().optional(),
   preorderLeadTime: z.string().optional(),
   preorderDepositPercent: z.number().int().min(10).max(100).nullable().optional(),
@@ -77,6 +78,7 @@ function parseProductForm(formData: FormData) {
     care: formData.get("care") || undefined,
     tags: formData.get("tags") || undefined,
     isFeatured: formData.get("isFeatured") === "on",
+    minimumOrderQuantity: formData.get("minimumOrderQuantity") ?? 1,
     isPreorder: formData.get("isPreorder") === "on",
     preorderLeadTime: formData.get("preorderLeadTime") || undefined,
     preorderDepositPercent: rawDeposit ? Number(rawDeposit) : null,
@@ -150,6 +152,7 @@ export async function createProductAction(
     care: data.care ?? null,
     tags,
     isFeatured: Boolean(data.isFeatured),
+    minimumOrderQuantity: data.minimumOrderQuantity,
     isPreorder: Boolean(data.isPreorder),
     preorderLeadTime: data.preorderLeadTime ?? null,
     preorderDepositPercent: data.preorderDepositPercent ?? null,
@@ -168,7 +171,7 @@ export async function createProductAction(
     action: "product.create",
     entity: "Product",
     entityId: product.id,
-    after: { title: data.title, slug, price, isPreorder: Boolean(data.isPreorder) },
+    after: { minimumOrderQuantity: data.minimumOrderQuantity, title: data.title, slug, price, isPreorder: Boolean(data.isPreorder) },
   });
 
   revalidateProduct(product.id);
@@ -231,6 +234,7 @@ export async function updateProductAction(
         care: data.care ?? null,
         tags,
         isFeatured: Boolean(data.isFeatured),
+        minimumOrderQuantity: data.minimumOrderQuantity,
         isPreorder: Boolean(data.isPreorder),
         preorderLeadTime: data.isPreorder ? (data.preorderLeadTime ?? "4–6 weeks") : null,
         preorderDepositPercent: data.isPreorder ? (data.preorderDepositPercent ?? 50) : null,
@@ -279,8 +283,8 @@ export async function updateProductAction(
     action: "product.update",
     entity: "Product",
     entityId: productId,
-    before: { title: existing.title, status: existing.status, isPreorder: existing.isPreorder },
-    after: { title: data.title, status: data.status, isPreorder: Boolean(data.isPreorder) },
+    before: { minimumOrderQuantity: existing.minimumOrderQuantity, title: existing.title, status: existing.status, isPreorder: existing.isPreorder },
+    after: { minimumOrderQuantity: data.minimumOrderQuantity, title: data.title, status: data.status, isPreorder: Boolean(data.isPreorder) },
   });
 
   revalidateProduct(productId);
@@ -904,6 +908,7 @@ export async function duplicateProductAction(productId: string): Promise<AdminSt
       data: {
         title,
         slug,
+        minimumOrderQuantity: source.minimumOrderQuantity,
         description: source.description,
         shortDescription: source.shortDescription,
         status: "DRAFT",

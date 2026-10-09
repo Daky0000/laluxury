@@ -89,6 +89,7 @@ function CartLine({ line }: { line: CartLineView }) {
           </button>
         </div>
 
+        {line.minimumOrderQuantity > 1 ? <p className="mt-2 text-xs">Minimum {line.minimumOrderQuantity} units per variant.</p> : null}
         {line.stockProblem ? (
           <p role="alert" className="mt-2 text-sm text-danger">
             {line.stockProblem}
@@ -105,7 +106,7 @@ function CartLine({ line }: { line: CartLineView }) {
             <button
               type="button"
               onClick={() => setQuantity(line.quantity - 1)}
-              disabled={pending}
+              disabled={pending || line.quantity <= line.minimumOrderQuantity}
               className="lx-tap-tight text-lg leading-none text-[var(--accent)] disabled:opacity-30"
               aria-label={`Decrease quantity of ${line.productTitle}`}
             >

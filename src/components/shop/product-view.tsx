@@ -36,6 +36,7 @@ export function ProductView({
   badge,
   productId,
   isSaved,
+  minimumOrderQuantity = 1,
   isPreorder = false,
   preorderLeadTime = null,
   preorderDepositPercent = null,
@@ -51,6 +52,7 @@ export function ProductView({
   badge?: string | null;
   productId: string;
   isSaved: boolean;
+  minimumOrderQuantity?: number;
   isPreorder?: boolean;
   preorderLeadTime?: string | null;
   preorderDepositPercent?: number | null;
@@ -194,6 +196,7 @@ export function ProductView({
           productId={productId}
           productTitle={title}
           isSaved={customer?.isSaved ?? isSaved}
+          minimumOrderQuantity={minimumOrderQuantity}
           isPreorder={isPreorder}
           preorderLeadTime={preorderLeadTime}
           preorderDepositPercent={preorderDepositPercent}

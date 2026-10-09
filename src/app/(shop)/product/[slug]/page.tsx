@@ -150,6 +150,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
         badge={badge}
         productId={product.id}
         isSaved={false}
+        minimumOrderQuantity={product.minimumOrderQuantity}
         isPreorder={isPreorder}
         preorderLeadTime={product.preorderLeadTime ?? (isPreorder ? "2–3 weeks" : null)}
         preorderDepositPercent={product.preorderDepositPercent}

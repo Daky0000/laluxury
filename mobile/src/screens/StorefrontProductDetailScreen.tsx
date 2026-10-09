@@ -217,6 +217,7 @@ export function StorefrontProductDetailScreen({
         ]);
         const p = res.product;
         setProduct(p);
+        setQuantity(p.minimumOrderQuantity ?? 1);
 
         const others = (listRes.products || [])
           .filter((item) => item.id !== productId)
@@ -287,7 +288,7 @@ export function StorefrontProductDetailScreen({
     (activeVariant?.inventory
       ? Math.max(0, activeVariant.inventory.onHand - activeVariant.inventory.reserved)
       : variantStock);
-  const isSoldOut = !product.isPreorder && variantAvailable <= 0;
+  const isSoldOut = !product.isPreorder && variantAvailable < (product.minimumOrderQuantity ?? 1);
 
   const handleSelectOption = (optionId: string, valueId: string) => {
     const nextSelected = { ...selectedOptions, [optionId]: valueId };
@@ -397,6 +398,10 @@ export function StorefrontProductDetailScreen({
       return;
     }
 
+    if (bulkSelectedVariants.some((line) => line.quantity < (product.minimumOrderQuantity ?? 1))) {
+      onNotify?.({ title: "Minimum order quantity", message: `Minimum ${product.minimumOrderQuantity} units per variant.`, type: "warning", icon: "alert-circle" });
+      return;
+    }
     if (onBulkAddToCart) {
       onBulkAddToCart(
         bulkSelectedVariants.map((line) => ({
@@ -821,11 +826,12 @@ export function StorefrontProductDetailScreen({
         <View style={styles.bottomQtyGroup}>
           <TouchableOpacity
             style={styles.qtyBtn}
-            onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+            onPress={() => setQuantity((q) => Math.max(product.minimumOrderQuantity ?? 1, q - 1))}
           >
             <Text style={styles.qtyBtnText}>−</Text>
           </TouchableOpacity>
           <Text style={styles.qtyNumber}>{quantity}</Text>
+          {(product.minimumOrderQuantity ?? 1) > 1 ? <Text>Min {product.minimumOrderQuantity}</Text> : null}
           <TouchableOpacity
             style={styles.qtyBtn}
             onPress={() => setQuantity((q) => q + 1)}
@@ -967,7 +973,7 @@ export function StorefrontProductDetailScreen({
                         onPress={() =>
                           setBulkQuantities((prev) => ({
                             ...prev,
-                            [v.id]: Math.max(0, (prev[v.id] || 0) - 1),
+                            [v.id]: (prev[v.id] || 0) <= (product.minimumOrderQuantity ?? 1) ? 0 : (prev[v.id] || 0) - 1,
                           }))
                         }
                       >
@@ -990,7 +996,7 @@ export function StorefrontProductDetailScreen({
                         onPress={() =>
                           setBulkQuantities((prev) => ({
                             ...prev,
-                            [v.id]: (prev[v.id] || 0) + 1,
+                            [v.id]: Math.max(product.minimumOrderQuantity ?? 1, (prev[v.id] || 0) + 1),
                           }))
                         }
                       >
