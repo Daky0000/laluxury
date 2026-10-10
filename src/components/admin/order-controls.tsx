@@ -10,17 +10,21 @@ import {
 import type { AdminState } from "@/app/actions/admin/products";
 import { Card, Field, Alert } from "@/components/ui";
 import { toMajorUnits, formatMoney } from "@/lib/money";
+import { MANUAL_PAYMENT_METHODS } from "@/lib/constants";
 import type { OrderStatus } from "@/generated/prisma";
 
-/** Only forward transitions are offered, so staff cannot un-ship an order. */
+/**
+ * Forward steps only, so staff cannot un-ship an order. The exceptions are
+ * payment: an unpaid order can be marked paid, and a cancelled one reopened.
+ */
 const NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
-  PENDING: ["CANCELLED"],
+  PENDING: ["PAID", "CANCELLED"],
   PAID: ["PROCESSING", "FULFILLED", "CANCELLED"],
   PROCESSING: ["FULFILLED", "SHIPPED", "CANCELLED"],
   FULFILLED: ["SHIPPED"],
   SHIPPED: ["DELIVERED"],
   DELIVERED: [],
-  CANCELLED: [],
+  CANCELLED: ["PENDING", "PAID"],
   REFUNDED: [],
 };
 
@@ -66,7 +70,9 @@ export function OrderControls({
   );
 
   const options = NEXT_STATUSES[status];
-  const [chosen, setChosen] = useState<OrderStatus | "">(options[0] ?? "");
+  const [picked, setPicked] = useState<OrderStatus | "">(options[0] ?? "");
+  // After a change the order has new options; a stale pick falls back to the first.
+  const chosen = picked && options.includes(picked) ? picked : (options[0] ?? "");
   const [showRefund, setShowRefund] = useState(false);
 
   return (
@@ -86,12 +92,16 @@ export function OrderControls({
                 id="status"
                 name="status"
                 value={chosen}
-                onChange={(event) => setChosen(event.target.value as OrderStatus)}
+                onChange={(event) => setPicked(event.target.value as OrderStatus)}
                 className="lx-field"
               >
                 {options.map((option) => (
                   <option key={option} value={option}>
-                    {LABELS[option]}
+                    {status === "CANCELLED"
+                      ? option === "PAID"
+                        ? "Reopen as paid"
+                        : "Reopen, awaiting payment"
+                      : LABELS[option]}
                   </option>
                 ))}
               </select>
@@ -117,6 +127,28 @@ export function OrderControls({
                   />
                 </Field>
               </>
+            ) : null}
+
+            {chosen === "PAID" ? (
+              <Field
+                label="Payment received by"
+                htmlFor="paymentMethod"
+                hint="Paystack is checked first. The customer gets their receipt text and you get the new order alert."
+              >
+                <select id="paymentMethod" name="paymentMethod" defaultValue="mobile_money" className="lx-field">
+                  {Object.entries(MANUAL_PAYMENT_METHODS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
+
+            {status === "CANCELLED" ? (
+              <p className="text-sm text-[var(--text-secondary)]">
+                Reopening reserves the stock again. If a piece has since sold out, it will say so.
+              </p>
             ) : null}
 
             {chosen === "CANCELLED" ? (

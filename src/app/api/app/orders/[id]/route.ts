@@ -8,7 +8,8 @@ import {
   withApiAuth,
 } from "@/lib/auth/bearer";
 import { can, isStaff } from "@/lib/auth/rbac";
-import { cancelOrder, logOrderEvent, markOrderPaid, orderInclude, updateOrderStatus } from "@/lib/orders";
+import { changeOrderStatusByStaff, logOrderEvent, orderInclude } from "@/lib/orders";
+import { MANUAL_PAYMENT_METHODS, type ManualPaymentMethod } from "@/lib/constants";
 import type { OrderStatus } from "@/generated/prisma";
 import { orderAccessTokenMatches, orderPath } from "@/lib/order-access";
 
@@ -158,24 +159,19 @@ export const PATCH = withApiAuth(async (
   // customer notices behave exactly as they do from the web admin.
   if (body.status && body.status !== order.status) {
     const status = String(body.status) as OrderStatus;
+    const method = String(body.paymentMethod ?? "cash");
     try {
-      if (status === "PAID") {
-        // Staff recording an offline payment (cash, manual transfer).
-        if (order.status !== "PENDING") throw new Error(`Cannot move an order from ${order.status} to PAID.`);
-        await markOrderPaid({
-          orderId: order.id,
-          reference: `MANUAL-${order.orderNumber}-${Date.now()}`,
-          amount: order.total,
-          channel: "manual",
-          raw: { recordedBy: actor.id },
-        });
-      } else if (status === "CANCELLED") {
-        await cancelOrder(order.id, body.reason ? String(body.reason) : "Cancelled by staff.", actor.id);
-      } else if (status === "REFUNDED") {
-        throw new Error("Use the refund flow to refund an order.");
-      } else {
-        await updateOrderStatus({ orderId: order.id, status, actorId: actor.id, trackingNumber, trackingCompany });
-      }
+      // The same rules as the web admin: mark unpaid orders paid (an offline
+      // payment), cancel, reopen a cancelled order, or step forward.
+      await changeOrderStatusByStaff({
+        orderId: order.id,
+        status,
+        actorId: actor.id,
+        reason: body.reason ? String(body.reason) : null,
+        paymentMethod: method in MANUAL_PAYMENT_METHODS ? (method as ManualPaymentMethod) : "cash",
+        trackingNumber,
+        trackingCompany,
+      });
     } catch (error) {
       if (error instanceof ApiAuthError) throw error;
       return NextResponse.json(

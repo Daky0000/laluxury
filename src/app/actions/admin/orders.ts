@@ -3,12 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
-import { updateOrderStatus, cancelOrder, recordRefund, logOrderEvent } from "@/lib/orders";
+import {
+  changeOrderStatusByStaff,
+  recordRefund,
+  logOrderEvent,
+} from "@/lib/orders";
 import { notifyOrder, type OrderNotice } from "@/lib/notify";
 import { refundTransaction, PaystackError } from "@/lib/paystack";
 import { toMinorUnits } from "@/lib/money";
 import { normalisePhone } from "@/lib/phone";
-import { GHANA_REGIONS } from "@/lib/constants";
+import { GHANA_REGIONS, MANUAL_PAYMENT_METHODS, type ManualPaymentMethod } from "@/lib/constants";
 import { recordAudit } from "@/lib/audit";
 import type { OrderStatus } from "@/generated/prisma";
 import type { AdminState } from "./products";
@@ -130,29 +134,25 @@ export async function updateOrderStatusAction(
   const status = String(formData.get("status") || "") as OrderStatus;
   const trackingNumber = String(formData.get("trackingNumber") || "").trim();
   const trackingCompany = String(formData.get("trackingCompany") || "").trim();
+  const method = String(formData.get("paymentMethod") || "cash");
 
+  let message: string;
   try {
-    if (status === "CANCELLED") {
-      await cancelOrder(
-        orderId,
-        String(formData.get("reason") || "Cancelled by staff."),
-        actor.id,
-      );
-    } else {
-      await updateOrderStatus({
-        orderId,
-        status,
-        actorId: actor.id,
-        trackingNumber: trackingNumber || undefined,
-        trackingCompany: trackingCompany || undefined,
-      });
-    }
+    message = await changeOrderStatusByStaff({
+      orderId,
+      status,
+      actorId: actor.id,
+      reason: String(formData.get("reason") || ""),
+      paymentMethod: method in MANUAL_PAYMENT_METHODS ? (method as ManualPaymentMethod) : "cash",
+      trackingNumber: trackingNumber || undefined,
+      trackingCompany: trackingCompany || undefined,
+    });
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Could not update." };
   }
 
   revalidateOrder(orderId);
-  return { ok: true, message: `Order marked ${status.toLowerCase()}.` };
+  return { ok: true, message };
 }
 
 export async function addOrderNoteAction(

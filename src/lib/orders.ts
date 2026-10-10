@@ -22,6 +22,7 @@ import { notifyOrder, notifyOwnerOfPaidOrder } from "./notify";
 import { quoteShipping } from "./shipping";
 import { describeChannel } from "./paystack";
 import { postAlert } from "./agent/slack";
+import { MANUAL_PAYMENT_METHODS, type ManualPaymentMethod } from "./constants";
 import type { OrderNotice } from "./notify";
 import type { OrderStatus, Prisma } from "@/generated/prisma";
 
@@ -773,6 +774,142 @@ export async function updateOrderStatus(args: {
   // and CANCELLED left above through `cancelOrder`, which sends its own.
   const notice = STATUS_NOTICES[args.status];
   if (notice) await notifyOrder(args.orderId, notice);
+}
+
+/**
+ * Staff recording money that arrived outside the checkout: cash, a MoMo sent
+ * straight to the shop, a bank transfer. It goes through `markOrderPaid`, so
+ * stock, the receipt text and the owner alert behave exactly as for an online
+ * payment. Paystack is asked first, so a payment it already holds is not
+ * recorded twice.
+ */
+async function recordManualPayment(
+  orderId: string,
+  actorId: string,
+  method: ManualPaymentMethod,
+): Promise<string> {
+  // Imported here, not at the top: checkout-payment builds on this module.
+  const { reconcilePendingPayments } = await import("./checkout-payment");
+  const { paid } = await reconcilePendingPayments({ orderId });
+  if (paid > 0) return "Paystack had already received this payment, so the order is now paid.";
+
+  const order = await db.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new Error("Order not found.");
+  if (order.status !== "PENDING") {
+    throw new Error(`Cannot move an order from ${order.status} to PAID.`);
+  }
+
+  await markOrderPaid({
+    orderId,
+    reference: `MANUAL-${order.orderNumber}-${Date.now().toString(36).toUpperCase()}`,
+    amount: order.depositAmount ?? order.total,
+    channel: method,
+    raw: { recordedBy: actorId, method },
+  });
+  await logOrderEvent({
+    orderId,
+    type: "payment.manual",
+    message: `Payment recorded by staff (${MANUAL_PAYMENT_METHODS[method]}).`,
+    actorId,
+  });
+  return `Order marked paid (${MANUAL_PAYMENT_METHODS[method]}).`;
+}
+
+/**
+ * Brings a cancelled order back. Its stock is taken again first, so a piece
+ * sold to someone else in the meantime stops it with the usual stock message.
+ * An order whose money arrived after it was cancelled comes back as paid,
+ * with the receipt and owner texts it missed; any other comes back awaiting
+ * payment.
+ */
+async function reopenOrder(orderId: string, actorId: string): Promise<"PAID" | "PENDING"> {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    include: { payments: { where: { status: "SUCCESS" }, orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+  if (!order) throw new Error("Order not found.");
+  if (order.status !== "CANCELLED") throw new Error("Only a cancelled order can be reopened.");
+  if (order.refundedTotal > 0) throw new Error("A refunded order cannot be reopened.");
+
+  await reserveStock(await stockLinesForOrder(orderId), order.orderNumber, actorId);
+
+  const paid = order.paymentStatus === "SUCCESS";
+  await db.order.update({
+    where: { id: orderId },
+    data: {
+      status: paid ? "PAID" : "PENDING",
+      cancelledAt: null,
+      // Cancelling put any sold goods back; the claim starts over.
+      inventoryAppliedAt: null,
+      ...(paid ? {} : { paymentStatus: "PENDING" as const }),
+    },
+  });
+  await logOrderEvent({
+    orderId,
+    type: "order.reopened",
+    message: paid ? "Reopened by staff as paid." : "Reopened by staff, awaiting payment.",
+    actorId,
+  });
+
+  if (paid) {
+    await applySoldStock(order);
+    const reference = order.payments[0]?.reference ?? order.orderNumber;
+    await notifyOrder(orderId, { kind: "payment.received", reference });
+    await notifyOwnerOfPaidOrder(orderId, reference);
+    return "PAID";
+  }
+  return "PENDING";
+}
+
+/**
+ * Every status change staff can make, from the web admin or the admin app.
+ * On top of the forward steps: an unpaid order can be marked paid, and a
+ * cancelled one reopened to awaiting payment or straight to paid.
+ * Returns the line to show the person who made the change.
+ */
+export async function changeOrderStatusByStaff(args: {
+  orderId: string;
+  status: OrderStatus;
+  actorId: string;
+  reason?: string | null;
+  paymentMethod?: ManualPaymentMethod | null;
+  trackingNumber?: string | null;
+  trackingCompany?: string | null;
+}): Promise<string> {
+  const order = await db.order.findUnique({
+    where: { id: args.orderId },
+    select: { status: true },
+  });
+  if (!order) throw new Error("Order not found.");
+  if (order.status === args.status) return "Nothing to change.";
+
+  const method = args.paymentMethod ?? "cash";
+
+  if (order.status === "CANCELLED" && (args.status === "PENDING" || args.status === "PAID")) {
+    const reopened = await reopenOrder(args.orderId, args.actorId);
+    if (args.status === "PAID" && reopened === "PENDING") {
+      return recordManualPayment(args.orderId, args.actorId, method);
+    }
+    return reopened === "PAID" ? "Order reopened as paid." : "Order reopened, awaiting payment.";
+  }
+
+  if (args.status === "PAID") return recordManualPayment(args.orderId, args.actorId, method);
+
+  if (args.status === "CANCELLED") {
+    await cancelOrder(args.orderId, args.reason?.trim() || "Cancelled by staff.", args.actorId);
+    return "Order cancelled. Its stock is back on the shelf.";
+  }
+
+  if (args.status === "REFUNDED") throw new Error("Use the refund form to refund an order.");
+
+  await updateOrderStatus({
+    orderId: args.orderId,
+    status: args.status,
+    actorId: args.actorId,
+    trackingNumber: args.trackingNumber,
+    trackingCompany: args.trackingCompany,
+  });
+  return `Order marked ${args.status.toLowerCase()}.`;
 }
 
 /**

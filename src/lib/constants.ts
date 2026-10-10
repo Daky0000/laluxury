@@ -56,3 +56,12 @@ export const PAYMENT_STATUS_LABELS = {
   REFUNDED: "Refunded",
   PARTIALLY_REFUNDED: "Part refunded",
 } as const;
+
+/** How staff say an offline payment arrived when they mark an order paid. */
+export const MANUAL_PAYMENT_METHODS = {
+  cash: "Cash",
+  mobile_money: "Mobile Money",
+  bank_transfer: "Bank transfer",
+} as const;
+
+export type ManualPaymentMethod = keyof typeof MANUAL_PAYMENT_METHODS;
