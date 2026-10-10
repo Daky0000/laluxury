@@ -5,6 +5,7 @@ import { enqueueNotification } from "./notifications/queue";
 import { db } from "./db";
 import { env } from "./env";
 import { formatMoney } from "./money";
+import { formatPhone, normalisePhone } from "./phone";
 import { formatDate } from "./utils";
 import { getSettings } from "./settings";
 import { sendEmail } from "./email";
@@ -275,6 +276,11 @@ export async function notifyOrder(orderId: string, notice: OrderNotice, options:
 
     const settings = await getSettings();
     const written = await composeOrderNotice(order, notice, settings.storeName);
+    // Owner-edited templates can drop the placeholder; the customer always
+    // needs the order number to quote back to us.
+    if (!written.sms.includes(order.orderNumber)) {
+      written.sms = `${written.sms.trim()} Order: ${order.orderNumber}`;
+    }
     const phone = recipientPhone(order);
 
     const title = settings.storeName + " - " + written.subject;
@@ -299,6 +305,65 @@ export async function notifyOrder(orderId: string, notice: OrderNotice, options:
   } catch {
     console.error("[notify] Notice could not be queued.", { kind: notice.kind, orderId });
     return { ok: false, outcomes: ["Notification could not be queued. Please retry or contact support."] };
+  }
+}
+
+/** Who the shop texts about a new sale: the alert numbers, or the support phone. */
+function orderAlertPhones(settings: { orderAlertPhones?: string; supportPhone: string }): string[] {
+  const raw = settings.orderAlertPhones?.trim() || settings.supportPhone;
+  const phones = raw
+    .split(/[,;\n]/)
+    .map((value) => normalisePhone(value.trim()))
+    .filter((value): value is string => Boolean(value));
+  return [...new Set(phones)];
+}
+
+/**
+ * Texts the shop owner that an order has been paid, with its order number.
+ * Goes through the same queue as customer notices, so it is retried and shows
+ * in the delivery log. Never throws.
+ */
+export async function notifyOwnerOfPaidOrder(orderId: string, reference: string): Promise<void> {
+  try {
+    const order = await db.order.findUnique({ where: { id: orderId }, select: noticeSelect });
+    if (!order) return;
+
+    const settings = await getSettings();
+    const phones = orderAlertPhones(settings);
+    if (phones.length === 0) {
+      console.warn("[notify] No order alert phone set; owner was not texted.");
+      return;
+    }
+
+    const name = [order.shippingAddress?.firstName, order.shippingAddress?.lastName]
+      .filter(Boolean)
+      .join(" ");
+    const customerPhone = recipientPhone(order);
+    const sms =
+      `${settings.storeName}: New paid order ${order.orderNumber}. ` +
+      `${formatMoney(order.total, order.currency)} via ${describePayment(order)}. ` +
+      `Items: ${formatProductsForSms(order.items)}. ` +
+      `Customer: ${name || "Guest"}${customerPhone ? ` ${formatPhone(customerPhone)}` : ""}` +
+      `${order.shippingAddress ? `, ${order.shippingAddress.city}` : ""}.`;
+    const title = `New paid order ${order.orderNumber}`;
+
+    await enqueueNotification({
+      orderId,
+      userId: null,
+      eventKey: "staff.order_paid",
+      dedupeKey: `${orderId}:staff.order_paid:${reference}`,
+      title,
+      body: sms,
+      actionUrl: "/account",
+      deliveries: phones.map((destination) => ({
+        channel: "SMS" as const,
+        destination,
+        subject: title,
+        body: sms,
+      })),
+    });
+  } catch {
+    console.error("[notify] Owner order alert could not be queued.", { orderId });
   }
 }
 

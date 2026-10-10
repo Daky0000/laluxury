@@ -16,13 +16,16 @@ export type PaymentOutcome = "paid" | "failed" | "pending" | "held";
  * idempotent `markOrderPaid`, so whichever lands first wins and the rest are
  * no-ops. Throws when the provider cannot be reached.
  */
-export async function reconcilePaystackPayment(payment: {
-  orderId: string;
-  orderNumber: string;
-  reference: string;
-  amount: number;
-  currency: string;
-}): Promise<PaymentOutcome> {
+export async function reconcilePaystackPayment(
+  payment: {
+    orderId: string;
+    orderNumber: string;
+    reference: string;
+    amount: number;
+    currency: string;
+  },
+  options: { recordFailure?: boolean } = {},
+): Promise<PaymentOutcome> {
   const { orderId, reference } = payment;
   const transaction = await verifyTransaction(reference);
 
@@ -65,6 +68,10 @@ export async function reconcilePaystackPayment(payment: {
   }
 
   if (transaction.status === "failed" || transaction.status === "abandoned") {
+    // Paystack calls every unpaid hosted checkout "abandoned", including one
+    // the shopper is still looking at. Only the shopper's own page settles it
+    // as failed; background checks leave it for the webhook or expiry.
+    if (options.recordFailure === false) return "pending";
     await markPaymentFailed({
       orderId,
       reference,
@@ -74,6 +81,72 @@ export async function reconcilePaystackPayment(payment: {
   }
 
   return "pending";
+}
+
+/** How far back an unsettled payment is still worth asking the provider about. */
+const RECONCILE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Asks the provider about payments still marked pending and records what it
+ * says.
+ *
+ * A customer can approve a MoMo prompt after closing the confirmation page,
+ * and a webhook can be missed, which left paid orders reading "awaiting
+ * payment". This catches them: it runs in the background as people use the
+ * shop, and directly when an order is opened by staff or by its customer.
+ */
+export async function reconcilePendingPayments(
+  options: { orderId?: string; limit?: number } = {},
+): Promise<{ checked: number; paid: number }> {
+  const payments = await db.payment.findMany({
+    where: {
+      provider: "paystack",
+      status: "PENDING",
+      createdAt: { gte: new Date(Date.now() - RECONCILE_WINDOW_MS) },
+      ...(options.orderId ? { orderId: options.orderId } : {}),
+    },
+    select: {
+      orderId: true,
+      reference: true,
+      amount: true,
+      currency: true,
+      order: { select: { orderNumber: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: options.limit ?? 25,
+  });
+
+  let paid = 0;
+  for (const payment of payments) {
+    try {
+      const outcome = await reconcilePaystackPayment(
+        {
+          orderId: payment.orderId,
+          orderNumber: payment.order.orderNumber,
+          reference: payment.reference,
+          amount: payment.amount,
+          currency: payment.currency,
+        },
+        { recordFailure: false },
+      );
+      if (outcome === "paid") paid += 1;
+    } catch (error) {
+      // An unknown reference (a charge that never started) or a provider
+      // hiccup. The next sweep asks again while the payment is in the window.
+      console.error("[payments.reconcile] could not verify", payment.reference, error);
+    }
+  }
+  return { checked: payments.length, paid };
+}
+
+let lastReconcile = 0;
+
+/** Runs the pending-payment check at most every two minutes per server, in the background. */
+export function reconcilePendingPaymentsSoon(): void {
+  const now = Date.now();
+  if (now - lastReconcile < 2 * 60 * 1000) return;
+  lastReconcile = now;
+  reconcilePendingPayments().catch((error) => console.error("[payments.reconcile]", error));
 }
 
 /**

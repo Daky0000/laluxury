@@ -176,7 +176,7 @@ export async function testMessageTemplateAction(args: {
     const sms = renderTemplateString(template.smsTemplate, sampleVars);
     const sent = await sendSms(args.phone, `[TEST] ${sms}`);
     accepted ||= sent.ok;
-    outcomes.push(sent.ok ? `SMS sent to ${args.phone}` : `SMS failed (${sent.code})`);
+    outcomes.push(sent.ok ? `SMS sent to ${args.phone}` : `SMS failed (${sent.code}). ${sent.message}`);
   }
 
   if (args.email) {

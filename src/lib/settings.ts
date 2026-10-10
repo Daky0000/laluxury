@@ -19,6 +19,8 @@ export type StoreSettings = {
   tagline: string;
   supportEmail: string;
   supportPhone: string;
+  /** Phones texted when an order is paid, comma separated. Empty falls back to `supportPhone`. */
+  orderAlertPhones: string;
   whatsappNumber: string;
   addressLine: string;
   instagramUrl: string;
@@ -95,6 +97,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   tagline: "Considered pieces for the modern Ghanaian home",
   supportEmail: "hello@nobleenclave.com",
   supportPhone: "",
+  orderAlertPhones: "",
   whatsappNumber: "",
   addressLine: "Accra, Ghana",
   instagramUrl: "",

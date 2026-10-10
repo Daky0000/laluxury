@@ -18,7 +18,7 @@ import {
   restockUnits,
   stockLinesForOrder,
 } from "./inventory";
-import { notifyOrder } from "./notify";
+import { notifyOrder, notifyOwnerOfPaidOrder } from "./notify";
 import { quoteShipping } from "./shipping";
 import { describeChannel } from "./paystack";
 import { postAlert } from "./agent/slack";
@@ -512,6 +512,7 @@ export async function markOrderPaid(args: {
     reference: args.reference,
     channel: describeChannel(args.channel ?? null),
   });
+  await notifyOwnerOfPaidOrder(order.id, args.reference);
 
   return { alreadyPaid: false };
 }
@@ -677,9 +678,16 @@ export async function expireStalePendingOrders(limit = 50): Promise<number> {
     take: limit,
   });
 
+  // Imported here, not at the top: checkout-payment builds on this module.
+  const { reconcilePendingPayments } = await import("./checkout-payment");
+
   let expired = 0;
   for (const order of stale) {
     try {
+      // A payment approved late, with its webhook missed, is still a sale.
+      // Ask the provider before giving the stock back.
+      const { paid } = await reconcilePendingPayments({ orderId: order.id });
+      if (paid > 0) continue;
       await cancelOrder(order.id, "Checkout expired without payment.", null, { notify: false });
       expired += 1;
     } catch (error) {

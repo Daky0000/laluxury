@@ -26,7 +26,7 @@ export async function enqueueNotification(input: {
       });
       await tx.orderEvent.create({ data: {
         orderId: input.orderId, type: `notify.${input.eventKey}`,
-        message: `Customer notice queued (${input.eventKey}); ${input.deliveries.length} channel jobs.`,
+        message: `Notice queued (${input.eventKey}); ${input.deliveries.length} channel jobs.`,
         meta: { notificationId: id },
       } });
     }

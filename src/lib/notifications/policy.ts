@@ -50,5 +50,6 @@ export function isNoticeCurrent(event: string, order: { status: string; paymentS
   if (event === "order.placed") return order.status === "PENDING" && order.paymentStatus !== "SUCCESS";
   if (event === "payment.failed") return order.paymentStatus === "FAILED" && !["CANCELLED", "REFUNDED"].includes(order.status);
   if (event === "payment.received") return order.paymentStatus === "SUCCESS";
+  if (event === "staff.order_paid") return order.paymentStatus === "SUCCESS";
   return true;
 }

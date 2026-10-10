@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { ExportLink } from "@/components/admin/export-link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
+import { reconcilePendingPaymentsSoon } from "@/lib/checkout-payment";
 import { formatMoney } from "@/lib/money";
 import { formatDate, buildQuery } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
@@ -21,6 +22,8 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
   const user = await requirePermission("orders:read");
   const canWrite = can(user.role, "orders:write");
   const params = await searchParams;
+  // Picks up late MoMo approvals in the background; a refresh shows them paid.
+  reconcilePendingPaymentsSoon();
 
   const q = typeof params.q === "string" ? params.q : "";
   const status = typeof params.status === "string" ? params.status : "";

@@ -14,6 +14,7 @@ import { recordRedemption, validateDiscount, type DiscountLine } from "@/lib/dis
 import { getCommerceSettings } from "@/lib/settings";
 import { getIntegrations, activePaystack } from "@/lib/integrations";
 import { notifyOrder } from "@/lib/notify";
+import { reconcilePendingPaymentsSoon } from "@/lib/checkout-payment";
 import {
   chargeMobileMoney,
   detectGhanaMomoProvider,
@@ -75,6 +76,8 @@ const checkoutSchema = z.object({
 // GET /api/app/orders - List customer orders or staff recent store orders
 // ---------------------------------------------------------------------------
 export const GET = withApiAuth(async (request: Request) => {
+  // Same heartbeat as the website: late MoMo approvals are caught in the background.
+  reconcilePendingPaymentsSoon();
   const user = await getOptionalBearerUser();
   const url = new URL(request.url);
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));

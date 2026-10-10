@@ -65,6 +65,7 @@ export type SmsResult =
  */
 const FATAL_CODES = new Set([
   "NOT_CONFIGURED",
+  "SENDER_ID_NOT_APPROVED",
   "UNAUTHORISED",
   "INVALID_PHONE",
   "MISSING_PHONE",
@@ -173,15 +174,23 @@ function readableError(
   status: number,
   data: VynfyResponse,
 ): { code: string; message: string; fatal: boolean } {
-  const code = data.error_code ?? data.error ?? `HTTP_${status}`;
+  const providerText = String(data.message ?? data.error ?? "");
+  // Vynfy refuses a sender name it has not approved with a bare 403. Every
+  // text fails until the sender ID matches an approved one exactly, so the
+  // fault is named rather than left as "HTTP_403".
+  const code = /sender\s*id/i.test(providerText)
+    ? "SENDER_ID_NOT_APPROVED"
+    : (data.error_code ?? data.error ?? `HTTP_${status}`);
 
   // Whatever the gateway said, in full, in our own log. Nothing below passes it
   // on to the customer: it is Vynfy's internal wording, and when their own
   // backend fails it has been seen to hand back things like a raw database
   // error — which is meaningless to a shopper and looks like our bug.
+  // The provider's reason is what makes a failure fixable; digit runs are
+  // masked so a number it echoes back never lands in the log.
   console.error(
     `[sms] ${path} failed: status=${status} code=${JSON.stringify(code)} ` +
-      `provider message omitted`,
+      `provider=${JSON.stringify(providerText.replace(/\d{6,}/g, "<number>").slice(0, 200))}`,
   );
 
   // Vynfy answers an unusable key with a 401 and "Invalid API key". That is a
@@ -198,6 +207,9 @@ function readableError(
   }
 
   const messages: Record<string, string> = {
+    SENDER_ID_NOT_APPROVED:
+      "The SMS sender ID is not approved at Vynfy. In Admin, Integrations, SMS, set the sender ID " +
+      "to exactly the name Vynfy approved (11 characters at most).",
     INVALID_PHONE:
       "Our SMS network would not accept that number. Codes reach Ghanaian " +
       "networks reliably; if yours is elsewhere, contact us and we will set the " +

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { displayName, requirePermission } from "@/lib/auth";
 import { can } from "@/lib/auth/rbac";
 import { orderInclude } from "@/lib/orders";
+import { reconcilePendingPayments } from "@/lib/checkout-payment";
 import { describeChannel } from "@/lib/paystack";
 import { formatMoney } from "@/lib/money";
 import { formatPhone, telHref } from "@/lib/phone";
@@ -22,6 +23,10 @@ export const metadata: Metadata = { title: "Order" };
 export default async function AdminOrderPage({ params }: PageProps<"/admin/orders/[id]">) {
   const user = await requirePermission("orders:read");
   const { id } = await params;
+
+  // A MoMo approval whose confirmation never reached us still shows as
+  // pending; ask the provider before showing staff "awaiting payment".
+  await reconcilePendingPayments({ orderId: id }).catch(() => undefined);
 
   const order = await db.order.findUnique({ where: { id }, include: orderInclude });
   if (!order) notFound();

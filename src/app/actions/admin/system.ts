@@ -47,6 +47,7 @@ export async function updateSettingsAction(
     tagline: String(formData.get("tagline") || "").trim(),
     supportEmail: String(formData.get("supportEmail") || "").trim(),
     supportPhone: String(formData.get("supportPhone") || "").trim(),
+    orderAlertPhones: text("orderAlertPhones"),
     whatsappNumber: String(formData.get("whatsappNumber") || "").trim(),
     addressLine: String(formData.get("addressLine") || "").trim(),
     instagramUrl: String(formData.get("instagramUrl") || "").trim(),

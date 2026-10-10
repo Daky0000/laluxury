@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CheckCircle2, Clock, FileText, Package, Search, Truck } from "lucide-react";
 import { db } from "@/lib/db";
 import { canViewOrder, orderAccessToken } from "@/lib/order-access";
+import { reconcilePendingPayments } from "@/lib/checkout-payment";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
@@ -43,7 +44,20 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
       })
     : null;
   // Without the order email, a signed link or an owner/staff session is needed.
-  const order = found && (await canViewOrder(found, { token, email })) ? found : null;
+  let order = found && (await canViewOrder(found, { token, email })) ? found : null;
+
+  // Paid after leaving the confirmation page, with the webhook missed: ask the
+  // provider before telling the customer their order still awaits payment.
+  if (order && order.paymentStatus !== "SUCCESS") {
+    const { paid } = await reconcilePendingPayments({ orderId: order.id }).catch(() => ({ paid: 0 }));
+    if (paid > 0) {
+      order =
+        (await db.order.findUnique({
+          where: { id: order.id },
+          include: { items: true, shippingRate: true },
+        })) ?? order;
+    }
+  }
   const accessToken = order ? orderAccessToken(order.orderNumber) : "";
 
   const searched = Boolean(orderNumber);

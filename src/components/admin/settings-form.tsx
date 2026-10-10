@@ -338,6 +338,20 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
             />
           </Field>
 
+          <Field
+            label="New order SMS alerts"
+            htmlFor="orderAlertPhones"
+            hint="Texted with the order number whenever an order is paid. Separate several numbers with commas. Blank uses the support phone."
+          >
+            <input
+              id="orderAlertPhones"
+              name="orderAlertPhones"
+              defaultValue={settings.orderAlertPhones}
+              placeholder="024 000 0000, 055 000 0000"
+              className="lx-field"
+            />
+          </Field>
+
           <Field label="WhatsApp number" htmlFor="whatsappNumber" hint="Shown to customers.">
             <input
               id="whatsappNumber"
