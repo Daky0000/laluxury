@@ -209,7 +209,7 @@ export async function customerInitiateMomoPushAction(args: {
         amountFormatted: formatMoney(amountToPay),
         displayText:
           charge.display_text ??
-          `Live ${providerLabel} prompt sent to ${cleanPhone}. Please check your phone screen (or dial *170# > 6 > 3 for MTN) and enter your 4-digit MoMo PIN to authorize.`,
+          `Live ${providerLabel} prompt sent to ${cleanPhone}. Please check your approvals and enter your 4-digit MoMo PIN to authorize.`,
       };
     } catch (err) {
       return {

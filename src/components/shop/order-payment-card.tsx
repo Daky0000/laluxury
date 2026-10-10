@@ -323,7 +323,7 @@ export function OrderPaymentCard({
                             {pushState.displayText}
                           </p>
                           <p role="status" className="mt-1.5 text-xs text-[var(--text-secondary)]">
-                            No pop-up? {pushState.providerLabel?.includes("MTN") ? "Dial *170#, select My Wallet, then My Approvals." : "Check pending approvals in your network’s Mobile Money menu."} Approve only one request. If you have already approved or been debited, select Check PIN Status instead of resending.
+                            No pop-up? Check your approvals and approve only one request. If you have already approved or been debited, select Check PIN Status instead of resending.
                           </p>
                         </div>
                       </div>

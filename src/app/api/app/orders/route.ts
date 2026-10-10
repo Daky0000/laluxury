@@ -785,7 +785,7 @@ export const POST = withApiAuth(async (request: Request) => {
             amountFormatted: formatMoney(chargeAmount, order.currency),
             displayText:
               chargeRes.display_text ||
-              `A prompt has been sent to ${momoPhone}. Please enter your 4-digit MoMo PIN on your phone screen to authorize. (For MTN, you can also dial *170# > 6 > 3).`,
+              `A prompt has been sent to ${momoPhone}. Please check your approvals and enter your 4-digit MoMo PIN to authorize.`,
         };
     } catch (chargeErr) {
         await cancelOrder(order.id, "Payment gateway initialization failed.", null, { notify: false }).catch((err) =>

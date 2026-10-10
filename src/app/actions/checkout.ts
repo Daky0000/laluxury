@@ -19,7 +19,7 @@ import {
 } from "@/lib/paystack";
 import { InsufficientStockError } from "@/lib/inventory";
 import { GHANA_REGIONS } from "@/lib/constants";
-import { normalisePhone } from "@/lib/phone";
+import { MOMO_NETWORKS, networkOf, normalisePhone } from "@/lib/phone";
 
 export type CheckoutState = {
   ok: boolean;
@@ -47,6 +47,7 @@ const schema = z.object({
   postalCode: z.string().optional(),
   shippingRateId: z.string().optional(),
   paymentMethod: z.enum(["direct_debit", "mobile_money", "bank_card"]).optional(),
+  momoPhone: z.string().trim().optional(),
   preorderDepositOption: z.enum(["full", "deposit_50"]).optional(),
   customerNote: z.string().optional(),
   createAccount: z.boolean().optional(),
@@ -69,6 +70,7 @@ export async function placeOrderAction(
     postalCode: formData.get("postalCode") || undefined,
     shippingRateId: formData.get("shippingRateId") || undefined,
     paymentMethod: formData.get("paymentMethod") || undefined,
+    momoPhone: formData.get("momoPhone") || undefined,
     preorderDepositOption: formData.get("preorderDepositOption") || undefined,
     customerNote: formData.get("customerNote") || undefined,
     createAccount: formData.get("createAccount") === "on",
@@ -94,6 +96,19 @@ export async function placeOrderAction(
   const data = parsed.data;
   const email = data.email.toLowerCase().trim();
   const phone = normalisePhone(data.phone)!;
+
+  // Direct Debit pushes the prompt to the wallet the shopper names, which is
+  // not always the delivery phone. Checked before any account is created.
+  const momoNumber = data.momoPhone || data.phone;
+  const momoNetwork = networkOf(momoNumber);
+  if (data.paymentMethod === "direct_debit" && !(momoNetwork && MOMO_NETWORKS.includes(momoNetwork))) {
+    return {
+      ok: false,
+      fieldErrors: {
+        momoPhone: "Enter the MTN, Telecel or AirtelTigo MoMo number that will pay, like 024 000 0000.",
+      },
+    };
+  }
 
   const session = await getSession();
   let userId = session?.userId ?? null;
@@ -215,7 +230,7 @@ export async function placeOrderAction(
       });
 
       if (isDirectDebit) {
-        const momoPhone = normaliseGhanaMomoPhone(phone);
+        const momoPhone = normaliseGhanaMomoPhone(momoNumber);
         await db.payment.update({
           where: { reference },
           data: { channel: "mobile_money", mobileMoneyNumber: momoPhone },

@@ -101,6 +101,8 @@ export function CheckoutForm({
   const [rateId, setRateId] = useState<string>("");
   const [loadingRates, setLoadingRates] = useState(false);
   const [method, setMethod] = useState(PAYMENT_METHODS[0].id);
+  // Follows the delivery phone until the shopper types a different wallet.
+  const [momoPhone, setMomoPhone] = useState<string | null>(null);
   const [preorderDepositOption, setPreorderDepositOption] = useState<"deposit_50" | "full">(
     hasPreorderItems ? "deposit_50" : "full",
   );
@@ -587,6 +589,35 @@ export function CheckoutForm({
             );
           })}
         </div>
+
+        {method === "direct_debit" ? (
+          <div className="mt-4">
+            <label
+              htmlFor="momoPhone"
+              className="mb-2 block text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]"
+            >
+              MoMo number to pay with
+            </label>
+            <input
+              id="momoPhone"
+              name="momoPhone"
+              type="tel"
+              required
+              value={momoPhone ?? phone}
+              onChange={(e) => setMomoPhone(e.target.value)}
+              autoComplete="tel"
+              placeholder="MoMo number (e.g. 024 000 0000)"
+              className={field}
+            />
+            <p className="mt-1.5 text-sm text-[var(--text-muted)]">
+              The payment prompt goes to this number. Change it if you will pay from a different
+              MoMo wallet.
+            </p>
+            {errors.momoPhone ? (
+              <p className="mt-1.5 text-sm text-danger">{errors.momoPhone}</p>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* Order note + account */}
         <div className="mt-10 flex flex-col gap-4">

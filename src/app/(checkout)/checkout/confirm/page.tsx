@@ -357,14 +357,15 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
               Check your approvals
             </p>
             <p className="mt-2 text-[var(--text-secondary)]">
-              A payment prompt for {formatPrice(latestPayment?.amount ?? fresh.total)} has been sent
-              to your phone. Enter your MoMo PIN to approve it.
-            </p>
-            <p className="mt-2 text-[var(--text-secondary)]">
-              No prompt, or it timed out? Open your pending approvals and approve the payment there.
-              On MTN, dial <strong className="font-medium text-[var(--text-primary)]">*170#</strong>,
-              choose <strong className="font-medium text-[var(--text-primary)]">My Wallet</strong>,
-              then <strong className="font-medium text-[var(--text-primary)]">My Approvals</strong>.
+              A payment request for {formatPrice(latestPayment?.amount ?? fresh.total)} was sent to{" "}
+              {latestPayment?.mobileMoneyNumber ? (
+                <strong className="font-medium text-[var(--text-primary)]">
+                  {formatPhone(latestPayment.mobileMoneyNumber)}
+                </strong>
+              ) : (
+                "your phone"
+              )}
+              . Please check your approvals and approve it.
             </p>
             <p className="mt-2 text-[var(--text-secondary)]">
               Your bag is saved, so you can go back and choose another payment method at any time.

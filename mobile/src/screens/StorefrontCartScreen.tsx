@@ -1807,7 +1807,7 @@ export function StorefrontCartScreen({
                 <View style={styles.instructionStepRow}>
                   <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>1</Text></View>
                   <Text style={styles.instructionStepText}>
-                    Check your phone screen for the payment authorization prompt. No pop-up? {momoPushData?.provider === "mtn" ? "Dial *170#, select My Wallet, then My Approvals." : "Check pending approvals in your network’s Mobile Money menu."}
+                    Check your phone screen for the payment authorization prompt. No pop-up? Check your approvals and approve the payment.
                   </Text>
                 </View>
                 <View style={styles.instructionStepRow}>
