@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireBearerUser, getOptionalBearerUser, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { availableOf } from "@/lib/inventory";
-import { validateCartVariantQuantity } from "@/lib/cart";
+import { liveCartWhere, validateCartVariantQuantity } from "@/lib/cart";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@/generated/prisma";
 
@@ -108,7 +108,7 @@ export const GET = withApiAuth(async () => {
   }
 
   const cart = await db.cart.findFirst({
-    where: { userId: user.id, convertedOrderId: null },
+    where: await liveCartWhere(user.id),
     include: cartInclude,
     orderBy: { updatedAt: "desc" },
   });
@@ -144,7 +144,7 @@ export const POST = withApiAuth(async (request: Request) => {
 
   // Find or create user cart
   let cart = await db.cart.findFirst({
-    where: { userId: user.id, convertedOrderId: null },
+    where: await liveCartWhere(user.id),
     include: cartInclude,
     orderBy: { updatedAt: "desc" },
   });
@@ -221,7 +221,7 @@ export const PATCH = withApiAuth(async (request: Request) => {
   const { variantId, quantity } = parsed.data;
 
   const cart = await db.cart.findFirst({
-    where: { userId: user.id, convertedOrderId: null },
+    where: await liveCartWhere(user.id),
     include: cartInclude,
     orderBy: { updatedAt: "desc" },
   });
@@ -272,7 +272,7 @@ export const DELETE = withApiAuth(async (request: Request) => {
   const variantId = searchParams.get("variantId");
 
   const cart = await db.cart.findFirst({
-    where: { userId: user.id, convertedOrderId: null },
+    where: await liveCartWhere(user.id),
     include: cartInclude,
     orderBy: { updatedAt: "desc" },
   });

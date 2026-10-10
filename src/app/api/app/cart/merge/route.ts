@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireBearerUser, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { randomUUID } from "node:crypto";
-import { validateCartVariantQuantity } from "@/lib/cart";
+import { liveCartWhere, validateCartVariantQuantity } from "@/lib/cart";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,7 +57,7 @@ export const POST = withApiAuth(async (request: Request) => {
 
   // Find or create customer's server cart
   let cart = await db.cart.findFirst({
-    where: { userId: user.id, convertedOrderId: null },
+    where: await liveCartWhere(user.id),
     include: cartInclude,
     orderBy: { updatedAt: "desc" },
   });

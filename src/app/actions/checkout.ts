@@ -7,6 +7,7 @@ import { env } from "@/lib/env";
 import { getIntegrations, isReady } from "@/lib/integrations";
 import { getOrCreateCart } from "@/lib/cart";
 import { createOrderFromCart } from "@/lib/orders";
+import { settleEarlierCheckout } from "@/lib/checkout-payment";
 import { notifyOrder } from "@/lib/notify";
 import { createSessionCookie, getSession } from "@/lib/auth/session";
 import { hashPassword, passwordProblems } from "@/lib/auth/password";
@@ -159,6 +160,14 @@ export async function placeOrderAction(
   const cart = await getOrCreateCart();
   if (cart.items.length === 0) {
     return { ok: false, message: "Your bag is empty." };
+  }
+
+  // This bag already went to payment once (a MoMo prompt never approved, or a
+  // failed attempt). Settle that attempt first so money that did land is not
+  // taken twice, and its stock hold does not block this order.
+  if (cart.convertedOrderId) {
+    const { paidReference } = await settleEarlierCheckout(cart.convertedOrderId);
+    if (paidReference) redirect(`/checkout/confirm?reference=${encodeURIComponent(paidReference)}`);
   }
 
   const paymentMethod = data.paymentMethod ?? "mobile_money";

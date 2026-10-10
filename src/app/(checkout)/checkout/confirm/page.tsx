@@ -3,16 +3,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Clock, XCircle } from "lucide-react";
 import { db } from "@/lib/db";
-import { verifyTransaction, describeChannel } from "@/lib/paystack";
-import { markOrderPaid, markPaymentFailed, logOrderEvent } from "@/lib/orders";
-import { postAlert } from "@/lib/agent/slack";
+import { describeChannel } from "@/lib/paystack";
+import { reconcilePaystackPayment } from "@/lib/checkout-payment";
 import { productCardSelect } from "@/lib/catalog";
 import { toTile } from "@/lib/product-view";
-import { formatMoney, formatPrice } from "@/lib/money";
+import { formatPrice } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
 import { getSettings } from "@/lib/settings";
 import { ProductTile } from "@/components/shop/product-tile";
 import { Footer } from "@/components/shop/footer";
+import { PaymentStatusRefresher } from "@/components/shop/payment-status-refresher";
 import { LinkButton } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Order confirmation" };
@@ -62,48 +62,13 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
   // A callback is not proof of payment. Verify every unsettled provider payment.
   if (payment.provider === "paystack" && payment.status !== "SUCCESS") {
     try {
-      const transaction = await verifyTransaction(reference);
-
-      if (
-        transaction.status === "success" &&
-        (transaction.amount !== payment.amount ||
-          transaction.currency.toUpperCase() !== payment.currency.toUpperCase())
-      ) {
-        const held = await db.orderEvent.findFirst({
-          where: { orderId: order.id, type: "payment.mismatch" },
-          select: { id: true },
-        });
-        if (!held) {
-          await logOrderEvent({
-            orderId: order.id,
-            type: "payment.mismatch",
-            message: `Payment provider reported ${formatMoney(transaction.amount, transaction.currency)} but the expected payment is ${formatMoney(payment.amount, payment.currency)}. Held for review.`,
-            meta: { reference, reported: transaction.amount, expected: payment.amount, reportedCurrency: transaction.currency, expectedCurrency: payment.currency },
-          });
-          await postAlert(
-            `:warning: Payment mismatch on ${order.orderNumber}. Provider reported ${formatMoney(transaction.amount, transaction.currency)}, expected ${formatMoney(payment.amount, payment.currency)}.`,
-          );
-        }
-      } else if (transaction.status === "success") {
-        await markOrderPaid({
-          orderId: order.id,
-          reference,
-          amount: transaction.amount,
-          channel: transaction.channel,
-          providerTransactionId: String(transaction.id),
-          cardLast4: transaction.authorization?.last4 ?? null,
-          cardBrand: transaction.authorization?.brand ?? null,
-          authCode: transaction.authorization?.authorization_code ?? null,
-          mobileMoneyNumber: transaction.authorization?.mobile_money_number ?? null,
-          raw: transaction as never,
-        });
-      } else if (transaction.status === "failed" || transaction.status === "abandoned") {
-        await markPaymentFailed({
-          orderId: order.id,
-          reference,
-          reason: transaction.gateway_response ?? "Payment did not complete.",
-        });
-      }
+      await reconcilePaystackPayment({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        reference,
+        amount: payment.amount,
+        currency: payment.currency,
+      });
     } catch (error) {
       console.error("[checkout confirm] verify failed", error);
     }
@@ -375,13 +340,51 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
     );
   }
 
+  // Direct Debit sends a MoMo prompt straight to the phone; nothing moves
+  // until the shopper approves it there.
+  const awaitsPhoneApproval =
+    fresh.paymentMethod === "direct_debit" || latestPayment?.channel === "mobile_money";
+
   return (
     <Shell
       icon={<Clock className="h-10 w-10 text-warning" aria-hidden />}
       title="Payment is still processing"
-      body={`We are waiting on confirmation for ${fresh.orderNumber}. Refresh in a moment — we will email you as soon as it clears.`}
-      action={<LinkButton href={`/checkout/confirm?reference=${reference}`}>Refresh</LinkButton>}
-    />
+      body={`We are waiting on confirmation for ${fresh.orderNumber}. This page updates on its own, and we will email you as soon as it clears.`}
+      note={
+        awaitsPhoneApproval ? (
+          <div className="mt-6 border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-5 text-left text-sm leading-relaxed">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
+              Check your approvals
+            </p>
+            <p className="mt-2 text-[var(--text-secondary)]">
+              A payment prompt for {formatPrice(latestPayment?.amount ?? fresh.total)} has been sent
+              to your phone. Enter your MoMo PIN to approve it.
+            </p>
+            <p className="mt-2 text-[var(--text-secondary)]">
+              No prompt, or it timed out? Open your pending approvals and approve the payment there.
+              On MTN, dial <strong className="font-medium text-[var(--text-primary)]">*170#</strong>,
+              choose <strong className="font-medium text-[var(--text-primary)]">My Wallet</strong>,
+              then <strong className="font-medium text-[var(--text-primary)]">My Approvals</strong>.
+            </p>
+            <p className="mt-2 text-[var(--text-secondary)]">
+              Your bag is saved, so you can go back and choose another payment method at any time.
+            </p>
+          </div>
+        ) : null
+      }
+      action={
+        <>
+          <LinkButton href={`/checkout/confirm?reference=${encodeURIComponent(reference)}`}>
+            Refresh
+          </LinkButton>
+          <Link href="/cart" className="self-center text-sm underline-offset-4 hover:underline">
+            Back to bag
+          </Link>
+        </>
+      }
+    >
+      <PaymentStatusRefresher />
+    </Shell>
   );
 }
 
@@ -389,19 +392,25 @@ function Shell({
   icon,
   title,
   body,
+  note,
   action,
+  children,
 }: {
   icon: React.ReactNode;
   title: string;
   body: string;
+  note?: React.ReactNode;
   action?: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   return (
     <div className="lx-container max-w-lg py-24 text-center">
+      {children}
       <div className="flex justify-center">{icon}</div>
       <h1 className="mt-4 text-3xl">{title}</h1>
       <p className="mt-2 text-[var(--text-secondary)]">{body}</p>
-      <div className="mt-6 flex justify-center gap-3">
+      {note}
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
         {action}
         <Link href="/contact" className="self-center text-sm underline-offset-4 hover:underline">
           Contact us

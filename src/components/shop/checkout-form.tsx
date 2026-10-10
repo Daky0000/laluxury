@@ -727,17 +727,6 @@ export function CheckoutForm({
             : `Complete Order · ${formatPrice(depositDueNow)}`}
         </button>
 
-        <a
-          href={`https://wa.me/233240000000?text=${encodeURIComponent(
-            `Hello Noble Enclave Concierge, I am ready to place my order (${formatPrice(total)}${hasPreorderItems && preorderDepositOption === "deposit_50" ? `, 50% deposit due today: ${formatPrice(depositDueNow)}` : ""}) for delivery to ${city || "Accra"}, ${region || "Greater Accra"}.`,
-          )}`}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-2.5 flex min-h-11 w-full items-center justify-center border border-sage-600/40 bg-sage-600/10 px-4 py-2.5 text-center text-xs font-medium uppercase tracking-[0.12em] text-sage-600 transition-colors hover:bg-sage-600 hover:text-white"
-        >
-          Confirm or Finalize via WhatsApp Concierge
-        </a>
-
         <div className="mt-4 space-y-1.5 text-xs text-[var(--text-muted)]">
           <p className="flex items-center justify-center gap-2">
             <ShieldCheck className="h-3.5 w-3.5 text-sage-600" strokeWidth={1.5} aria-hidden />

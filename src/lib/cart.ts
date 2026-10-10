@@ -4,7 +4,7 @@ import { db } from "./db";
 import { getCartToken, setCartToken, getSession } from "./auth/session";
 import { applyDiscount, type DiscountLine, type DiscountResult } from "./discounts";
 import { availableOf } from "./inventory";
-import type { Prisma } from "@/generated/prisma";
+import type { PaymentStatus, Prisma } from "@/generated/prisma";
 
 /**
  * Carts are keyed by an httpOnly cookie token for guests and additionally by
@@ -95,6 +95,50 @@ export async function validateCartVariantQuantity(variantId: string, quantity: n
   return variant;
 }
 
+const UNPAID: PaymentStatus[] = ["PENDING", "FAILED", "ABANDONED"];
+
+/**
+ * Checkout tags a cart with the order it became, but the bag has to outlive
+ * that order until it is actually paid. A MoMo prompt still waiting for
+ * approval, or a payment that failed or was abandoned, must leave the
+ * shopper's pieces where they were, so going back from the payment step finds
+ * the bag intact. Payment clears the cart (`markOrderPaid`), and checking out
+ * from it again replaces the earlier attempt (`settleEarlierCheckout`).
+ */
+async function isAwaitingPayment(cart: {
+  convertedOrderId: string | null;
+  items: unknown[];
+}): Promise<boolean> {
+  if (!cart.convertedOrderId || cart.items.length === 0) return false;
+  const order = await db.order.findUnique({
+    where: { id: cart.convertedOrderId },
+    select: { paidAt: true, paymentStatus: true },
+  });
+  return Boolean(order && !order.paidAt && UNPAID.includes(order.paymentStatus));
+}
+
+/** A cart the visitor is still shopping with: never checked out, or not yet paid for. */
+async function isLive(cart: { convertedOrderId: string | null; items: unknown[] }): Promise<boolean> {
+  return !cart.convertedOrderId || isAwaitingPayment(cart);
+}
+
+/**
+ * Where to find the cart a signed-in customer is shopping with, on web or in
+ * the app: the open cart, or failing that the bag whose order still waits on
+ * payment.
+ */
+export async function liveCartWhere(userId: string): Promise<Prisma.CartWhereInput> {
+  const open: Prisma.CartWhereInput = { userId, convertedOrderId: null };
+  if (await db.cart.findFirst({ where: open, select: { id: true } })) return open;
+
+  const pending = await db.cart.findFirst({
+    where: { userId, convertedOrderId: { not: null }, items: { some: {} } },
+    select: { id: true, convertedOrderId: true, items: { select: { id: true }, take: 1 } },
+    orderBy: { updatedAt: "desc" },
+  });
+  return pending && (await isAwaitingPayment(pending)) ? { id: pending.id } : open;
+}
+
 /**
  * Read-only cart lookup for Server Components.
  *
@@ -108,7 +152,7 @@ export async function readCart(): Promise<CartWithItems | null> {
 
   if (session) {
     const owned = await db.cart.findFirst({
-      where: { userId: session.userId, convertedOrderId: null },
+      where: await liveCartWhere(session.userId),
       include: cartInclude,
       orderBy: { updatedAt: "desc" },
     });
@@ -117,7 +161,7 @@ export async function readCart(): Promise<CartWithItems | null> {
 
   if (token) {
     const cart = await db.cart.findUnique({ where: { token }, include: cartInclude });
-    if (cart && !cart.convertedOrderId) return cart;
+    if (cart && (await isLive(cart))) return cart;
   }
 
   return null;
@@ -134,7 +178,7 @@ export async function getOrCreateCart(): Promise<CartWithItems> {
 
   if (session) {
     const existing = await db.cart.findFirst({
-      where: { userId: session.userId, convertedOrderId: null },
+      where: await liveCartWhere(session.userId),
       include: cartInclude,
       orderBy: { updatedAt: "desc" },
     });
@@ -155,6 +199,20 @@ export async function getOrCreateCart(): Promise<CartWithItems> {
         }
         return reload(target.id);
       }
+
+      // A guest bag still waiting on payment is adopted whole, never merged,
+      // so it stays tied to the order it may yet be paid for.
+      if (
+        !existing &&
+        guest &&
+        (!guest.userId || guest.userId === session.userId) &&
+        (await isAwaitingPayment(guest))
+      ) {
+        if (!guest.userId) {
+          await db.cart.update({ where: { id: guest.id }, data: { userId: session.userId } });
+        }
+        return reload(guest.id);
+      }
     }
 
     if (existing) return existing;
@@ -169,7 +227,7 @@ export async function getOrCreateCart(): Promise<CartWithItems> {
 
   if (token) {
     const cart = await db.cart.findUnique({ where: { token }, include: cartInclude });
-    if (cart && !cart.convertedOrderId) return cart;
+    if (cart && (await isLive(cart))) return cart;
   }
 
   const created = await db.cart.create({
@@ -443,7 +501,7 @@ export async function cartItemCount(): Promise<number> {
     if (!session && !token) return 0;
 
     const cart = await db.cart.findFirst({
-      where: session ? { userId: session.userId, convertedOrderId: null } : { token: token! },
+      where: session ? await liveCartWhere(session.userId) : { token: token! },
       select: { items: { select: { quantity: true } } },
     });
 

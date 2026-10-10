@@ -681,9 +681,11 @@ export const POST = withApiAuth(async (request: Request) => {
   // Convert and clear active cart so items are not left behind in customer's bag
   if (userId) {
     try {
+      // A bag still waiting on payment from an earlier web checkout counts as
+      // active too: it is emptied, but keeps its tie to that earlier order.
       const activeCarts = await db.cart.findMany({
-        where: { userId, convertedOrderId: null },
-        select: { id: true },
+        where: { userId, OR: [{ convertedOrderId: null }, { items: { some: {} } }] },
+        select: { id: true, convertedOrderId: true },
       });
       if (activeCarts.length > 0) {
         const cartIds = activeCarts.map((c) => c.id);
@@ -691,7 +693,7 @@ export const POST = withApiAuth(async (request: Request) => {
           where: { cartId: { in: cartIds } },
         });
         await db.cart.updateMany({
-          where: { id: { in: cartIds } },
+          where: { id: { in: cartIds }, convertedOrderId: null },
           data: { convertedOrderId: order.id },
         });
       }
