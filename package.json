@@ -24,6 +24,8 @@
     "catalog:images": "node scripts/fetch-catalog-images.mjs",
     "catalog:photos": "node scripts/import-product-photos.mjs",
     "catalog:worker": "tsx scripts/catalog-worker.ts",
+    "notifications:worker": "tsx scripts/notification-worker.ts",
+    "test:notifications": "tsx scripts/test-notification-policy.ts && tsx scripts/test-notification-delivery.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

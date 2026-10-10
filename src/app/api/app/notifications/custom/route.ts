@@ -61,7 +61,7 @@ export const POST = withApiAuth(async (request: Request) => {
       },
     }).catch(() => null);
 
-    if (!sent.ok && sent.fatal) {
+    if (!sent.ok) {
       return NextResponse.json(
         { error: `Could not send SMS: ${sent.message}` },
         { status: 400 },
@@ -71,7 +71,7 @@ export const POST = withApiAuth(async (request: Request) => {
     return NextResponse.json({
       ok: true,
       message: `SMS notification dispatched to ${phone}.`,
-      deliveryStatus: sent.ok ? "delivered" : "queued",
+      deliveryStatus: "accepted",
     });
   }
 

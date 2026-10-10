@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Package, Heart, MapPin, LogOut, ShieldCheck } from "lucide-react";
+import { Package, Heart, MapPin, LogOut, ShieldCheck, Bell } from "lucide-react";
 import { db } from "@/lib/db";
 import { currentUser, displayName } from "@/lib/auth";
 import { isStaff } from "@/lib/auth/rbac";
@@ -15,13 +15,17 @@ import { Card, Badge, EmptyState, LinkButton } from "@/components/ui";
 import { Thumb } from "@/components/shop/photo";
 import { MarketingToggle } from "@/components/shop/marketing-toggle";
 import { AccountDetailsForm, ChangePasswordForm } from "@/components/shop/account-forms";
+import { NotificationInbox } from "@/components/shop/notification-inbox";
+import { listNotifications } from "@/lib/notifications/inbox";
 
 export const metadata: Metadata = { title: "Your account" };
 export const dynamic = "force-dynamic";
 
-export default async function AccountPage() {
+export default async function AccountPage({ searchParams }: { searchParams: Promise<{ notificationsBefore?: string }> }) {
   const user = await currentUser();
   if (!user) redirect("/login");
+  const { notificationsBefore } = await searchParams;
+  const inbox = await listNotifications(user.id, notificationsBefore, 10);
 
   const [orders, wishlist, addresses] = await Promise.all([
     db.order.findMany({
@@ -63,6 +67,10 @@ export default async function AccountPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link href="/account#notifications" aria-label={`Notifications, ${inbox.unreadCount} unread`} className="inline-flex min-h-11 items-center gap-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-4">
+            <Bell className="h-4 w-4" aria-hidden="true" />
+            {inbox.unreadCount > 0 && <span>{inbox.unreadCount}</span>}
+          </Link>
           {isStaff(user.role) ? (
             <LinkButton href="/admin" variant="secondary" size="sm">
               Back office
@@ -82,6 +90,7 @@ export default async function AccountPage() {
 
       <div className="mt-8 sm:mt-10 grid gap-8 lg:grid-cols-[1fr_18rem]">
         <section>
+          <NotificationInbox inbox={inbox} paginated={Boolean(notificationsBefore)} />
           <h2 className="lx-eyebrow mb-4">Your orders</h2>
 
           {orders.length === 0 ? (

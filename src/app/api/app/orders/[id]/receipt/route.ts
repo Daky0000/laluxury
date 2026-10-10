@@ -11,7 +11,7 @@ export const OPTIONS = apiOptionsResponse;
 
 /**
  * POST /api/app/orders/[id]/receipt
- * Resends the official tax receipt & invoice to the customer via SMS and Email.
+ * Queues the official receipt and invoice for the customer through configured channels.
  */
 export async function POST(
   request: NextRequest,
@@ -46,7 +46,7 @@ export async function POST(
     const res = await notifyOrder(order.id, { kind: "order.receipt" });
     return NextResponse.json({
       ok: res.ok,
-      message: `Receipt dispatched: ${res.outcomes.join(", ")}.`,
+      message: `Receipt notice: ${res.outcomes.join(", ")}.`,
       outcomes: res.outcomes,
     });
   } catch (err) {

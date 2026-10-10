@@ -57,6 +57,7 @@ model User {
   wishlist     WishlistItem[]
   pushDevices  PushDevice[]
   interactions CustomerInteraction[]
+  notifications CustomerNotification[]
   tags         CustomerTagOnUser[]
   auditLogs    AuditLog[]
   tokens       VerificationToken[]
@@ -634,6 +635,7 @@ model Order {
   payments    Payment[]
   redemptions DiscountRedemption[]
   events      OrderEvent[]
+  notifications CustomerNotification[]
 
   placedAt    DateTime  @default(now())
   paidAt      DateTime?
@@ -731,6 +733,61 @@ model OrderEvent {
   createdAt DateTime @default(now())
 
   @@index([orderId, createdAt])
+}
+
+// Transactional customer inbox and database-backed delivery jobs.
+model CustomerNotification {
+  id String @id @default(cuid())
+  eventKey String
+  dedupeKey String @unique
+  userId String?
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId String?
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  title String
+  body String
+  actionUrl String
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  deliveries NotificationDelivery[]
+
+  @@index([userId, createdAt, id])
+  @@index([userId, readAt])
+}
+
+model NotificationDelivery {
+  id String @id @default(cuid())
+  notificationId String
+  notification CustomerNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  channel String
+  destination String
+  subject String
+  body String
+  status String @default("QUEUED")
+  attemptCount Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  lockedAt DateTime?
+  lockToken String?
+  acceptedAt DateTime?
+  failureCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  attempts NotificationAttempt[]
+
+  @@unique([notificationId, channel])
+  @@index([status, nextAttemptAt])
+}
+
+model NotificationAttempt {
+  id String @id @default(cuid())
+  deliveryId String
+  delivery NotificationDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  number Int
+  status String
+  failureCode String?
+  createdAt DateTime @default(now())
+
+  @@unique([deliveryId, number])
 }
 
 // ---------------------------------------------------------------------------

@@ -296,16 +296,16 @@ export async function resendOrderNoticeAction(orderId: string): Promise<AdminSta
 
   if (!notice) return { ok: false, message: "There is nothing to tell the customer about yet." };
 
-  await notifyOrder(orderId, notice);
+  const result = await notifyOrder(orderId, notice, { force: true });
   await logOrderEvent({
     orderId,
     type: "notify.resent",
-    message: `Notice (${notice.kind}) re-sent by staff.`,
+    message: `Notice (${notice.kind}) attempted by staff: ${result.outcomes.join(", ")}.`,
     actorId: actor.id,
   });
 
   revalidateOrder(orderId);
-  return { ok: true, message: "Sent again. The timeline shows whether it went out." };
+  return { ok: result.ok, message: `Notice: ${result.outcomes.join(", ")}.` };
 }
 
 /**

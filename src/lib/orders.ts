@@ -572,27 +572,27 @@ export async function markPaymentFailed(args: {
   reference: string;
   reason?: string;
 }): Promise<void> {
-  const before = await db.payment.findUnique({
-    where: { reference: args.reference },
-    select: { status: true },
-  });
-  const alreadyFailed = before?.status === "FAILED";
-
-  // A late failure report must never undo money that already arrived.
-  await db.payment.updateMany({
-    where: { reference: args.reference, status: { not: "SUCCESS" } },
+  // Only one caller can claim a failed attempt. A late failure cannot regress
+  // a successful attempt, and the reference must belong to this order.
+  const claimed = await db.payment.updateMany({
+    where: {
+      reference: args.reference,
+      orderId: args.orderId,
+      status: { notIn: ["SUCCESS", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED"] },
+    },
     data: { status: "FAILED" },
   });
-  await db.order.updateMany({
+  if (claimed.count === 0) return;
+
+  const changed = await db.order.updateMany({
     where: {
       id: args.orderId,
+      status: { notIn: ["CANCELLED", "REFUNDED"] },
       paymentStatus: { notIn: ["SUCCESS", "REFUNDED", "PARTIALLY_REFUNDED"] },
     },
     data: { paymentStatus: "FAILED" },
   });
-  if (before?.status === "SUCCESS") return;
-
-  if (alreadyFailed) return;
+  if (changed.count === 0) return;
 
   await logOrderEvent({
     orderId: args.orderId,
@@ -600,7 +600,7 @@ export async function markPaymentFailed(args: {
     message: args.reason ?? "Payment attempt failed.",
   });
 
-  await notifyOrder(args.orderId, { kind: "payment.failed", reason: args.reason ?? null });
+  await notifyOrder(args.orderId, { kind: "payment.failed", reason: args.reason ?? null, reference: args.reference });
 }
 
 /** Cancels an unpaid order and gives its reserved stock back. */

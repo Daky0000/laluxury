@@ -1,5 +1,7 @@
+import { cartRecoveryBlockReason } from "./notification-policy";
 import { orderPath } from "@/lib/order-access";
-import { pushToUser } from "@/lib/push";
+import { randomUUID } from "node:crypto";
+import { enqueueNotification } from "./notifications/queue";
 import { db } from "./db";
 import { env } from "./env";
 import { formatMoney } from "./money";
@@ -28,6 +30,7 @@ import type { Prisma } from "@/generated/prisma";
 const noticeSelect = {
   id: true,
   userId: true,
+  refundedTotal: true,
   orderNumber: true,
   email: true,
   phone: true,
@@ -83,7 +86,7 @@ export type OrderNotice =
   | { kind: "order.placed" }
   | { kind: "payment.received"; reference?: string | null; channel?: string | null }
   | { kind: "order.receipt" }
-  | { kind: "payment.failed"; reason?: string | null }
+  | { kind: "payment.failed"; reason?: string | null; reference?: string }
   | { kind: "order.processing" }
   | { kind: "order.fulfilled" }
   | { kind: "order.shipped" }
@@ -148,9 +151,9 @@ async function composeOrderNotice(
       : "";
   const customerName = order.shippingAddress?.firstName?.trim() || "there";
   const track = trackingUrl(order);
-  const estimate = deliveryEstimate(order) || "1–3 business days";
-  const carrier = tracking(order) || "Concierge Rider";
-  const receiptLink = `${env.siteUrl()}/print/orders/${order.id}`;
+  const estimate = deliveryEstimate(order) || "Check your order page for delivery updates";
+  const carrier = tracking(order) || "Check your order page for carrier updates";
+  const receiptLink = `${env.siteUrl()}${orderPath(order.orderNumber, "invoice")}`;
   const addressText = order.shippingAddress
     ? `${order.shippingAddress.line1}${order.shippingAddress.line2 ? ` ${order.shippingAddress.line2}` : ""}, ${order.shippingAddress.city}, ${order.shippingAddress.region}`
     : "Delivery Address on File";
@@ -239,7 +242,7 @@ async function composeOrderNotice(
         sms: `${storeName}: payment for order ${order.orderNumber} did not go through. Your bag is saved at ${env.siteUrl()}/checkout.`,
         smsEnabled: true,
         subject: `Payment unsuccessful for order ${order.orderNumber}`,
-        body: `Hello ${customerName},\n\nThe payment for order ${order.orderNumber} did not complete. Nothing was charged.\n\n${notice.reason ? `Gateway note: ${notice.reason}\n\n` : ""}You can finish your order with another payment method anytime: ${env.siteUrl()}/checkout.\n\nWarm regards,\n${storeName}`,
+        body: `Hello ${customerName},\n\nThe payment for order ${order.orderNumber} did not complete. Check your order status before retrying; your payment provider may still be processing the attempt.\n\n${notice.reason ? `Gateway note: ${notice.reason}\n\n` : ""}You can finish your order with another payment method anytime: ${env.siteUrl()}/checkout.\n\nWarm regards,\n${storeName}`,
         emailEnabled: true,
       };
   }
@@ -262,10 +265,10 @@ function recipientPhone(order: NoticeOrder): string | null {
 }
 
 /**
- * Texts and emails the customer about their order using active templates.
+ * Records the customer inbox and queues provider delivery using active templates.
  * Never throws.
  */
-export async function notifyOrder(orderId: string, notice: OrderNotice): Promise<{ ok: boolean; outcomes: string[] }> {
+export async function notifyOrder(orderId: string, notice: OrderNotice, options: { force?: boolean } = {}): Promise<{ ok: boolean; outcomes: string[] }> {
   try {
     const order = await db.order.findUnique({ where: { id: orderId }, select: noticeSelect });
     if (!order) return { ok: false, outcomes: ["order not found"] };
@@ -274,54 +277,28 @@ export async function notifyOrder(orderId: string, notice: OrderNotice): Promise
     const written = await composeOrderNotice(order, notice, settings.storeName);
     const phone = recipientPhone(order);
 
-    const outcomes: string[] = [];
-    let smsSuccess = false;
-    let emailSuccess = false;
-
-    if (phone && written.smsEnabled) {
-      const sent = await sendSms(phone, written.sms);
-      smsSuccess = sent.ok;
-      outcomes.push(sent.ok ? "texted" : `text failed (${sent.code || ("message" in sent ? String(sent.message) : "error")})`);
-    } else if (!phone && written.smsEnabled) {
-      outcomes.push("no phone number on order");
-    } else if (!written.smsEnabled) {
-      outcomes.push("SMS disabled in template");
-    }
-
-    if (order.email && written.emailEnabled) {
-      const mailed = await sendEmail({
-        to: order.email,
-        subject: `${settings.storeName} — ${written.subject}`,
-        text: `${written.body}\n\n— ${settings.storeName}`,
-      });
-      emailSuccess = !mailed.skipped && mailed.ok;
-      if (!mailed.skipped) outcomes.push(mailed.ok ? "emailed" : "email failed");
-    } else if (!order.email && written.emailEnabled) {
-      outcomes.push("no email on order");
-    }
-
-    // App push on top of SMS/email, for customers signed in on a phone.
-    if (order.userId) {
-      const pushed = await pushToUser(order.userId, {
-        title: `${settings.storeName} — ${written.subject}`,
-        body: written.sms,
-        data: { type: "order", orderNumber: order.orderNumber },
-      }).catch(() => 0);
-      if (pushed > 0) outcomes.push("pushed");
-    }
-
-    await db.orderEvent.create({
-      data: {
-        orderId: order.id,
-        type: `notify.${notice.kind}`,
-        message: `Customer notice (${notice.kind}): ${outcomes.join(", ")}.`,
-      },
+    const title = settings.storeName + " - " + written.subject;
+    const deliveries: { channel: "SMS" | "EMAIL" | "PUSH"; destination: string; subject: string; body: string }[] = [];
+    if (phone && written.smsEnabled) deliveries.push({ channel: "SMS", destination: phone, subject: title, body: written.sms });
+    if (order.email && written.emailEnabled) deliveries.push({ channel: "EMAIL", destination: order.email, subject: title, body: written.body });
+    if (order.userId) deliveries.push({ channel: "PUSH", destination: order.userId, subject: title, body: written.sms });
+    const manual = options.force || notice.kind === "custom.message" || notice.kind === "order.receipt";
+    const identity = manual ? randomUUID()
+      : notice.kind === "payment.received" ? notice.reference || order.payments[0]?.reference || "payment"
+      : notice.kind === "payment.failed" ? notice.reference || order.payments[0]?.reference || "payment"
+      : notice.kind === "order.refunded" ? String(order.refundedTotal)
+      : "lifecycle";
+    return await enqueueNotification({
+      orderId, userId: order.userId, eventKey: notice.kind,
+      dedupeKey: orderId + ":" + notice.kind + ":" + identity,
+      title: written.subject, body: notice.kind === "custom.message"
+        ? notice.customText
+        : `Order ${order.orderNumber}: ${written.subject}. View your order for details.`,
+      actionUrl: "/orders/track?order=" + encodeURIComponent(order.orderNumber), deliveries,
     });
-
-    return { ok: smsSuccess || emailSuccess, outcomes };
-  } catch (error) {
-    console.error(`[notify] ${notice.kind} for order ${orderId} failed:`, error);
-    return { ok: false, outcomes: [error instanceof Error ? error.message : "unknown error"] };
+  } catch {
+    console.error("[notify] Notice could not be queued.", { kind: notice.kind, orderId });
+    return { ok: false, outcomes: ["Notification could not be queued. Please retry or contact support."] };
   }
 }
 
@@ -331,7 +308,7 @@ export async function sendOrderReceipt(orderId: string): Promise<{ ok: boolean; 
     const res = await notifyOrder(orderId, { kind: "order.receipt" });
     return {
       ok: res.ok,
-      message: `Receipt dispatched: ${res.outcomes.join(", ")}.`,
+      message: `Receipt notice: ${res.outcomes.join(", ")}.`,
       outcomes: res.outcomes,
     };
   } catch (error) {
@@ -349,20 +326,20 @@ export async function sendOrderCustomMessage(args: {
     const order = await db.order.findUnique({ where: { id: args.orderId }, select: noticeSelect });
     if (!order) return { ok: false, message: "Order not found." };
 
-    await notifyOrder(args.orderId, { kind: "custom.message", customText: args.customText });
+    const result = await notifyOrder(args.orderId, { kind: "custom.message", customText: args.customText });
 
     if (args.actorId) {
       await db.orderEvent.create({
         data: {
           orderId: args.orderId,
           type: "notify.custom",
-          message: `Custom message sent by staff: "${args.customText.slice(0, 100)}"`,
+          message: `Custom message attempted by staff: ${result.outcomes.join(", ")}.`,
           actorId: args.actorId,
         },
       });
     }
 
-    return { ok: true, message: "Custom message sent successfully." };
+    return { ok: result.ok, message: `Custom message notice: ${result.outcomes.join(", ")}.` };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Failed to send message." };
   }
@@ -380,7 +357,7 @@ export async function sendCartRecoveryNotice(args: {
     const cart = await db.cart.findUnique({
       where: { id: args.cartId },
       include: {
-        user: { select: { firstName: true, phone: true, email: true } },
+        user: { select: { firstName: true, phone: true, email: true, isActive: true, acceptsMarketing: true, marketingConsentAt: true } },
         items: {
           include: {
             variant: {
@@ -398,6 +375,9 @@ export async function sendCartRecoveryNotice(args: {
     if (!cart || cart.items.length === 0) {
       return { ok: false, message: "Cart has no items or was not found." };
     }
+
+    const blocked = cartRecoveryBlockReason(cart);
+    if (blocked) return { ok: false, message: blocked };
 
     const phone = cart.user?.phone || null;
     const email = cart.user?.email || cart.email || null;
@@ -439,11 +419,13 @@ export async function sendCartRecoveryNotice(args: {
 
     const outcomes: string[] = [];
 
-    const shouldSendSms = args.sendSmsOverride ?? template.smsEnabled;
-    const shouldSendEmail = args.sendEmailOverride ?? template.emailEnabled;
+    let accepted = false;
+    const shouldSendSms = template.smsEnabled && args.sendSmsOverride !== false;
+    const shouldSendEmail = template.emailEnabled && args.sendEmailOverride !== false;
 
     if (phone && shouldSendSms) {
       const res = await sendSms(phone, smsText);
+      accepted ||= res.ok;
       outcomes.push(res.ok ? "texted" : `text failed (${res.code})`);
     }
 
@@ -453,17 +435,20 @@ export async function sendCartRecoveryNotice(args: {
         subject: `${settings.storeName} — ${emailSubject}`,
         text: `${emailBody}\n\n— ${settings.storeName}`,
       });
-      if (!res.skipped) outcomes.push(res.ok ? "emailed" : "email failed");
+      accepted ||= res.ok && !res.skipped;
+      outcomes.push(res.skipped ? "email not configured" : res.ok ? "emailed" : "email failed");
     }
 
-    await db.cart.update({
-      where: { id: cart.id },
-      data: { recoveryEmailSentAt: new Date() },
-    });
+    if (accepted) {
+      await db.cart.update({
+        where: { id: cart.id },
+        data: { recoveryEmailSentAt: new Date() },
+      });
+    }
 
     return {
-      ok: true,
-      message: `Recovery notice dispatched: ${outcomes.join(", ") || "no channels eligible"}.`,
+      ok: accepted,
+      message: `Recovery notice: ${outcomes.join(", ") || "no channels eligible"}.`,
     };
   } catch (error) {
     console.error("[notify] Cart recovery failed:", error);

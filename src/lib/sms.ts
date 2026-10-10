@@ -158,7 +158,7 @@ async function call(
     // hundred characters are enough to tell which.
     console.error(
       `[sms] ${path} returned ${response.status} ${response.headers.get("content-type") ?? "?"}, ` +
-        `not JSON: ${text.slice(0, 300).replace(/\s+/g, " ")}`,
+        `non-JSON response omitted`,
     );
     return { status: response.status, data: {} };
   }
@@ -181,7 +181,7 @@ function readableError(
   // error — which is meaningless to a shopper and looks like our bug.
   console.error(
     `[sms] ${path} failed: status=${status} code=${JSON.stringify(code)} ` +
-      `message=${JSON.stringify(data.message ?? null)}`,
+      `provider message omitted`,
   );
 
   // Vynfy answers an unusable key with a 401 and "Invalid API key". That is a
@@ -381,16 +381,14 @@ export async function sendSms(phone: string, message: string): Promise<SmsResult
 
   const config = await credentials();
   if (!config) {
-    console.warn(
-      `[sms:simulated] SMS Gateway not configured (missing VYNFY_API_KEY/integrations). Simulated dispatch to ${number}: "${message.slice(0, 100)}"`,
-    );
+    console.warn("[sms] Gateway is not configured; no message sent.");
     return { ok: false, code: "NOT_CONFIGURED", fatal: true, message: "SMS is not configured." };
   }
 
   const cleanedMessage = cleanSmsText(message).slice(0, 650);
   const gatewayPhone = forGateway(number);
 
-  console.log(`[sms:dispatching] Sending SMS to ${number} (${gatewayPhone}) via Vynfy (${config.senderId})...`);
+  console.log("[sms] Dispatching transactional message.");
 
   const payload = {
     sender: config.senderId,
@@ -417,10 +415,10 @@ export async function sendSms(phone: string, message: string): Promise<SmsResult
       (typeof data.message === "string" && /success|queued|sent|delivered/i.test(data.message)));
 
   if (isSuccess) {
-    console.log(`[sms:success] SMS delivered to ${number}`);
+    console.log("[sms] Gateway accepted message.");
     return { ok: true };
   }
 
-  console.error(`[sms:error] SMS to ${number} failed with status ${status}:`, data);
+  console.error("[sms] Dispatch failed", { status, code: data.error_code });
   return { ok: false, ...readableError("/api/v1/send", status, data) };
 }

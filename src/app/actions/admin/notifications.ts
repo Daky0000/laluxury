@@ -47,7 +47,7 @@ export async function sendCustomSmsAction(
     after: { phone: clean, title, preview: message.slice(0, 100), ok: sent.ok },
   }).catch(() => null);
 
-  if (!sent.ok && sent.fatal) {
+  if (!sent.ok) {
     return { ok: false, message: `Failed to deliver SMS: ${sent.message}` };
   }
 

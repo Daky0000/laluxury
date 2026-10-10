@@ -7,6 +7,7 @@ import { getMessageTemplates } from "@/lib/message-templates";
 import { SectionHeading } from "@/components/ui";
 import { MessageTemplatesEditor } from "@/components/admin/message-templates-editor";
 import { CustomNotificationPanel } from "@/components/admin/custom-notification-panel";
+import { NotificationDeliveries } from "@/components/admin/notification-deliveries";
 
 export const metadata: Metadata = { title: "SMS & Email Notifications" };
 
@@ -34,6 +35,8 @@ export default async function AdminMessagesSettingsPage() {
       />
 
       <CustomNotificationPanel storeName={settings.storeName} />
+
+      <NotificationDeliveries />
 
       <MessageTemplatesEditor
         initialTemplates={templates}

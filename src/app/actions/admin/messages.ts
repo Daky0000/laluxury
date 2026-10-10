@@ -170,10 +170,12 @@ export async function testMessageTemplateAction(args: {
   };
 
   const outcomes: string[] = [];
+  let accepted = false;
 
   if (args.phone) {
     const sms = renderTemplateString(template.smsTemplate, sampleVars);
-    const sent = await sendSms(args.phone, sms);
+    const sent = await sendSms(args.phone, `[TEST] ${sms}`);
+    accepted ||= sent.ok;
     outcomes.push(sent.ok ? `SMS sent to ${args.phone}` : `SMS failed (${sent.code})`);
   }
 
@@ -185,6 +187,7 @@ export async function testMessageTemplateAction(args: {
       subject: `[TEST] ${subject}`,
       text: `${body}\n\n— ${settings.storeName}`,
     });
+    accepted ||= sent.ok;
     outcomes.push(sent.ok ? `Email sent to ${args.email}` : "Email failed (check SMTP settings)");
   }
 
@@ -192,5 +195,5 @@ export async function testMessageTemplateAction(args: {
     return { ok: false, message: "Enter a phone number or email to send a test." };
   }
 
-  return { ok: true, message: outcomes.join(" · ") };
+  return { ok: accepted, message: outcomes.join(" · ") };
 }

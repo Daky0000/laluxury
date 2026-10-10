@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { getIntegrations } from "./integrations";
+import { classifyEmailError, type DeliveryResult } from "./notifications/policy";
 
 /**
  * Transactional email over whatever SMTP the owner has configured.
@@ -9,7 +10,7 @@ import { getIntegrations } from "./integrations";
  * the returned result rather than a thrown error.
  */
 
-export type SendResult = { ok: boolean; skipped?: boolean; error?: string };
+export type SendResult = { ok: boolean; skipped?: boolean; error?: string; delivery?: DeliveryResult };
 
 export async function isEmailConfigured(): Promise<boolean> {
   const { smtp } = await getIntegrations();
@@ -35,6 +36,9 @@ export async function sendEmail(args: {
       // 465 is implicit TLS; everything else upgrades with STARTTLS.
       secure: (smtp.port || 587) === 465,
       auth: { user: smtp.user, pass: smtp.password },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
     });
 
     await transport.sendMail({
@@ -47,8 +51,9 @@ export async function sendEmail(args: {
 
     return { ok: true };
   } catch (error) {
-    console.error("[email] send failed", error);
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    const delivery = classifyEmailError(error);
+    console.error("[email] send failed", { code: delivery.code });
+    return { ok: false, error: "Email provider did not confirm acceptance.", delivery };
   }
 }
 

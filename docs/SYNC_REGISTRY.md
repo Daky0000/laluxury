@@ -229,3 +229,19 @@ Web order tracking and mobile storefront checkout offer a customer-controlled Re
 ## Product minimum order quantity
 
 `Product.minimumOrderQuantity` is a positive integer, defaults to 1, and applies separately to each variant line. Admin web create/edit and `/api/app/products` POST/PATCH persist this field. Web catalog, public `/api/store/products`, app product responses, and app cart product objects expose it. Web and mobile quantity controls use the minimum; removal remains explicit. Shared cart validation and order quantity validation reject under-minimum lines, including stale carts after a minimum changes. Existing products retain minimum 1.
+
+
+## Customer notification foundation - 2026-10-09
+
+Order notices from web and mobile now share the PostgreSQL inbox and delivery queue through src/lib/notify.ts. A successful order-notice response means persisted/queued, not provider acceptance. Custom direct-phone SMS remains synchronous and reports deliveryStatus: "accepted" only after provider acceptance. Receipt, custom-order and staff-resend responses report queued outcomes. No mobile screen reads the direct-phone deliveryStatus field.
+
+Customer API contracts (active bearer account required, private/no-store):
+
+- GET /api/app/notifications?before=<id>&limit=<1..50>: items, nextCursor, unreadCount. Each item contains id, eventKey, title, body, actionUrl, createdAt and readAt.
+- GET /api/app/notifications/unread-count: count.
+- PATCH /api/app/notifications/<id>/read: ok, or 404 for missing/foreign notification.
+- POST /api/app/notifications/mark-all-read: ok and updated count.
+
+Web /account uses the same inbox service with a bell count, pagination, read controls and authenticated order links. These APIs are available to mobile; a native inbox screen is not included in this change. Existing Expo order push routing remains unchanged, with notificationId added to its data payload. Guest orders receive provider jobs without a customer inbox. No new providers or marketing channels are activated.
+
+Database migration 20261009000000_customer_notifications adds CustomerNotification, NotificationDelivery and NotificationAttempt. Run migrations before serving the updated account/admin pages. POST /api/cron/notifications uses CRON_SECRET to drain pending jobs and apply retention; npm run notifications:worker is an alternative queue runner. See [notification implementation and rollout](CUSTOMER_NOTIFICATIONS.md).
