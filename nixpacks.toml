@@ -5,3 +5,13 @@
 # shows up as a build that behaves differently for no visible reason.
 [phases.setup]
 nixPkgs = ["nodejs_24"]
+
+# glibc gives each busy thread its own memory arena and seldom returns freed
+# memory from them, so after photo processing (sharp/libvips threads) the
+# server keeps hundreds of MB it no longer uses — and Railway bills RAM by the
+# minute. Two arenas keeps resident memory close to what is actually in use.
+# Variables here are baked into the final image, so they apply at runtime.
+# Set the same value as a Railway service variable too: it survives the move
+# off Nixpacks (deprecated by Railway; see RAILWAY_COST_GROWTH_RUNBOOK.md).
+[variables]
+MALLOC_ARENA_MAX = "2"

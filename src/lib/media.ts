@@ -9,6 +9,7 @@ import {
   mediaPath,
 } from "./media-format";
 import { invalidateMediaMetaCache } from "./media-cache";
+import { withSharp } from "./image-processing";
 import type { Prisma } from "@/generated/prisma";
 
 /**
@@ -202,23 +203,25 @@ export async function storeUpload(
   let finalHeight = height;
 
   try {
-    const sharpModule = await import("sharp");
-    const sharp = sharpModule.default;
-    const image = sharp(bytes).rotate();
-    const meta = await image.metadata();
+    const smaller = await withSharp(async (sharp) => {
+      const image = sharp(bytes).rotate();
+      const meta = await image.metadata();
 
-    let pipeline = image;
-    if ((meta.width && meta.width > 2048) || (meta.height && meta.height > 2048)) {
-      pipeline = pipeline.resize(2048, 2048, { fit: "inside", withoutEnlargement: true });
-    }
+      let pipeline = image;
+      if ((meta.width && meta.width > 2048) || (meta.height && meta.height > 2048)) {
+        pipeline = pipeline.resize(2048, 2048, { fit: "inside", withoutEnlargement: true });
+      }
 
-    const compressed = await pipeline.webp({ quality: 82 }).toBuffer();
-    if (compressed.length < bytes.length) {
-      finalBytes = compressed;
-      finalMime = "image/webp";
+      const compressed = await pipeline.webp({ quality: 82 }).toBuffer();
+      if (compressed.length >= bytes.length) return null;
       const compMeta = await sharp(compressed).metadata();
-      finalWidth = compMeta.width ?? finalWidth;
-      finalHeight = compMeta.height ?? finalHeight;
+      return { compressed, width: compMeta.width, height: compMeta.height };
+    });
+    if (smaller) {
+      finalBytes = smaller.compressed;
+      finalMime = "image/webp";
+      finalWidth = smaller.width ?? finalWidth;
+      finalHeight = smaller.height ?? finalHeight;
     }
   } catch {
     // If sharp fails on an exotic format, safely fall back to the original bytes

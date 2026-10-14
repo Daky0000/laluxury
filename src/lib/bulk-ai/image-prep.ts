@@ -1,6 +1,6 @@
-import sharp from "sharp";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { withSharp } from "@/lib/image-processing";
 
 /**
  * A temporary, AI-only copy of a catalog photo: auto-rotated, metadata
@@ -27,11 +27,13 @@ export async function prepareAiImage(mediaId: string): Promise<{ dataUrl: string
     original = Buffer.from(await res.arrayBuffer());
   }
 
-  const out = await sharp(original)
-    .rotate()
-    .resize({ width: 1280, height: 1280, fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 80, mozjpeg: true })
-    .toBuffer();
+  const out = await withSharp((sharp) =>
+    sharp(original)
+      .rotate()
+      .resize({ width: 1280, height: 1280, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 80, mozjpeg: true })
+      .toBuffer(),
+  );
 
   return { dataUrl: `data:image/jpeg;base64,${out.toString("base64")}`, bytes: out.length };
 }
@@ -41,7 +43,9 @@ export async function prepareAiImage(mediaId: string): Promise<{ dataUrl: string
  * lightly recompressed — land within a few bits of each other.
  */
 export async function differenceHash(input: Buffer): Promise<string> {
-  const pixels = await sharp(input).rotate().greyscale().resize(9, 8, { fit: "fill" }).raw().toBuffer();
+  const pixels = await withSharp((sharp) =>
+    sharp(input).rotate().greyscale().resize(9, 8, { fit: "fill" }).raw().toBuffer(),
+  );
   let hex = "";
   let nibble = 0;
   for (let i = 0; i < 64; i++) {
