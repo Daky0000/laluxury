@@ -23,6 +23,7 @@ import {
   type MediaUploadState,
 } from "@/app/actions/admin/media";
 import { UPLOAD_ACCEPT, humanSize } from "@/lib/media-format";
+import { compressImageClient } from "@/lib/client-image-compression";
 import type { MediaListItem } from "@/lib/media";
 import type { AdminState } from "@/app/actions/admin/products";
 import { Alert, Badge, Card } from "@/components/ui";
@@ -54,35 +55,45 @@ export function MediaUploader({
 
   const [state, action, pending] = useActionState<MediaUploadState | null, FormData>(
     async (prev, formData) => {
-      // The strip below is the source of truth, not the file input: a picture
-      // taken back out must not still be uploaded.
-      formData.delete("files");
-      for (const item of picked) formData.append("files", item.file);
+      try {
+        // The strip below is the source of truth, not the file input: a picture
+        // taken back out must not still be uploaded.
+        formData.delete("files");
+        for (const item of picked) {
+          const optimized = await compressImageClient(item.file);
+          formData.append("files", optimized);
+        }
 
-      const result = await uploadMediaAction(prev, formData);
+        const result = await uploadMediaAction(prev, formData);
 
-      if (result.ok) {
-        for (const item of picked) URL.revokeObjectURL(item.preview);
-        setPicked([]);
-        if (inputRef.current) inputRef.current.value = "";
-        router.refresh();
-        onDone?.();
+        if (result.ok) {
+          for (const item of picked) URL.revokeObjectURL(item.preview);
+          setPicked([]);
+          if (inputRef.current) inputRef.current.value = "";
+          router.refresh();
+          onDone?.();
+        }
+
+        return result;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "The upload failed. Please try again.";
+        return { ok: false, message };
       }
-
-      return result;
     },
     null,
   );
 
-  function choose(files: FileList | null) {
+  async function choose(files: FileList | null) {
     const incoming = Array.from(files ?? []);
     if (incoming.length === 0) return;
 
-    setPicked((current) => [
-      // Object URLs render the picture immediately, before anything is sent.
-      ...current,
-      ...incoming.map((file) => ({ file, preview: URL.createObjectURL(file) })),
-    ]);
+    const processed: Picked[] = [];
+    for (const file of incoming) {
+      const optimized = await compressImageClient(file);
+      processed.push({ file: optimized, preview: URL.createObjectURL(optimized) });
+    }
+
+    setPicked((current) => [...current, ...processed]);
 
     // Cleared so choosing the same file again still fires a change event.
     if (inputRef.current) inputRef.current.value = "";

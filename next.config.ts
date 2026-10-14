@@ -33,7 +33,7 @@ const nextConfig: NextConfig = {
     // Railway's shared cache has contained missing Turbopack SST files.
     // Compile cleanly rather than restoring an invalid persistent build cache.
     turbopackFileSystemCacheForBuild: false,
-    serverActions: { bodySizeLimit: "12mb" },
+    serverActions: { bodySizeLimit: "24mb" },
   },
 
   async redirects() {

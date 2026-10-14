@@ -5,6 +5,7 @@ import { Loader2, Upload, X } from "lucide-react";
 import { uploadSettingImageAction } from "@/app/actions/admin/media";
 import { UPLOAD_ACCEPT } from "@/lib/media-format";
 import { Photo } from "@/components/shop/photo";
+import { compressImageClient } from "@/lib/client-image-compression";
 
 /**
  * A picture field for anything that is not a product: a category card, a
@@ -33,13 +34,18 @@ export function ImageUrlField({
   function upload(file: File | undefined) {
     if (!file) return;
     setError(null);
-    const formData = new FormData();
-    formData.set("file", file);
-    formData.set("folder", folder);
     startUpload(async () => {
-      const result = await uploadSettingImageAction(null, formData);
-      if (result.ok && result.url) setUrl(result.url);
-      else setError(result.message ?? "The upload failed.");
+      try {
+        const optimized = await compressImageClient(file);
+        const formData = new FormData();
+        formData.set("file", optimized);
+        formData.set("folder", folder);
+        const result = await uploadSettingImageAction(null, formData);
+        if (result.ok && result.url) setUrl(result.url);
+        else setError(result.message ?? "The upload failed.");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "The upload failed. Please try again.");
+      }
       if (inputRef.current) inputRef.current.value = "";
     });
   }

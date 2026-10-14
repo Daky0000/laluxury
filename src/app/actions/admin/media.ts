@@ -29,12 +29,16 @@ function reason(error: unknown): string {
 }
 
 function revalidateMedia(productId?: string) {
-  revalidatePath("/admin/media");
-  if (productId) revalidatePath(`/admin/products/${productId}`);
-  revalidatePath("/admin/products");
-  revalidatePath("/shop");
-  revalidatePath("/");
-  revalidatePath("/product/[slug]", "page");
+  try {
+    revalidatePath("/admin/media");
+    if (productId) revalidatePath(`/admin/products/${productId}`);
+    revalidatePath("/admin/products");
+    revalidatePath("/shop");
+    revalidatePath("/");
+    revalidatePath("/product/[slug]", "page");
+  } catch {
+    // Non-blocking: revalidation cache errors shouldn't crash the upload action
+  }
 }
 
 /** Files chosen in a form, minus the empty entry a file input sends when idle. */
@@ -54,40 +58,44 @@ export async function uploadMediaAction(
   _prev: MediaUploadState | null,
   formData: FormData,
 ): Promise<MediaUploadState> {
-  const user = await requirePermission("products:write");
+  try {
+    const user = await requirePermission("products:write");
 
-  const chosen = filesFrom(formData);
-  if (chosen.length === 0) return { ok: false, message: "Choose at least one image." };
+    const chosen = filesFrom(formData);
+    if (chosen.length === 0) return { ok: false, message: "Choose at least one image." };
 
-  const folder = String(formData.get("folder") || "products").trim() || "products";
-  const alt = String(formData.get("alt") || "").trim() || null;
+    const folder = String(formData.get("folder") || "products").trim() || "products";
+    const alt = String(formData.get("alt") || "").trim() || null;
 
-  const failures: string[] = [];
-  let added = 0;
+    const failures: string[] = [];
+    let added = 0;
 
-  for (const file of chosen) {
-    try {
-      await storeUpload(file, { folder, alt, uploadedById: user.id });
-      added += 1;
-    } catch (error) {
-      // One bad file should not lose the others that uploaded fine.
-      failures.push(`${file.name}: ${reason(error)}`);
+    for (const file of chosen) {
+      try {
+        await storeUpload(file, { folder, alt, uploadedById: user.id });
+        added += 1;
+      } catch (error) {
+        // One bad file should not lose the others that uploaded fine.
+        failures.push(`${file.name}: ${reason(error)}`);
+      }
     }
+
+    revalidateMedia();
+
+    if (added === 0) {
+      return { ok: false, message: failures.join(" · ") || "Nothing uploaded." };
+    }
+
+    return {
+      ok: true,
+      message:
+        failures.length > 0
+          ? `Added ${added}. ${failures.length} failed — ${failures.join(" · ")}`
+          : `Added ${added} image${added === 1 ? "" : "s"} to the library.`,
+    };
+  } catch (error: unknown) {
+    return { ok: false, message: reason(error) };
   }
-
-  revalidateMedia();
-
-  if (added === 0) {
-    return { ok: false, message: failures.join(" · ") || "Nothing uploaded." };
-  }
-
-  return {
-    ok: true,
-    message:
-      failures.length > 0
-        ? `Added ${added}. ${failures.length} failed — ${failures.join(" · ")}`
-        : `Added ${added} image${added === 1 ? "" : "s"} to the library.`,
-  };
 }
 
 export async function importMediaUrlAction(
@@ -205,44 +213,51 @@ export async function uploadProductImagesAction(
   _prev: AdminState | null,
   formData: FormData,
 ): Promise<AdminState> {
-  const user = await requirePermission("products:write");
+  try {
+    const user = await requirePermission("products:write");
 
-  const chosen = filesFrom(formData);
-  if (chosen.length === 0) return { ok: false, message: "Choose at least one image." };
+    const chosen = filesFrom(formData);
+    if (chosen.length === 0) return { ok: false, message: "Choose at least one image." };
 
-  const optionValueId = String(formData.get("optionValueId") || "").trim() || null;
-  const alt = String(formData.get("alt") || "").trim() || null;
+    const optionValueId = String(formData.get("optionValueId") || "").trim() || null;
+    const alt = String(formData.get("alt") || "").trim() || null;
 
-  const failures: string[] = [];
-  const stored: { id: string; url: string; alt: string | null }[] = [];
+    const failures: string[] = [];
+    const stored: { id: string; url: string; alt: string | null }[] = [];
 
-  for (const file of chosen) {
-    try {
-      const asset = await storeUpload(file, {
-        folder: "products",
-        alt,
-        uploadedById: user.id,
-      });
-      stored.push({ id: asset.id, url: asset.url, alt: alt ?? asset.alt });
-    } catch (error) {
-      failures.push(`${file.name}: ${reason(error)}`);
+    for (const file of chosen) {
+      try {
+        const asset = await storeUpload(file, {
+          folder: "products",
+          alt,
+          uploadedById: user.id,
+        });
+        stored.push({ id: asset.id, url: asset.url, alt: alt ?? asset.alt });
+      } catch (error) {
+        failures.push(`${file.name}: ${reason(error)}`);
+      }
     }
+
+    let added = 0;
+    if (stored.length > 0) {
+      added = await attach(productId, stored, optionValueId);
+    }
+    revalidateMedia(productId);
+
+    if (added === 0) {
+      return { ok: false, message: failures.join(" · ") || "Nothing uploaded." };
+    }
+
+    return {
+      ok: true,
+      message:
+        failures.length > 0
+          ? `Uploaded ${added}. ${failures.length} failed — ${failures.join(" · ")}`
+          : `Uploaded ${added} image${added === 1 ? "" : "s"}.`,
+    };
+  } catch (error: unknown) {
+    return { ok: false, message: reason(error) };
   }
-
-  const added = await attach(productId, stored, optionValueId);
-  revalidateMedia(productId);
-
-  if (added === 0) {
-    return { ok: false, message: failures.join(" · ") || "Nothing uploaded." };
-  }
-
-  return {
-    ok: true,
-    message:
-      failures.length > 0
-        ? `Uploaded ${added}. ${failures.length} failed — ${failures.join(" · ")}`
-        : `Uploaded ${added} image${added === 1 ? "" : "s"}.`,
-  };
 }
 
 /** Puts pictures already in the library onto a product. */
@@ -283,19 +298,19 @@ export async function uploadSettingImageAction(
   _prev: AdminState | null,
   formData: FormData,
 ): Promise<AdminState & { url?: string }> {
-  const user = await requirePermission("products:write");
-
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, message: "Choose an image." };
-  }
-
-  // Category and collection pictures file themselves under their own folder so
-  // the library can be browsed by what a picture is for.
-  const requested = String(formData.get("folder") || "store");
-  const folder = (MEDIA_FOLDERS as readonly string[]).includes(requested) ? requested : "store";
-
   try {
+    const user = await requirePermission("products:write");
+
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, message: "Choose an image." };
+    }
+
+    // Category and collection pictures file themselves under their own folder so
+    // the library can be browsed by what a picture is for.
+    const requested = String(formData.get("folder") || "store");
+    const folder = (MEDIA_FOLDERS as readonly string[]).includes(requested) ? requested : "store";
+
     const asset = await storeUpload(file, { folder, uploadedById: user.id });
     revalidateMedia();
     return { ok: true, message: "Uploaded.", url: asset.url };

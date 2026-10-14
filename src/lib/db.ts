@@ -29,7 +29,7 @@ const globalForPrisma = globalThis as unknown as {
  */
 function poolMax(): number {
   const configured = Number(process.env.DATABASE_POOL_MAX);
-  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 3;
+  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 8;
 }
 
 function createClient() {

@@ -33,6 +33,7 @@ import {
 import { uploadProductImagesAction } from "@/app/actions/admin/media";
 import { bulkAdjustStockAction } from "@/app/actions/admin/catalog-ops";
 import { UPLOAD_ACCEPT } from "@/lib/media-format";
+import { compressImageClient } from "@/lib/client-image-compression";
 import { MediaPicker } from "@/components/admin/media-picker";
 import { Card, Field, Alert, Badge, InfoTooltip } from "@/components/ui";
 import { formatMoney, toMajorUnits } from "@/lib/money";
@@ -1219,32 +1220,43 @@ function UploadImages({
 
   const [state, action, pending] = useActionState<AdminState | null, FormData>(
     async (prev, formData) => {
-      // The visible list is the source of truth, not the file input — a picture
-      // removed from the strip must not still be uploaded.
-      formData.delete("files");
-      for (const item of picked) formData.append("files", item.file);
+      try {
+        // The visible list is the source of truth, not the file input — a picture
+        // removed from the strip must not still be uploaded.
+        formData.delete("files");
+        for (const item of picked) {
+          const optimized = await compressImageClient(item.file);
+          formData.append("files", optimized);
+        }
 
-      const result = await uploadProductImagesAction(product.id, prev, formData);
-      if (result.ok) {
-        for (const item of picked) URL.revokeObjectURL(item.preview);
-        setPicked([]);
-        if (inputRef.current) inputRef.current.value = "";
-        router.refresh();
+        const result = await uploadProductImagesAction(product.id, prev, formData);
+        if (result.ok) {
+          for (const item of picked) URL.revokeObjectURL(item.preview);
+          setPicked([]);
+          if (inputRef.current) inputRef.current.value = "";
+          router.refresh();
+        }
+        return result;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "The upload failed. Please try again.";
+        return { ok: false, message };
       }
-      return result;
     },
     null,
   );
 
-  function choose(files: FileList | null) {
+  async function choose(files: FileList | null) {
     const incoming = Array.from(files ?? []);
     if (incoming.length === 0) return;
 
-    setPicked((current) => [
-      ...current,
-      // Object URLs render the picture immediately, before anything is uploaded.
-      ...incoming.map((file) => ({ file, preview: URL.createObjectURL(file) })),
-    ]);
+    // Pre-compress photos on selection so in-memory footprint is tiny and previews match
+    const processed: Picked[] = [];
+    for (const file of incoming) {
+      const optimized = await compressImageClient(file);
+      processed.push({ file: optimized, preview: URL.createObjectURL(optimized) });
+    }
+
+    setPicked((current) => [...current, ...processed]);
 
     // Cleared so choosing the same file again still fires a change event.
     if (inputRef.current) inputRef.current.value = "";

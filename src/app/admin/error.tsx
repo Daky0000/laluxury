@@ -16,9 +16,9 @@ export default function AdminError({
 }) {
   const isPermission = error.name === "AuthError" || /role cannot/i.test(error.message);
   const isDbDown =
-    /database is currently offline|ECONNREFUSED|connect_timeout|database|prisma/i.test(
+    /database is currently offline|ECONNREFUSED|connect_timeout|Can't reach database server|PrismaClientInitializationError/i.test(
       error.message
-    ) || (Boolean(error.digest) && !isPermission);
+    );
 
   if (isDbDown && !isPermission) {
     return (

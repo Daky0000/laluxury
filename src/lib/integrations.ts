@@ -422,8 +422,9 @@ export async function integrationsView(): Promise<IntegrationGroup[]> {
     },
     {
       key: "cloudinary",
-      label: "Image CDN",
-      description: "Stores product photos uploaded from the console.",
+      label: "Cloudinary (Optional Image CDN)",
+      description:
+        "Alternative image CDN. When Cloudflare R2 is connected, R2 takes priority and handles media with $0 egress.",
       ready: isReady(config, "cloudinary"),
       fields: [
         field("cloudinary", "cloudName", "Cloud name"),
@@ -462,7 +463,7 @@ export async function integrationStatus() {
     { key: "whatsapp", label: "WhatsApp channel", ready: isReady(config, "whatsapp") },
     { key: "smtp", label: "Transactional email", ready: isReady(config, "smtp") },
     { key: "sms", label: "SMS & one-time codes", ready: isReady(config, "sms") },
-    { key: "cloudinary", label: "Image CDN", ready: isReady(config, "cloudinary") },
+    { key: "cloudinary", label: "Cloudinary CDN", ready: isReady(config, "cloudinary") },
     { key: "r2", label: "Cloudflare R2", ready: isReady(config, "r2") },
   ];
 }
