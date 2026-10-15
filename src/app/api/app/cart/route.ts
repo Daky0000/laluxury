@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireBearerUser, getOptionalBearerUser, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { availableOf } from "@/lib/inventory";
-import { liveCartWhere, validateCartVariantQuantity } from "@/lib/cart";
+import { liveCartWhere, refreshCartLines, validateCartVariantQuantity } from "@/lib/cart";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@/generated/prisma";
 
@@ -107,11 +107,15 @@ export const GET = withApiAuth(async () => {
     });
   }
 
-  const cart = await db.cart.findFirst({
+  let cart = await db.cart.findFirst({
     where: await liveCartWhere(user.id),
     include: cartInclude,
     orderBy: { updatedAt: "desc" },
   });
+  // Same clean-up as the website: off-sale lines go, prices are current.
+  if (cart && (await refreshCartLines(cart.id))) {
+    cart = await db.cart.findUnique({ where: { id: cart.id }, include: cartInclude });
+  }
 
   return NextResponse.json({
     ok: true,

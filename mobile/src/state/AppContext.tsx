@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppState as RNAppState } from "react-native";
 import * as Notifications from "expo-notifications";
 import { api } from "../services/api";
 import type { CartItem, Product, ServerCartItem, User, Variant } from "../types";
@@ -102,6 +103,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .then((res) => setWishlistIds(new Set(res.productIds)))
       .catch(() => null);
   }, []);
+
+  // Coming back to the app (often from the payment page, or after approving a
+  // prompt) re-reads the server bag, so a paid order's lines do not linger.
+  useEffect(() => {
+    if (!user) return;
+    const subscription = RNAppState.addEventListener("change", (next) => {
+      if (next === "active") resync();
+    });
+    return () => subscription.remove();
+  }, [user, resync]);
 
   // Screens raise simple notices through toast(); show them here.
   useEffect(() => {

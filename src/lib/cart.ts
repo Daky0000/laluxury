@@ -112,9 +112,57 @@ async function isAwaitingPayment(cart: {
   if (!cart.convertedOrderId || cart.items.length === 0) return false;
   const order = await db.order.findUnique({
     where: { id: cart.convertedOrderId },
-    select: { paidAt: true, paymentStatus: true },
+    select: { paidAt: true, paymentStatus: true, status: true, placedAt: true },
   });
-  return Boolean(order && !order.paidAt && UNPAID.includes(order.paymentStatus));
+  // Only while that checkout is still open. A cancelled or expired attempt
+  // used to keep its bag live for good, so old (even test) lines kept coming
+  // back long after the shopper had moved on.
+  return Boolean(
+    order &&
+      !order.paidAt &&
+      order.status === "PENDING" &&
+      UNPAID.includes(order.paymentStatus) &&
+      Date.now() - order.placedAt.getTime() < BAG_HOLD_MS,
+  );
+}
+
+/** Matches `PENDING_ORDER_TTL_MS` in orders.ts, when an unpaid checkout expires. */
+const BAG_HOLD_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Brings stored lines in line with the catalogue: lines for products taken
+ * off sale (archived, draft, or a disabled variant) are dropped, and prices
+ * are re-read, since a line keeps the price from when it was added and
+ * checkout charges what the cart holds. Returns true when anything changed.
+ */
+export async function refreshCartLines(cartId: string): Promise<boolean> {
+  const items = await db.cartItem.findMany({
+    where: { cartId },
+    select: {
+      id: true,
+      unitPrice: true,
+      variant: { select: { price: true, isActive: true, product: { select: { status: true } } } },
+    },
+  });
+  const gone = items
+    .filter((item) => !item.variant.isActive || item.variant.product.status !== "ACTIVE")
+    .map((item) => item.id);
+  const repriced = items.filter(
+    (item) => !gone.includes(item.id) && item.unitPrice !== item.variant.price,
+  );
+  if (gone.length === 0 && repriced.length === 0) return false;
+
+  await db.$transaction([
+    db.cartItem.deleteMany({ where: { id: { in: gone } } }),
+    ...repriced.map((item) =>
+      db.cartItem.update({ where: { id: item.id }, data: { unitPrice: item.variant.price } }),
+    ),
+  ]);
+  return true;
+}
+
+async function fresh(cart: CartWithItems): Promise<CartWithItems> {
+  return (await refreshCartLines(cart.id)) ? reload(cart.id) : cart;
 }
 
 /** A cart the visitor is still shopping with: never checked out, or not yet paid for. */
@@ -156,12 +204,12 @@ export async function readCart(): Promise<CartWithItems | null> {
       include: cartInclude,
       orderBy: { updatedAt: "desc" },
     });
-    if (owned) return owned;
+    if (owned) return fresh(owned);
   }
 
   if (token) {
     const cart = await db.cart.findUnique({ where: { token }, include: cartInclude });
-    if (cart && (await isLive(cart))) return cart;
+    if (cart && (await isLive(cart))) return fresh(cart);
   }
 
   return null;
@@ -173,6 +221,10 @@ export async function readCart(): Promise<CartWithItems | null> {
  * Server Action or Route Handler.
  */
 export async function getOrCreateCart(): Promise<CartWithItems> {
+  return fresh(await findOrCreateCart());
+}
+
+async function findOrCreateCart(): Promise<CartWithItems> {
   const session = await getSession();
   const token = await getCartToken();
 

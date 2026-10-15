@@ -148,7 +148,7 @@ function BagTab() {
         onBack={() => nav.navigate("Storefront", { screen: "SHOP" })}
         onUpdateQuantity={updateCartQty}
         onRemoveItem={removeCartItem}
-        onClearCart={() => clearCart()}
+        onClearCart={() => clearCart({ silent: true })}
         onOrderSuccess={(orderNumber, phone, email) => {
           clearCart({ silent: true });
           setConfirmedOrder({ orderNumber, phone: phone || null, email: email || null });
