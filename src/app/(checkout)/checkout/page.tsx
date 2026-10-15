@@ -6,7 +6,7 @@ import { currentUser } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { formatPhone } from "@/lib/phone";
 import { CheckoutForm, type CheckoutDefaults } from "@/components/shop/checkout-form";
-import { CartLines, DiscountForm } from "@/components/shop/cart-lines";
+import { DiscountForm } from "@/components/shop/cart-lines";
 
 export const metadata: Metadata = { title: "Checkout" };
 export const dynamic = "force-dynamic";
@@ -55,8 +55,8 @@ export default async function CheckoutPage() {
 
   const hasPreorderItems = totals.lines.some((line) => line.isPreorder);
   return (
-    <div className="lx-container py-12 sm:py-16">
-      <h1 className="mb-6 text-[clamp(2rem,5vw,3rem)]">Checkout</h1>
+    <div className="lx-container py-6 sm:py-12">
+      <h1 className="mb-5 text-[clamp(1.75rem,5vw,2.75rem)] sm:mb-8">Checkout</h1>
 
       <CheckoutForm
         subtotal={totals.subtotal}
@@ -79,7 +79,16 @@ export default async function CheckoutPage() {
         hasPreorderItems={hasPreorderItems}
         freeShippingThreshold={settings.freeShippingThreshold}
         directNetworks={settings.momoDirectNetworks}
-        lines={<CartLines lines={totals.lines} />}
+        items={totals.lines.map((line) => ({
+          id: line.id,
+          title: line.productTitle,
+          variantTitle: line.variantTitle,
+          imageUrl: line.imageUrl,
+          quantity: line.quantity,
+          lineTotal: line.lineTotal,
+          isPreorder: line.isPreorder,
+          stockProblem: line.stockProblem,
+        }))}
         discount={<DiscountForm appliedCode={totals.discountCode} />}
       />
     </div>

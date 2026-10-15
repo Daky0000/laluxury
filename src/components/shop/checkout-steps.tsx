@@ -11,7 +11,10 @@ export function CheckoutSteps({ current }: { current: number }) {
         const done = index < current;
         const active = index === current;
         return (
-          <li key={label} className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+          <li
+            key={label}
+            className={cn("flex items-center gap-2 sm:gap-3", active ? "shrink-0 sm:flex-1" : "min-w-0 flex-1")}
+          >
             <span
               aria-current={active ? "step" : undefined}
               className={cn(
@@ -25,7 +28,7 @@ export function CheckoutSteps({ current }: { current: number }) {
             </span>
             <span
               className={cn(
-                "truncate text-xs uppercase tracking-[0.12em] sm:text-sm",
+                "whitespace-nowrap text-xs uppercase tracking-[0.12em] sm:text-sm",
                 active ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]",
                 !active && "max-sm:sr-only",
               )}

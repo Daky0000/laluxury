@@ -4,15 +4,15 @@ import { useActionState, useEffect, useRef, useState, type ReactNode } from "rea
 import Link from "next/link";
 import {
   ArrowLeft,
-  CreditCard,
+  ChevronDown,
   Clock,
+  CreditCard,
   ExternalLink,
   Loader2,
   Lock,
-  MapPin,
   ShieldCheck,
+  ShoppingBag,
   Smartphone,
-  UserCheck,
 } from "lucide-react";
 import { placeOrderAction, type CheckoutState } from "@/app/actions/checkout";
 import { formatPrice } from "@/lib/money";
@@ -44,6 +44,18 @@ export type SavedAddressOption = {
   postalCode: string;
 };
 
+/** One bag line as the order summary shows it; editing happens in the bag. */
+export type CheckoutSummaryItem = {
+  id: string;
+  title: string;
+  variantTitle: string;
+  imageUrl: string | null;
+  quantity: number;
+  lineTotal: number;
+  isPreorder: boolean;
+  stockProblem: string | null;
+};
+
 type PayWith = MomoNetworkId | "card";
 
 /** Fields on the delivery step; a server error on any of them reopens it. */
@@ -61,14 +73,17 @@ const DELIVERY_FIELDS = [
   "password",
 ];
 
+// 16px on phones: anything smaller makes iOS zoom into the field on focus.
 const field =
-  "w-full border border-[var(--border-strong)] bg-[var(--surface-raised)] px-4 py-3.5 text-sm " +
+  "w-full border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3.5 py-3 text-base sm:text-sm " +
   "outline-none transition-colors placeholder:text-ink-400 focus:border-[var(--accent)]";
 
-const sectionHeading = "mb-4 mt-10 text-[clamp(1.5rem,3vw,1.875rem)] first:mt-0";
+const labelClass = "mb-1.5 block text-sm text-[var(--text-secondary)]";
+
+const sectionHeading = "mb-4 text-xl sm:text-2xl";
 
 const primaryButton =
-  "flex min-h-12 w-full items-center justify-center gap-2 bg-[var(--accent)] px-4 py-4 text-center text-sm font-medium uppercase tracking-[0.1em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50 sm:px-6 sm:tracking-[0.14em]";
+  "flex min-h-12 w-full items-center justify-center gap-2 bg-[var(--accent)] px-5 py-4 text-center text-sm font-medium uppercase tracking-[0.1em] text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50 sm:w-auto sm:min-w-64";
 
 export type CheckoutDefaults = {
   email: string;
@@ -92,7 +107,7 @@ export function CheckoutForm({
   hasPreorderItems = false,
   freeShippingThreshold,
   directNetworks,
-  lines,
+  items,
   discount,
 }: {
   subtotal: number;
@@ -105,7 +120,7 @@ export function CheckoutForm({
   freeShippingThreshold: number | null;
   /** Networks that get the PIN prompt on the phone; the rest use Paystack's page. */
   directNetworks: MomoNetworkId[];
-  lines: ReactNode;
+  items: CheckoutSummaryItem[];
   discount: ReactNode;
 }) {
   const [state, action, pending] = useActionState<CheckoutState | null, FormData>(
@@ -114,6 +129,7 @@ export function CheckoutForm({
   );
 
   const [step, setStep] = useState<0 | 1>(0);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const deliveryRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
 
@@ -209,7 +225,11 @@ export function CheckoutForm({
   const errors = state?.fieldErrors ?? {};
   const route =
     payWith === null ? null : payWith === "card" ? "card" : momoRouteFor(payWith, directNetworks);
-  const network = MOMO_NETWORK_OPTIONS.find((n) => n.id === payWith);
+  const blockingProblem = items.find((item) => item.stockProblem)?.stockProblem ?? null;
+
+  function scrollToTop() {
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   function goToPayment() {
     const fields = deliveryRef.current?.querySelectorAll<
@@ -227,16 +247,12 @@ export function CheckoutForm({
     }
     setStepError(null);
     setStep(1);
-    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollToTop();
   }
 
-  function choiceClass(active: boolean): string {
-    return cn(
-      "flex min-h-14 cursor-pointer items-center gap-3.5 border px-4 py-3.5 transition-colors",
-      active
-        ? "border-[var(--accent)] bg-[var(--surface-raised)]"
-        : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]",
-    );
+  function backToDelivery() {
+    setStep(0);
+    scrollToTop();
   }
 
   function radioDot(active: boolean): ReactNode {
@@ -258,23 +274,163 @@ export function CheckoutForm({
     );
   }
 
+  /** A row in a bordered option list, the way most checkouts group choices. */
+  function optionRow(active: boolean): string {
+    return cn(
+      "flex min-h-14 cursor-pointer items-center gap-3 px-4 py-3.5 transition-colors",
+      active ? "bg-[var(--accent)]/5" : "hover:bg-[var(--surface-sunken)]",
+    );
+  }
+
+  const optionGroup =
+    "divide-y divide-[var(--border-subtle)] border border-[var(--border-strong)] bg-[var(--surface-raised)]";
+
   const payLabel =
     route === "direct_debit"
-      ? `Send prompt to my phone · ${formatPrice(depositDueNow)}`
-      : route === "mobile_money"
-        ? `Continue to secure payment · ${formatPrice(depositDueNow)}`
-        : route === "card"
-          ? `Pay by card · ${formatPrice(depositDueNow)}`
-          : "Choose how you will pay";
+      ? `Send prompt · ${formatPrice(depositDueNow)}`
+      : route === "mobile_money" || route === "card"
+        ? `Pay now · ${formatPrice(depositDueNow)}`
+        : "Choose a payment method";
+
+  const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+
+  const summary = (
+    <>
+      <ul className="flex flex-col gap-4">
+        {items.map((item) => (
+          <li key={item.id} className="flex items-center gap-3.5">
+            <span className="relative shrink-0">
+              <span className="block h-16 w-16 overflow-hidden border border-[var(--border-subtle)] bg-[var(--surface-media)]">
+                {item.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+                ) : null}
+              </span>
+              <span className="absolute -right-2 -top-2 grid h-5 min-w-5 place-items-center rounded-full bg-ink-700 px-1 text-[11px] font-medium text-white tabular-nums">
+                {item.quantity}
+              </span>
+            </span>
+            <span className="min-w-0 flex-1 text-sm">
+              <span className="block truncate font-medium">{item.title}</span>
+              {item.variantTitle && item.variantTitle !== "Default" ? (
+                <span className="block truncate text-[var(--text-muted)]">{item.variantTitle}</span>
+              ) : null}
+              {item.isPreorder ? (
+                <span className="block text-xs text-[var(--accent)]">Pre-order</span>
+              ) : null}
+              {item.stockProblem ? (
+                <span className="block text-xs text-danger">{item.stockProblem}</span>
+              ) : null}
+            </span>
+            <span className="shrink-0 text-sm tabular-nums">{formatPrice(item.lineTotal)}</span>
+          </li>
+        ))}
+      </ul>
+      <Link
+        href="/cart"
+        className="mt-3 inline-block text-sm text-[var(--accent)] underline-offset-4 hover:underline"
+      >
+        Edit bag
+      </Link>
+
+      <div className="mt-5 border-t border-[var(--border-subtle)] pt-5">{discount}</div>
+
+      <dl className="mt-4 text-sm">
+        <div className="flex justify-between py-1.5 text-[var(--text-secondary)]">
+          <dt>Subtotal · {itemCount} {itemCount === 1 ? "item" : "items"}</dt>
+          <dd className="tabular-nums">{formatPrice(subtotal)}</dd>
+        </div>
+        {discountTotal > 0 ? (
+          <div className="flex justify-between py-1.5 text-sage-600">
+            <dt>Discount</dt>
+            <dd className="tabular-nums">-{formatPrice(discountTotal)}</dd>
+          </div>
+        ) : null}
+        <div className="flex justify-between py-1.5 text-[var(--text-secondary)]">
+          <dt>Delivery</dt>
+          <dd className="tabular-nums">
+            {!selectedRate
+              ? "Enter address"
+              : shippingTotal === 0
+                ? "Free"
+                : formatPrice(shippingTotal)}
+          </dd>
+        </div>
+      </dl>
+
+      {freeGap > 0 ? (
+        <p className="pt-1 text-xs text-sage-600">
+          Add {formatPrice(freeGap)} more for free delivery to your station
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-[var(--border-strong)] pt-4">
+        <span className="text-base font-medium">Total</span>
+        <span className="text-2xl font-semibold tabular-nums">{formatPrice(total)}</span>
+      </div>
+
+      {hasPreorderItems && preorderDepositOption === "deposit_50" ? (
+        <div className="mt-3 border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-3.5 text-sm">
+          <div className="flex justify-between font-medium">
+            <span>Due today (50% deposit)</span>
+            <span className="tabular-nums">{formatPrice(depositDueNow)}</span>
+          </div>
+          <div className="mt-1 flex justify-between text-[var(--text-secondary)]">
+            <span>Balance on delivery</span>
+            <span className="tabular-nums">{formatPrice(balanceOnDelivery)}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {hasPreorderItems ? (
+        <p className="mt-3 flex items-start gap-2 text-xs text-[var(--text-secondary)]">
+          <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden />
+          <span>Includes pre-order items, made for you before delivery.</span>
+        </p>
+      ) : null}
+    </>
+  );
 
   return (
     <form action={action}>
-      <div ref={topRef} className="scroll-mt-24">
-        <CheckoutSteps current={step} />
-      </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-12">
+        {/* Order summary: a fold-out bar on phones, a sticky column on desktop.
+            Rendered once, so the discount field is never in the page twice. */}
+        <aside className="-mx-4 border-y border-[var(--border-subtle)] bg-[var(--surface-raised)] sm:mx-0 sm:border lg:sticky lg:top-8 lg:col-start-2 lg:row-start-1">
+          <button
+            type="button"
+            onClick={() => setSummaryOpen((open) => !open)}
+            aria-expanded={summaryOpen}
+            aria-controls="checkout-summary"
+            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-sm lg:hidden"
+          >
+            <span className="flex items-center gap-2 text-[var(--accent)]">
+              <ShoppingBag className="h-4 w-4" aria-hidden />
+              {summaryOpen ? "Hide order summary" : "Show order summary"}
+              <ChevronDown
+                className={cn("h-4 w-4 transition-transform", summaryOpen && "rotate-180")}
+                aria-hidden
+              />
+            </span>
+            <span className="text-base font-semibold tabular-nums">{formatPrice(total)}</span>
+          </button>
+          <div
+            id="checkout-summary"
+            className={cn(
+              "border-t border-[var(--border-subtle)] px-4 pb-5 pt-5 sm:px-5 lg:block lg:border-t-0 lg:p-6",
+              summaryOpen ? "block" : "hidden",
+            )}
+          >
+            <h2 className="mb-5 hidden font-display text-2xl lg:block">Order summary</h2>
+            {summary}
+          </div>
+        </aside>
 
-      <div className="grid items-start gap-10 lg:grid-cols-[1fr_400px] lg:gap-13">
-        <div>
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          <div ref={topRef} className="scroll-mt-24">
+            <CheckoutSteps current={step} />
+          </div>
+
           {state?.message ? (
             <p
               role="alert"
@@ -286,72 +442,96 @@ export function CheckoutForm({
 
           {/* ---------------- Step 1: Delivery ---------------- */}
           <div ref={deliveryRef} hidden={step !== 0}>
-            <div className="mb-6 border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-4 sm:p-5">
-              {isSignedIn ? (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 text-sm">
-                    <UserCheck className="h-4 w-4 text-[var(--accent)]" aria-hidden />
-                    <span>
-                      Signed in as <strong className="font-medium">{defaults.email}</strong>
-                    </span>
-                  </div>
-                  <Link
-                    href="/account"
-                    className="text-xs uppercase tracking-[0.14em] text-[var(--accent)] hover:underline"
-                  >
-                    Manage account →
-                  </Link>
-                </div>
-              ) : (
-                <p className="text-sm text-[var(--text-secondary)]">
-                  Checking out as a guest.{" "}
+            {/* Contact */}
+            <section>
+              <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-xl sm:text-2xl">Contact</h2>
+                {isSignedIn ? (
+                  <span className="text-sm text-[var(--text-secondary)]">
+                    Signed in as {defaults.email}
+                  </span>
+                ) : (
                   <Link
                     href="/login?next=/checkout"
-                    className="font-medium text-[var(--accent)] underline-offset-4 hover:underline"
+                    className="text-sm text-[var(--accent)] underline-offset-4 hover:underline"
                   >
-                    Sign in
-                  </Link>{" "}
-                  to use a saved address.
-                </p>
-              )}
+                    Have an account? Sign in
+                  </Link>
+                )}
+              </div>
+              <div className="grid gap-3.5 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="email" className={labelClass}>
+                    Email
+                  </label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    inputMode="email"
+                    placeholder="you@example.com"
+                    className={field}
+                  />
+                  {errors.email ? <p className="mt-1.5 text-sm text-danger">{errors.email}</p> : null}
+                </div>
+                <div>
+                  <label htmlFor="phone" className={labelClass}>
+                    Phone
+                  </label>
+                  <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    autoComplete="tel"
+                    inputMode="tel"
+                    placeholder="024 000 0000"
+                    className={field}
+                  />
+                  {errors.phone ? <p className="mt-1.5 text-sm text-danger">{errors.phone}</p> : null}
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                We send your receipt and delivery updates here.
+              </p>
+            </section>
+
+            {/* Address */}
+            <section className="mt-10">
+              <h2 className={sectionHeading}>Delivery address</h2>
 
               {isSignedIn && savedAddresses.length > 0 ? (
-                <div className="mt-4 border-t border-[var(--border-subtle)] pt-3.5">
-                  <p className="mb-2 flex items-center gap-1.5 text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                    <MapPin className="h-3.5 w-3.5" aria-hidden />
-                    Saved delivery addresses
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {savedAddresses.map((addr) => {
-                      const active = selectedAddressId === addr.id;
-                      return (
-                        <button
-                          key={addr.id}
-                          type="button"
-                          onClick={() => applySavedAddress(addr)}
-                          className={cn(
-                            "border px-3 py-1.5 text-left text-xs transition-colors",
-                            active
-                              ? "border-[var(--accent)] bg-[var(--accent)]/10 font-medium text-[var(--text-primary)]"
-                              : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]",
-                          )}
-                        >
-                          {addr.label} · {addr.line1}
-                        </button>
-                      );
-                    })}
-                  </div>
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {savedAddresses.map((addr) => {
+                    const active = selectedAddressId === addr.id;
+                    return (
+                      <button
+                        key={addr.id}
+                        type="button"
+                        onClick={() => applySavedAddress(addr)}
+                        className={cn(
+                          "min-h-10 border px-3 py-2 text-left text-sm transition-colors",
+                          active
+                            ? "border-[var(--accent)] bg-[var(--accent)]/10 font-medium"
+                            : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]",
+                        )}
+                      >
+                        {addr.line1}, {addr.label}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : null}
-            </div>
 
-            {lines}
-
-            <h2 className={sectionHeading}>Delivery details</h2>
-            <div className="grid gap-3.5 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <div className="grid gap-3.5 sm:grid-cols-2">
-                  <label htmlFor="firstName" className="sr-only">
+              <div className="grid gap-3.5 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="firstName" className={labelClass}>
                     First name
                   </label>
                   <input
@@ -361,10 +541,14 @@ export function CheckoutForm({
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     autoComplete="given-name"
-                    placeholder="First name"
                     className={field}
                   />
-                  <label htmlFor="lastName" className="sr-only">
+                  {errors.firstName ? (
+                    <p className="mt-1.5 text-sm text-danger">{errors.firstName}</p>
+                  ) : null}
+                </div>
+                <div>
+                  <label htmlFor="lastName" className={labelClass}>
                     Last name
                   </label>
                   <input
@@ -374,207 +558,177 @@ export function CheckoutForm({
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     autoComplete="family-name"
-                    placeholder="Last name"
+                    className={field}
+                  />
+                  {errors.lastName ? (
+                    <p className="mt-1.5 text-sm text-danger">{errors.lastName}</p>
+                  ) : null}
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label htmlFor="line1" className={labelClass}>
+                    Address
+                  </label>
+                  <input
+                    id="line1"
+                    name="line1"
+                    required
+                    value={line1}
+                    onChange={(e) => setLine1(e.target.value)}
+                    autoComplete="address-line1"
+                    placeholder="Street, area or house number"
+                    className={field}
+                  />
+                  {errors.line1 ? <p className="mt-1.5 text-sm text-danger">{errors.line1}</p> : null}
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label htmlFor="line2" className={labelClass}>
+                    Apartment or landmark <span className="text-[var(--text-muted)]">(optional)</span>
+                  </label>
+                  <input
+                    id="line2"
+                    name="line2"
+                    value={line2}
+                    onChange={(e) => setLine2(e.target.value)}
+                    autoComplete="address-line2"
                     className={field}
                   />
                 </div>
-                {errors.firstName || errors.lastName ? (
-                  <p className="mt-1.5 text-sm text-danger">{errors.firstName ?? errors.lastName}</p>
-                ) : null}
-              </div>
 
-              <div>
-                <label htmlFor="phone" className="sr-only">
-                  Phone number
-                </label>
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  autoComplete="tel"
-                  placeholder="Phone number (e.g. 024 000 0000)"
-                  className={field}
-                />
-                {errors.phone ? <p className="mt-1.5 text-sm text-danger">{errors.phone}</p> : null}
-              </div>
+                <div>
+                  <label htmlFor="region" className={labelClass}>
+                    Region
+                  </label>
+                  <select
+                    id="region"
+                    name="region"
+                    required
+                    value={region}
+                    onChange={(event) => setRegion(event.target.value)}
+                    className={`${field} cursor-pointer`}
+                  >
+                    <option value="">Choose a region</option>
+                    {GHANA_REGIONS.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.region ? <p className="mt-1.5 text-sm text-danger">{errors.region}</p> : null}
+                </div>
 
-              <div>
-                <label htmlFor="email" className="sr-only">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
-                  placeholder="Email address (for your receipt)"
-                  className={field}
-                />
-                {errors.email ? <p className="mt-1.5 text-sm text-danger">{errors.email}</p> : null}
-              </div>
+                <div>
+                  <label htmlFor="city" className={labelClass}>
+                    City or town
+                  </label>
+                  <input
+                    id="city"
+                    name="city"
+                    required
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    autoComplete="address-level2"
+                    className={field}
+                  />
+                  {errors.city ? <p className="mt-1.5 text-sm text-danger">{errors.city}</p> : null}
+                </div>
 
-              <div className="sm:col-span-2">
-                <label htmlFor="line1" className="sr-only">
-                  Delivery address
-                </label>
-                <input
-                  id="line1"
-                  name="line1"
-                  required
-                  value={line1}
-                  onChange={(e) => setLine1(e.target.value)}
-                  autoComplete="address-line1"
-                  placeholder="Street address, area or house number"
-                  className={field}
-                />
-                {errors.line1 ? <p className="mt-1.5 text-sm text-danger">{errors.line1}</p> : null}
+                <div className="sm:col-span-2">
+                  <label htmlFor="postalCode" className={labelClass}>
+                    Digital address <span className="text-[var(--text-muted)]">(optional)</span>
+                  </label>
+                  <input
+                    id="postalCode"
+                    name="postalCode"
+                    value={postalCode}
+                    onChange={(e) => setPostalCode(e.target.value)}
+                    autoComplete="postal-code"
+                    placeholder="GA-123-4567"
+                    className={field}
+                  />
+                </div>
               </div>
+            </section>
 
-              <div className="sm:col-span-2">
-                <label htmlFor="line2" className="sr-only">
-                  Apartment or landmark
-                </label>
-                <input
-                  id="line2"
-                  name="line2"
-                  value={line2}
-                  onChange={(e) => setLine2(e.target.value)}
-                  autoComplete="address-line2"
-                  placeholder="Apartment, landmark (optional)"
-                  className={field}
-                />
-              </div>
+            {/* Delivery method */}
+            <section className="mt-10">
+              <h2 className={sectionHeading}>Delivery method</h2>
+              {!region ? (
+                <p className="border border-[var(--border-subtle)] px-4 py-3.5 text-sm text-[var(--text-secondary)]">
+                  Choose a region to see delivery options.
+                </p>
+              ) : loadingRates ? (
+                <p className="flex items-center gap-2 border border-[var(--border-subtle)] px-4 py-3.5 text-sm text-[var(--text-secondary)]">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  Checking options…
+                </p>
+              ) : visibleRates.length === 0 ? (
+                <p className="border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
+                  We do not deliver to that region yet. Contact us and we will sort something out.
+                </p>
+              ) : (
+                <div className={optionGroup}>
+                  {visibleRates.map((rate) => {
+                    const active = rateId === rate.id;
+                    return (
+                      <label key={rate.id} className={optionRow(active)}>
+                        <input
+                          type="radio"
+                          name="shippingRateId"
+                          value={rate.id}
+                          checked={active}
+                          onChange={() => setRateId(rate.id)}
+                          className="sr-only"
+                        />
+                        {radioDot(active)}
+                        <span className="min-w-0 flex-1 text-left text-sm">
+                          <span className="block">{rate.name}</span>
+                          {rate.estimatedDaysMin !== null ? (
+                            <span className="mt-0.5 block text-[var(--text-muted)]">
+                              {rate.estimatedDaysMin === 0
+                                ? "Today or tomorrow"
+                                : `${rate.estimatedDaysMin}–${rate.estimatedDaysMax} days`}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="shrink-0 whitespace-nowrap text-sm font-medium tabular-nums">
+                          {rate.price === 0 ? "Free" : formatPrice(rate.price)}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
 
-              <div>
-                <label htmlFor="region" className="sr-only">
-                  Region
-                </label>
-                <select
-                  id="region"
-                  name="region"
-                  required
-                  value={region}
-                  onChange={(event) => setRegion(event.target.value)}
-                  className={`${field} cursor-pointer`}
-                >
-                  <option value="">Choose a region</option>
-                  {GHANA_REGIONS.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-                {errors.region ? <p className="mt-1.5 text-sm text-danger">{errors.region}</p> : null}
-              </div>
-
-              <div>
-                <label htmlFor="city" className="sr-only">
-                  City or town
-                </label>
-                <input
-                  id="city"
-                  name="city"
-                  required
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  autoComplete="address-level2"
-                  placeholder="City / town"
-                  className={field}
-                />
-                {errors.city ? <p className="mt-1.5 text-sm text-danger">{errors.city}</p> : null}
-              </div>
-
-              <div className="sm:col-span-2">
-                <label htmlFor="postalCode" className="sr-only">
-                  Digital address
-                </label>
-                <input
-                  id="postalCode"
-                  name="postalCode"
-                  value={postalCode}
-                  onChange={(e) => setPostalCode(e.target.value)}
-                  autoComplete="postal-code"
-                  placeholder="Digital address, e.g. GA-123-4567 (optional)"
-                  className={field}
-                />
-              </div>
-            </div>
-
-            <h2 className={sectionHeading}>Delivery method</h2>
-            {!region ? (
-              <p className="text-sm text-[var(--text-secondary)]">
-                Choose a region to see delivery options.
-              </p>
-            ) : loadingRates ? (
-              <p className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                Checking options…
-              </p>
-            ) : visibleRates.length === 0 ? (
-              <p className="border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
-                We do not deliver to that region yet. Contact us and we will sort something out.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {visibleRates.map((rate) => {
-                  const active = rateId === rate.id;
-                  return (
-                    <label key={rate.id} className={choiceClass(active)}>
-                      <input
-                        type="radio"
-                        name="shippingRateId"
-                        value={rate.id}
-                        checked={active}
-                        onChange={() => setRateId(rate.id)}
-                        className="sr-only"
-                      />
-                      {radioDot(active)}
-                      <span className="min-w-0 flex-1 text-left">
-                        <span className="block text-sm">{rate.name}</span>
-                        {rate.estimatedDaysMin !== null ? (
-                          <span className="mt-0.5 block text-sm text-[var(--text-muted)]">
-                            {rate.estimatedDaysMin === 0
-                              ? "Today or tomorrow"
-                              : `${rate.estimatedDaysMin}–${rate.estimatedDaysMax} days`}{" "}
-                            · {rate.zoneName}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="shrink-0 whitespace-nowrap text-sm tabular-nums">
-                        {rate.price === 0 ? "Free" : formatPrice(rate.price)}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="mt-10 flex flex-col gap-4">
-              <div>
-                <label
-                  htmlFor="customerNote"
-                  className="mb-2 block text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]"
-                >
-                  Order note (optional)
+            {/* Extras, folded away so they do not slow anyone down */}
+            <section className="mt-8 flex flex-col gap-3">
+              <details className="group border border-[var(--border-subtle)] px-4 py-3">
+                <summary className="flex cursor-pointer list-none items-center justify-between text-sm">
+                  <span>
+                    Add an order note <span className="text-[var(--text-muted)]">(optional)</span>
+                  </span>
+                  <ChevronDown
+                    className="ml-auto h-4 w-4 text-[var(--text-muted)] transition-transform group-open:rotate-180"
+                    aria-hidden
+                  />
+                </summary>
+                <label htmlFor="customerNote" className="sr-only">
+                  Order note
                 </label>
                 <textarea
                   id="customerNote"
                   name="customerNote"
-                  rows={2}
+                  rows={3}
                   placeholder="Anything we should know about delivery or room access."
-                  className={`${field} resize-y`}
+                  className={`${field} mt-3 resize-y`}
                 />
-              </div>
+              </details>
 
               {!isSignedIn ? (
-                <div className="border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-4">
-                  <label className="flex min-h-9 cursor-pointer items-center gap-2.5 text-sm font-medium">
+                <div className="border border-[var(--border-subtle)] px-4 py-3">
+                  <label className="flex min-h-9 cursor-pointer items-center gap-2.5 text-sm">
                     <input
                       type="checkbox"
                       name="createAccount"
@@ -582,12 +736,11 @@ export function CheckoutForm({
                       onChange={(event) => setCreateAccount(event.target.checked)}
                       className="h-5 w-5 shrink-0 accent-[var(--accent)]"
                     />
-                    Save my details for next time (create an account)
+                    Save my details for next time
                   </label>
-
                   {createAccount ? (
                     <div className="mt-3 max-w-md">
-                      <label htmlFor="password" className="sr-only">
+                      <label htmlFor="password" className={labelClass}>
                         Choose a password
                       </label>
                       <input
@@ -597,7 +750,7 @@ export function CheckoutForm({
                         minLength={8}
                         required={createAccount}
                         autoComplete="new-password"
-                        placeholder="Choose a password (8+ characters, a capital and a number)"
+                        placeholder="8+ characters, a capital and a number"
                         className={field}
                       />
                       {errors.password ? (
@@ -607,51 +760,68 @@ export function CheckoutForm({
                   ) : null}
                 </div>
               ) : null}
-            </div>
+            </section>
 
-            {stepError ? (
+            {stepError || blockingProblem ? (
               <p role="alert" className="mt-6 text-sm text-danger">
-                {stepError}
+                {stepError ?? blockingProblem}
               </p>
             ) : null}
-            <button type="button" onClick={goToPayment} className={cn(primaryButton, "mt-8")}>
-              Continue to payment · {formatPrice(depositDueNow)}
-            </button>
+            <div className="mt-8 flex flex-col-reverse items-center gap-4 sm:flex-row sm:justify-between">
+              <Link
+                href="/cart"
+                className="flex items-center gap-1.5 text-sm text-[var(--accent)] underline-offset-4 hover:underline"
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden />
+                Return to bag
+              </Link>
+              <button
+                type="button"
+                onClick={goToPayment}
+                disabled={Boolean(blockingProblem)}
+                className={primaryButton}
+              >
+                Continue to payment
+              </button>
+            </div>
           </div>
 
           {/* ---------------- Step 2: Payment ---------------- */}
           <div hidden={step !== 1}>
-            <div className="mb-8 flex items-start justify-between gap-4 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-5 py-4 text-sm">
-              <div className="min-w-0">
-                <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                  Delivering to
-                </p>
-                <p className="mt-1">
-                  {firstName} {lastName} · {phone}
-                </p>
-                <p className="truncate text-[var(--text-secondary)]">
-                  {line1}
-                  {line2 ? `, ${line2}` : ""}, {city}, {region}
-                </p>
-                {selectedRate ? (
-                  <p className="text-[var(--text-secondary)]">{selectedRate.name}</p>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={() => setStep(0)}
-                className="flex shrink-0 items-center gap-1 text-xs uppercase tracking-[0.14em] text-[var(--accent)] hover:underline"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-                Edit
-              </button>
-            </div>
+            {/* Review, as the big checkouts do before the payment choice */}
+            <dl className="divide-y divide-[var(--border-subtle)] border border-[var(--border-strong)] bg-[var(--surface-raised)] px-4 text-sm">
+              {[
+                { label: "Contact", value: `${email} · ${phone}` },
+                {
+                  label: "Deliver to",
+                  value: `${firstName} ${lastName}, ${line1}${line2 ? `, ${line2}` : ""}, ${city}, ${region}`,
+                },
+                {
+                  label: "Method",
+                  value: selectedRate
+                    ? `${selectedRate.name} · ${selectedRate.price === 0 ? "Free" : formatPrice(selectedRate.price)}`
+                    : "—",
+                },
+              ].map((row) => (
+                <div key={row.label} className="flex items-start gap-3 py-3">
+                  <dt className="w-20 shrink-0 text-[var(--text-muted)] sm:w-24">{row.label}</dt>
+                  <dd className="min-w-0 flex-1 break-words">{row.value}</dd>
+                  <button
+                    type="button"
+                    onClick={backToDelivery}
+                    className="shrink-0 text-sm text-[var(--accent)] underline-offset-4 hover:underline"
+                  >
+                    Change
+                  </button>
+                </div>
+              ))}
+            </dl>
 
             {hasPreorderItems ? (
-              <>
-                <h2 className={sectionHeading}>How much to pay today</h2>
-                <div className="mb-10 flex flex-col gap-3">
-                  <label className={choiceClass(preorderDepositOption === "deposit_50")}>
+              <section className="mt-10">
+                <h2 className={sectionHeading}>Amount to pay today</h2>
+                <div className={optionGroup}>
+                  <label className={optionRow(preorderDepositOption === "deposit_50")}>
                     <input
                       type="radio"
                       name="preorderDepositOption"
@@ -661,9 +831,9 @@ export function CheckoutForm({
                       className="sr-only"
                     />
                     {radioDot(preorderDepositOption === "deposit_50")}
-                    <span className="min-w-0 flex-1 text-left">
-                      <span className="block text-sm font-medium">50% pre-order deposit</span>
-                      <span className="mt-0.5 block text-xs text-[var(--text-muted)]">
+                    <span className="min-w-0 flex-1 text-left text-sm">
+                      <span className="block font-medium">50% pre-order deposit</span>
+                      <span className="mt-0.5 block text-[var(--text-muted)]">
                         The other half is paid on delivery
                       </span>
                     </span>
@@ -671,8 +841,7 @@ export function CheckoutForm({
                       {formatPrice(Math.round(total * 0.5))}
                     </span>
                   </label>
-
-                  <label className={choiceClass(preorderDepositOption === "full")}>
+                  <label className={optionRow(preorderDepositOption === "full")}>
                     <input
                       type="radio"
                       name="preorderDepositOption"
@@ -682,196 +851,160 @@ export function CheckoutForm({
                       className="sr-only"
                     />
                     {radioDot(preorderDepositOption === "full")}
-                    <span className="min-w-0 flex-1 text-left">
-                      <span className="block text-sm">Pay the full amount</span>
-                    </span>
+                    <span className="min-w-0 flex-1 text-left text-sm">Pay the full amount</span>
                     <span className="shrink-0 whitespace-nowrap text-sm tabular-nums">
                       {formatPrice(total)}
                     </span>
                   </label>
                 </div>
-              </>
+              </section>
             ) : (
               <input type="hidden" name="preorderDepositOption" value="full" />
             )}
 
-            <h2 className={sectionHeading}>How will you pay?</h2>
-            <p className="-mt-2 mb-4 text-sm text-[var(--text-secondary)]">
-              Choose your Mobile Money network, or pay by card.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              {MOMO_NETWORK_OPTIONS.map((option) => {
-                const active = payWith === option.id;
-                const direct = directNetworks.includes(option.id);
-                return (
-                  <label key={option.id} className={cn(choiceClass(active), "items-start")}>
+            <section className="mt-10">
+              <h2 className="text-xl sm:text-2xl">Payment</h2>
+              <p className="mb-4 mt-1 flex items-center gap-1.5 text-sm text-[var(--text-muted)]">
+                <Lock className="h-3.5 w-3.5" aria-hidden />
+                All payments are secure and encrypted.
+              </p>
+
+              {/* One list; the chosen option opens its details underneath. */}
+              <div className={optionGroup} role="radiogroup" aria-label="Payment method">
+                {MOMO_NETWORK_OPTIONS.map((option) => {
+                  const active = payWith === option.id;
+                  const direct = directNetworks.includes(option.id);
+                  return (
+                    <div key={option.id}>
+                      <label className={optionRow(active)}>
+                        <input
+                          type="radio"
+                          name="payWith"
+                          value={option.id}
+                          checked={active}
+                          onChange={() => setPayWith(option.id)}
+                          className="sr-only"
+                        />
+                        {radioDot(active)}
+                        <span className="min-w-0 flex-1 text-left text-sm">
+                          <span className="block font-medium">{option.label}</span>
+                          <span className="mt-0.5 block text-[var(--text-muted)]">
+                            {direct ? "Approve with a prompt on your phone" : "Pay on a secure payment page"}
+                          </span>
+                        </span>
+                        <span
+                          aria-hidden
+                          className="h-3.5 w-3.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: option.color }}
+                        />
+                      </label>
+
+                      {active && route === "direct_debit" ? (
+                        <div className="border-t border-[var(--border-subtle)] bg-[var(--surface-sunken)] px-4 py-4">
+                          <label
+                            htmlFor="momoPhone"
+                            className="mb-1.5 flex items-center gap-1.5 text-sm text-[var(--text-secondary)]"
+                          >
+                            <Smartphone className="h-4 w-4" aria-hidden />
+                            {option.label} number
+                          </label>
+                          <input
+                            id="momoPhone"
+                            name="momoPhone"
+                            type="tel"
+                            inputMode="tel"
+                            required
+                            value={momoPhone ?? phone}
+                            onChange={(e) => setMomoPhone(e.target.value)}
+                            autoComplete="tel"
+                            placeholder="024 000 0000"
+                            className={field}
+                          />
+                          {errors.momoPhone ? (
+                            <p className="mt-1.5 text-sm text-danger">{errors.momoPhone}</p>
+                          ) : null}
+                          <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                            We will send a request for{" "}
+                            <strong className="font-medium text-[var(--text-primary)]">
+                              {formatPrice(depositDueNow)}
+                            </strong>{" "}
+                            to this number. Approve it with your MoMo PIN.
+                          </p>
+                        </div>
+                      ) : null}
+
+                      {active && route === "mobile_money" ? (
+                        <p className="flex items-start gap-2.5 border-t border-[var(--border-subtle)] bg-[var(--surface-sunken)] px-4 py-4 text-sm leading-relaxed text-[var(--text-secondary)]">
+                          <ExternalLink className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                          <span>
+                            After you select Pay now, you will go to our payment partner&apos;s
+                            secure page to enter your {option.label} number and approve.
+                          </span>
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+
+                <div>
+                  <label className={optionRow(payWith === "card")}>
                     <input
                       type="radio"
                       name="payWith"
-                      value={option.id}
-                      checked={active}
-                      onChange={() => setPayWith(option.id)}
+                      value="card"
+                      checked={payWith === "card"}
+                      onChange={() => setPayWith("card")}
                       className="sr-only"
                     />
-                    <span
-                      aria-hidden
-                      className="mt-1 h-3 w-3 shrink-0 rounded-full"
-                      style={{ backgroundColor: option.color }}
-                    />
-                    <span className="min-w-0 text-left">
-                      <span className="block text-sm font-medium">{option.label}</span>
-                      <span className="mt-0.5 block text-xs text-[var(--text-muted)]">
-                        {direct ? "Prompt on your phone" : "Secure payment page"}
-                      </span>
+                    {radioDot(payWith === "card")}
+                    <span className="min-w-0 flex-1 text-left text-sm">
+                      <span className="block font-medium">Debit or credit card</span>
+                      <span className="mt-0.5 block text-[var(--text-muted)]">Visa · Mastercard</span>
                     </span>
+                    <CreditCard className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden />
                   </label>
-                );
-              })}
-              <label className={cn(choiceClass(payWith === "card"), "items-start")}>
-                <input
-                  type="radio"
-                  name="payWith"
-                  value="card"
-                  checked={payWith === "card"}
-                  onChange={() => setPayWith("card")}
-                  className="sr-only"
-                />
-                <CreditCard className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" aria-hidden />
-                <span className="min-w-0 text-left">
-                  <span className="block text-sm font-medium">Bank card</span>
-                  <span className="mt-0.5 block text-xs text-[var(--text-muted)]">
-                    Visa · Mastercard
-                  </span>
-                </span>
-              </label>
-            </div>
-            {errors.payWith ? <p className="mt-2 text-sm text-danger">{errors.payWith}</p> : null}
-
-            {route === "direct_debit" && network ? (
-              <div className="mt-6 border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-5">
-                <label
-                  htmlFor="momoPhone"
-                  className="mb-2 flex items-center gap-2 text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]"
-                >
-                  <Smartphone className="h-4 w-4" aria-hidden />
-                  {network.label} number
-                </label>
-                <input
-                  id="momoPhone"
-                  name="momoPhone"
-                  type="tel"
-                  required
-                  value={momoPhone ?? phone}
-                  onChange={(e) => setMomoPhone(e.target.value)}
-                  autoComplete="tel"
-                  placeholder="e.g. 024 000 0000"
-                  className={field}
-                />
-                {errors.momoPhone ? (
-                  <p className="mt-1.5 text-sm text-danger">{errors.momoPhone}</p>
-                ) : null}
-                <p className="mt-3 text-sm leading-relaxed text-[var(--text-secondary)]">
-                  We will send a request for{" "}
-                  <strong className="font-medium text-[var(--text-primary)]">
-                    {formatPrice(depositDueNow)}
-                  </strong>{" "}
-                  to this number. Approve it on your phone with your MoMo PIN.
-                </p>
+                  {payWith === "card" ? (
+                    <p className="flex items-start gap-2.5 border-t border-[var(--border-subtle)] bg-[var(--surface-sunken)] px-4 py-4 text-sm leading-relaxed text-[var(--text-secondary)]">
+                      <ExternalLink className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                      <span>
+                        After you select Pay now, you will enter your card details on our payment
+                        partner&apos;s secure page.
+                      </span>
+                    </p>
+                  ) : null}
+                </div>
               </div>
-            ) : route === "mobile_money" && network ? (
-              <p className="mt-6 flex items-start gap-2.5 border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-5 text-sm leading-relaxed text-[var(--text-secondary)]">
-                <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" aria-hidden />
-                <span>
-                  You will finish on our payment partner&apos;s secure page. Enter your{" "}
-                  {network.label} number there and follow the steps it shows to approve.
-                </span>
-              </p>
-            ) : route === "card" ? (
-              <p className="mt-6 flex items-start gap-2.5 border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-5 text-sm leading-relaxed text-[var(--text-secondary)]">
-                <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" aria-hidden />
-                <span>You will enter your card details on our payment partner&apos;s secure page.</span>
-              </p>
-            ) : null}
+              {errors.payWith ? <p className="mt-2 text-sm text-danger">{errors.payWith}</p> : null}
+            </section>
 
-            <button
-              type="submit"
-              disabled={pending || !route || !selectedRate}
-              className={cn(primaryButton, "mt-8")}
-            >
-              {pending ? (
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-              ) : (
-                <Lock className="h-4 w-4 shrink-0" aria-hidden />
-              )}
-              {pending ? "Starting payment…" : payLabel}
-            </button>
-            <p className="mt-3 flex items-center justify-center gap-2 text-xs text-[var(--text-muted)]">
+            <div className="mt-8 flex flex-col-reverse items-center gap-4 sm:flex-row sm:justify-between">
+              <button
+                type="button"
+                onClick={backToDelivery}
+                className="flex items-center gap-1.5 text-sm text-[var(--accent)] underline-offset-4 hover:underline"
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden />
+                Return to delivery
+              </button>
+              <button
+                type="submit"
+                disabled={pending || !route || !selectedRate || Boolean(blockingProblem)}
+                className={primaryButton}
+              >
+                {pending ? (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <Lock className="h-4 w-4 shrink-0" aria-hidden />
+                )}
+                {pending ? "Starting payment…" : payLabel}
+              </button>
+            </div>
+            <p className="mt-4 flex items-center justify-center gap-2 text-xs text-[var(--text-muted)] sm:justify-end">
               <ShieldCheck className="h-3.5 w-3.5 text-sage-600" strokeWidth={1.5} aria-hidden />
-              Payments are encrypted. Nothing is taken until you approve it.
+              Nothing is taken until you approve it.
             </p>
           </div>
         </div>
-
-        {/* Summary */}
-        <aside className="border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-5 sm:p-6 lg:sticky lg:top-8">
-          <h2 className="mb-5 font-display text-2xl">Order summary</h2>
-
-          {discount}
-
-          <dl className="mt-4">
-            <div className="flex justify-between py-2 text-sm text-[var(--text-secondary)]">
-              <dt>Subtotal</dt>
-              <dd className="font-medium tabular-nums">{formatPrice(subtotal)}</dd>
-            </div>
-
-            {discountTotal > 0 ? (
-              <div className="flex justify-between py-2 text-sm text-sage-600">
-                <dt>Discount</dt>
-                <dd className="tabular-nums">-{formatPrice(discountTotal)}</dd>
-              </div>
-            ) : null}
-
-            <div className="flex justify-between py-2 text-sm text-[var(--text-secondary)]">
-              <dt>Delivery</dt>
-              <dd className="tabular-nums">
-                {!selectedRate ? "—" : shippingTotal === 0 ? "Free" : formatPrice(shippingTotal)}
-              </dd>
-            </div>
-          </dl>
-
-          {freeGap > 0 ? (
-            <p className="pb-2 text-sm text-sage-600">
-              Add {formatPrice(freeGap)} more for free delivery to your station
-            </p>
-          ) : null}
-
-          <div className="mt-2.5 flex items-baseline justify-between gap-3 border-t border-[var(--border-strong)] pt-4">
-            <span className="text-sm uppercase tracking-[0.06em]">Order Total</span>
-            <span className="text-[clamp(1.5rem,6vw,1.875rem)] font-semibold tabular-nums">
-              {formatPrice(total)}
-            </span>
-          </div>
-
-          {hasPreorderItems && preorderDepositOption === "deposit_50" ? (
-            <div className="mt-3 border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-3.5 text-xs">
-              <div className="flex justify-between font-medium text-[var(--text-primary)]">
-                <span>Due today (50% deposit)</span>
-                <span className="tabular-nums">{formatPrice(depositDueNow)}</span>
-              </div>
-              <div className="mt-1 flex justify-between text-[var(--text-secondary)]">
-                <span>Balance on delivery</span>
-                <span className="tabular-nums">{formatPrice(balanceOnDelivery)}</span>
-              </div>
-            </div>
-          ) : null}
-
-          {hasPreorderItems ? (
-            <p className="mt-3 flex items-start gap-2 text-xs text-[var(--text-secondary)]">
-              <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden />
-              <span>Includes pre-order items, made for you before delivery.</span>
-            </p>
-          ) : null}
-        </aside>
       </div>
     </form>
   );
