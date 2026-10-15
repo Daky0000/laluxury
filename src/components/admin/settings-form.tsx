@@ -11,6 +11,7 @@ import {
 import type { StoreSettings } from "@/lib/settings";
 import { LANDING_PAGES, type LandingPage } from "@/lib/landing";
 import { MOMO_NETWORK_OPTIONS } from "@/lib/momo-networks";
+import { pickupLocationsToText } from "@/lib/pickup-locations";
 import { Card, Field, Alert } from "@/components/ui";
 import { ImageUrlField } from "./image-url-field";
 import { toMajorUnits } from "@/lib/money";
@@ -122,9 +123,10 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
             Direct phone prompt (website &amp; app)
           </h3>
           <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
-            Ticked networks get the MoMo PIN prompt sent straight to the customer&apos;s phone.
-            Unticked networks are still accepted: the customer finishes on Paystack&apos;s secure
-            payment page instead. Untick a network if its customers report prompts not arriving.
+            Customers on a ticked network can choose between a MoMo PIN prompt sent straight to
+            their phone and Paystack&apos;s secure payment page. Unticked networks are still
+            accepted, on Paystack&apos;s page only. Untick a network if its customers report prompts
+            not arriving.
           </p>
           <input type="hidden" name="momoNetworksConfigured" value="1" />
           <div className="mt-3 flex flex-wrap gap-4">
@@ -141,6 +143,23 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
               </label>
             ))}
           </div>
+        </div>
+
+        <div className="border-t border-[var(--border-subtle)] pt-4">
+          <Field
+            label="Pickup locations (website & app)"
+            htmlFor="pickupLocations"
+            hint="One per line: Name | Address | City | Region | Opening hours. Leave empty to turn pickup off."
+          >
+            <textarea
+              id="pickupLocations"
+              name="pickupLocations"
+              rows={3}
+              defaultValue={pickupLocationsToText(settings.pickupLocations)}
+              placeholder="Noble Enclave Showroom | Spintex Road | Accra | Greater Accra | Mon–Sat 9am–6pm"
+              className="lx-field font-mono text-xs"
+            />
+          </Field>
         </div>
       </Card>
 

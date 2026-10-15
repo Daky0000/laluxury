@@ -11,6 +11,11 @@ import {
   normaliseDirectNetworks,
   type MomoNetworkId,
 } from "./momo-networks";
+import {
+  DEFAULT_PICKUP_LOCATIONS,
+  normalisePickupLocations,
+  type PickupLocation,
+} from "./pickup-locations";
 
 /**
  * Store settings live in a key/value table so the owner can change copy,
@@ -76,6 +81,8 @@ export type StoreSettings = {
    * network is paid on Paystack's hosted page. See `momo-networks.ts`.
    */
   momoDirectNetworks: MomoNetworkId[];
+  /** Where customers can collect orders. See `pickup-locations.ts`. */
+  pickupLocations: PickupLocation[];
 };
 
 export {
@@ -149,6 +156,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   hiddenStorefrontNavItems: ["pre-order"],
   paymentMode: "live",
   momoDirectNetworks: DEFAULT_MOMO_DIRECT_NETWORKS,
+  pickupLocations: DEFAULT_PICKUP_LOCATIONS,
 };
 
 const SETTINGS_KEY = "store";
@@ -205,6 +213,7 @@ async function fetchSettings(): Promise<StoreSettings> {
       ? stored.hiddenStorefrontNavItems
       : DEFAULT_SETTINGS.hiddenStorefrontNavItems,
     momoDirectNetworks: normaliseDirectNetworks(stored.momoDirectNetworks),
+    pickupLocations: normalisePickupLocations(stored.pickupLocations),
   };
 
   cachedSettings = { data: resolved, expiresAt: now + SETTINGS_CACHE_TTL_MS };

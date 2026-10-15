@@ -88,6 +88,8 @@ export async function createOrderFromCart(args: {
   customerNote?: string | null;
   paymentMethod?: string | null;
   depositPercent?: number | null;
+  /** Collected from a pickup location: no delivery rate and no delivery fee. */
+  pickup?: boolean;
 }): Promise<FullOrder> {
   const { cart } = args;
   if (cart.items.length === 0) throw new Error("Your bag is empty.");
@@ -108,7 +110,9 @@ export async function createOrderFromCart(args: {
   let shippingTotal = 0;
   let shippingRateId: string | null = null;
 
-  if (args.shippingRateId) {
+  if (args.pickup) {
+    // Nothing to deliver; the address is the pickup point.
+  } else if (args.shippingRateId) {
     const chosen = quotes.find((q) => q.id === args.shippingRateId);
     if (!chosen) throw new Error("That delivery option is not available for your address.");
     shippingRateId = chosen.id;
@@ -116,6 +120,9 @@ export async function createOrderFromCart(args: {
   } else if (quotes.length > 0) {
     shippingRateId = quotes[0].id;
     shippingTotal = quotes[0].price;
+  } else {
+    // No rate covers this address: refuse rather than deliver for free.
+    throw new Error("We do not deliver to that region yet. Choose pickup or another address.");
   }
 
   // A FREE_SHIPPING code zeroes the line but keeps the carrier selection.

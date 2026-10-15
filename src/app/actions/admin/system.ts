@@ -12,6 +12,7 @@ import {
 } from "@/lib/settings";
 import { isLandingPage } from "@/lib/landing";
 import { normaliseDirectNetworks } from "@/lib/momo-networks";
+import { parsePickupLocationsText } from "@/lib/pickup-locations";
 import { normaliseSections } from "@/lib/home-sections";
 import { runAgentTurn } from "@/lib/agent/runtime";
 import { pingAgent } from "@/lib/agent/provider";
@@ -81,6 +82,10 @@ export async function updateSettingsAction(
 
   if (formData.has("momoNetworksConfigured")) {
     patch.momoDirectNetworks = normaliseDirectNetworks(formData.getAll("momoDirectNetworks").map(String));
+  }
+
+  if (formData.has("pickupLocations")) {
+    patch.pickupLocations = parsePickupLocationsText(text("pickupLocations"));
   }
 
   if (formData.has("navMenusConfigured")) {

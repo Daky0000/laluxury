@@ -27,6 +27,8 @@ export async function getPublicStoreConfig() {
       },
       // Networks that get the direct PIN prompt; the rest use Paystack's page.
       momoDirectNetworks: settings.momoDirectNetworks,
+      // Where orders can be collected; the app lists these for pickup.
+      pickupLocations: settings.pickupLocations,
       supportEmail: settings?.supportEmail || "contact@nobleenclave.com",
       supportPhone: settings?.supportPhone || "",
       whatsappNumber: settings?.whatsappNumber || "",

@@ -21,7 +21,7 @@ import { InsufficientStockError } from "@/lib/inventory";
 import { GHANA_REGIONS } from "@/lib/constants";
 import { MOMO_NETWORKS, networkOf, normalisePhone } from "@/lib/phone";
 import { getCommerceSettings } from "@/lib/settings";
-import { momoRouteFor } from "@/lib/momo-networks";
+import { pickupAddressLines } from "@/lib/pickup-locations";
 
 export type CheckoutState = {
   ok: boolean;
@@ -40,15 +40,17 @@ const schema = z.object({
       message:
         "Enter a Ghanaian number like 024 000 0000, or one from elsewhere with its country code.",
     }),
-  line1: z.string().min(1, "Enter a street address."),
-  line2: z.string().optional(),
-  city: z.string().min(1, "Enter a city or town."),
-  region: z.string().refine((v) => GHANA_REGIONS.includes(v as (typeof GHANA_REGIONS)[number]), {
-    message: "Choose a region.",
-  }),
-  postalCode: z.string().optional(),
+  fulfilment: z.enum(["delivery", "pickup"]).default("delivery"),
+  pickupLocationId: z.string().optional(),
+  // Address fields are only required for delivery; checked after parsing.
+  line1: z.string().trim().optional(),
+  line2: z.string().trim().optional(),
+  city: z.string().trim().optional(),
+  region: z.string().optional(),
   shippingRateId: z.string().optional(),
   payWith: z.enum(["mtn", "vod", "atl", "card"], { message: "Choose how you will pay." }),
+  /** For a network that offers both: the phone prompt, or Paystack's page. */
+  momoRoute: z.enum(["direct", "hosted"]).optional(),
   momoPhone: z.string().trim().optional(),
   preorderDepositOption: z.enum(["full", "deposit_50"]).optional(),
   customerNote: z.string().optional(),
@@ -65,13 +67,15 @@ export async function placeOrderAction(
     firstName: formData.get("firstName"),
     lastName: formData.get("lastName"),
     phone: formData.get("phone"),
-    line1: formData.get("line1"),
+    fulfilment: formData.get("fulfilment") || undefined,
+    pickupLocationId: formData.get("pickupLocationId") || undefined,
+    line1: formData.get("line1") || undefined,
     line2: formData.get("line2") || undefined,
-    city: formData.get("city"),
-    region: formData.get("region"),
-    postalCode: formData.get("postalCode") || undefined,
+    city: formData.get("city") || undefined,
+    region: formData.get("region") || undefined,
     shippingRateId: formData.get("shippingRateId") || undefined,
     payWith: formData.get("payWith") || undefined,
+    momoRoute: formData.get("momoRoute") || undefined,
     momoPhone: formData.get("momoPhone") || undefined,
     preorderDepositOption: formData.get("preorderDepositOption") || undefined,
     customerNote: formData.get("customerNote") || undefined,
@@ -99,12 +103,41 @@ export async function placeOrderAction(
   const email = data.email.toLowerCase().trim();
   const phone = normalisePhone(data.phone)!;
 
-  // The shopper names their network first. The store decides which networks
-  // get a prompt pushed to the phone; the rest finish on Paystack's page.
   const settings = await getCommerceSettings();
+
+  // Collected from a pickup location, or delivered to an address.
+  const isPickup = data.fulfilment === "pickup";
+  const pickupLocation = isPickup
+    ? settings.pickupLocations.find((l) => l.id === data.pickupLocationId)
+    : null;
+  if (isPickup && !pickupLocation) {
+    return { ok: false, fieldErrors: { pickupLocationId: "Choose where you will collect your order." } };
+  }
+  if (!isPickup) {
+    const addressErrors: Record<string, string> = {};
+    if (!data.line1) addressErrors.line1 = "Enter your address or digital address.";
+    if (!data.city) addressErrors.city = "Enter a city or town.";
+    if (!GHANA_REGIONS.includes(data.region as (typeof GHANA_REGIONS)[number])) {
+      addressErrors.region = "Choose a region.";
+    }
+    if (Object.keys(addressErrors).length) return { ok: false, fieldErrors: addressErrors };
+  }
+  const shippingAddress = pickupLocation
+    ? {
+        ...pickupAddressLines(pickupLocation),
+        city: pickupLocation.city,
+        region: pickupLocation.region,
+      }
+    : { line1: data.line1!, line2: data.line2 || null, city: data.city!, region: data.region! };
+
+  // The shopper names their network first. A network on the store's direct
+  // list lets them choose the phone prompt or Paystack's page; any other
+  // network, and cards, always use Paystack's page.
   const network = data.payWith === "card" ? null : data.payWith;
   const paymentMethod = network
-    ? momoRouteFor(network, settings.momoDirectNetworks)
+    ? data.momoRoute === "direct" && settings.momoDirectNetworks.includes(network)
+      ? "direct_debit"
+      : "mobile_money"
     : "bank_card";
   const isDirectDebit = paymentMethod === "direct_debit";
 
@@ -153,22 +186,20 @@ export async function placeOrderAction(
     });
     userId = created.id;
 
-    // Save their default delivery address and log them in immediately.
-    await db.address.create({
-      data: {
-        userId: created.id,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        phone,
-        line1: data.line1,
-        line2: data.line2 ?? null,
-        city: data.city,
-        region: data.region,
-        postalCode: data.postalCode ?? null,
-        country: "GH",
-        isDefault: true,
-      },
-    });
+    // Save their delivery address (not a pickup point) and log them in.
+    if (!isPickup) {
+      await db.address.create({
+        data: {
+          userId: created.id,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          phone,
+          ...shippingAddress,
+          country: "GH",
+          isDefault: true,
+        },
+      });
+    }
 
     await createSessionCookie({ userId: created.id, role: created.role });
   } else if (!userId) {
@@ -210,13 +241,10 @@ export async function placeOrderAction(
         firstName: data.firstName.trim() || "Customer",
         lastName: data.lastName?.trim() || data.firstName.trim() || "Customer",
         phone,
-        line1: data.line1,
-        line2: data.line2 ?? null,
-        city: data.city,
-        region: data.region,
-        postalCode: data.postalCode ?? null,
+        ...shippingAddress,
       },
-      shippingRateId: data.shippingRateId ?? null,
+      shippingRateId: isPickup ? null : (data.shippingRateId ?? null),
+      pickup: isPickup,
       customerNote: data.customerNote ?? null,
       paymentMethod,
       depositPercent,

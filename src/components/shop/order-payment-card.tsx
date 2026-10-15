@@ -19,7 +19,7 @@ import {
   type CustomerMomoPushResult,
 } from "@/app/actions/order-pay";
 import { formatMoney } from "@/lib/money";
-import { MOMO_NETWORK_OPTIONS, momoRouteFor, type MomoNetworkId } from "@/lib/momo-networks";
+import { MOMO_NETWORK_OPTIONS, type MomoNetworkId } from "@/lib/momo-networks";
 import { cn } from "@/lib/utils";
 
 /**
@@ -60,8 +60,19 @@ export function OrderPaymentCard({
   const [resendAvailableAt, setResendAvailableAt] = useState(0);
   const [now, setNow] = useState(0);
 
+  const [momoRoute, setMomoRoute] = useState<"direct" | "hosted" | null>(null);
+  // A network on the direct list offers the phone prompt or the hosted page.
+  const directAllowed = payWith !== null && payWith !== "card" && directNetworks.includes(payWith);
   const route =
-    payWith === null ? null : payWith === "card" ? "card" : momoRouteFor(payWith, directNetworks);
+    payWith === null
+      ? null
+      : payWith === "card"
+        ? "card"
+        : !directAllowed || momoRoute === "hosted"
+          ? "mobile_money"
+          : momoRoute === "direct"
+            ? "direct_debit"
+            : null;
   const network = MOMO_NETWORK_OPTIONS.find((n) => n.id === payWith);
 
   useEffect(() => {
@@ -106,6 +117,7 @@ export function OrderPaymentCard({
   function choose(next: MomoNetworkId | "card") {
     if (pushState?.ok) return; // a prompt is out; resend or check it instead
     setPayWith(next);
+    setMomoRoute(null);
     setError(null);
   }
 
@@ -261,7 +273,7 @@ export function OrderPaymentCard({
                 <span>
                   <span className="block text-sm font-medium">{option.label}</span>
                   <span className="block text-xs text-[var(--text-muted)]">
-                    {directNetworks.includes(option.id) ? "Prompt on your phone" : "Secure payment page"}
+                    {directNetworks.includes(option.id) ? "Direct Debit or Paystack" : "Paystack secure page"}
                   </span>
                 </span>
               </button>
@@ -284,6 +296,38 @@ export function OrderPaymentCard({
               </span>
             </button>
           </div>
+
+          {directAllowed && network && !pushState?.ok ? (
+            <div>
+              <p className="mb-2 text-sm text-[var(--text-secondary)]">
+                How would you like to pay with {network.label}?
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(
+                  [
+                    { id: "direct", title: "Direct Debit", note: "A prompt on your phone; approve with your PIN." },
+                    { id: "hosted", title: "Paystack", note: "Enter your number on Paystack's secure page." },
+                  ] as const
+                ).map((choice) => (
+                  <button
+                    key={choice.id}
+                    type="button"
+                    onClick={() => setMomoRoute(choice.id)}
+                    aria-pressed={momoRoute === choice.id}
+                    className={cn(
+                      "border px-3.5 py-3 text-left text-sm transition-colors",
+                      momoRoute === choice.id
+                        ? "border-[var(--accent)]"
+                        : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]",
+                    )}
+                  >
+                    <span className="block font-medium">{choice.title}</span>
+                    <span className="block text-xs text-[var(--text-muted)]">{choice.note}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {route === "direct_debit" && network && !pushState?.ok ? (
             <form onSubmit={handleSendPush} className="space-y-3">

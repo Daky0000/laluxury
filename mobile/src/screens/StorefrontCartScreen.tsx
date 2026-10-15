@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { track } from "../lib/analytics";
 import { colors } from "../theme/colors";
 import { api } from "../services/api";
-import { CartItem, User, ShippingAddress, ShippingRate, GHANA_REGIONS } from "../types";
+import { CartItem, User, ShippingAddress, ShippingRate, GHANA_REGIONS, type PickupLocation } from "../types";
 import { formatCurrency } from "../utils/format";
 import { resolveImageUrl } from "../utils/image";
 
@@ -81,18 +81,31 @@ export function StorefrontCartScreen({
   const [showPickupContactModal, setShowPickupContactModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   // The shopper names their network (or card) first; nothing is preselected.
-  // Networks on the store's direct list get a prompt on the phone, the rest
-  // and cards finish on the hosted payment page.
+  // A network on the store's direct list then offers a choice: a prompt on the
+  // phone (Direct Debit) or the hosted Paystack page. Other networks and cards
+  // always use the hosted page.
   const [payWith, setPayWith] = useState<PayWith | null>(null);
+  const [momoRoute, setMomoRoute] = useState<"direct" | "hosted" | null>(null);
   const [directNetworks, setDirectNetworks] = useState<NetworkId[]>(DEFAULT_DIRECT_NETWORKS);
+  const directAllowed = payWith !== null && payWith !== "card" && directNetworks.includes(payWith);
   const selectedPayment: PaymentMethod | null =
     payWith === null
       ? null
       : payWith === "card"
         ? "bank_card"
-        : directNetworks.includes(payWith)
-          ? "direct_debit"
-          : "mobile_money";
+        : !directAllowed || momoRoute === "hosted"
+          ? "mobile_money"
+          : momoRoute === "direct"
+            ? "direct_debit"
+            : null;
+  const choosePayWith = (next: PayWith) => {
+    setPayWith(next);
+    setMomoRoute(null);
+  };
+  const [pickupLocations, setPickupLocations] = useState<PickupLocation[]>([]);
+  const [pickupLocationId, setPickupLocationId] = useState<string | null>(null);
+  const pickupLocation =
+    pickupLocations.find((l) => l.id === pickupLocationId) ?? pickupLocations[0] ?? null;
   const momoProvider: NetworkId | null = payWith && payWith !== "card" ? payWith : null;
   const [isTestMode, setIsTestMode] = useState(false);
   const [deliveryType, setDeliveryType] = useState<"delivery" | "pickup">("delivery");
@@ -155,6 +168,7 @@ export function StorefrontCartScreen({
         }
         if (cfg.regions?.length) setAvailableRegions(cfg.regions);
         if (Array.isArray(cfg.momoDirectNetworks)) setDirectNetworks(cfg.momoDirectNetworks);
+        if (Array.isArray(cfg.pickupLocations)) setPickupLocations(cfg.pickupLocations);
       })
       .catch(() => {});
   }, []);
@@ -521,17 +535,16 @@ export function StorefrontCartScreen({
     }
 
     if (!selectedPayment) {
+      // Network picked but not yet Direct Debit vs Paystack: the choice is on screen.
+      const message = payWith
+        ? "Choose Direct Debit or Paystack for your network."
+        : "Pick your Mobile Money network, or pay by card.";
       if (onNotify) {
-        onNotify({
-          title: "Choose How to Pay",
-          message: "Pick your Mobile Money network, or pay by card.",
-          type: "warning",
-          icon: "smartphone",
-        });
+        onNotify({ title: "Choose How to Pay", message, type: "warning", icon: "smartphone" });
       } else {
-        toast("Choose How to Pay", "Pick your Mobile Money network, or pay by card.");
+        toast("Choose How to Pay", message);
       }
-      setShowPaymentModal(true);
+      if (!payWith) setShowPaymentModal(true);
       return;
     }
 
@@ -575,15 +588,17 @@ export function StorefrontCartScreen({
         },
         deliveryType,
         isPickup,
+        pickupLocationId: isPickup ? (pickupLocation?.id ?? null) : null,
         shippingAddress: isPickup
           ? {
               firstName: safeFirst,
               lastName: safeLast,
               phone: safePhone,
-              line1: "Noble Enclave Showroom (Self-Pickup)",
-              line2: "Spintex Road / Airport Residential",
-              city: "Accra",
-              region: "Greater Accra",
+              // The server writes the chosen location's address from its id.
+              line1: pickupLocation ? `${pickupLocation.name} (Pickup)` : "Pickup",
+              line2: pickupLocation?.address || undefined,
+              city: pickupLocation?.city || "Accra",
+              region: pickupLocation?.region || "Greater Accra",
               country: "Ghana",
             }
           : {
@@ -995,7 +1010,7 @@ export function StorefrontCartScreen({
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
+            {pickupLocations.length > 0 && (<TouchableOpacity
               style={[
                 styles.deliveryTypeBtn,
                 deliveryType === "pickup" && styles.deliveryTypeBtnActive,
@@ -1016,7 +1031,7 @@ export function StorefrontCartScreen({
               >
                 Store Pickup (FREE)
               </Text>
-            </TouchableOpacity>
+            </TouchableOpacity>)}
           </View>
         </View>
 
@@ -1140,27 +1155,41 @@ export function StorefrontCartScreen({
         {deliveryType === "pickup" && (
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionHeaderLabel}>PICKUP LOCATION</Text>
-            <View style={[styles.cardSelectable, { backgroundColor: "#FAF7F5", borderColor: colors.primary }]}>
-              <View style={styles.cardContentLeft}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                  <Text style={[styles.paymentMethodText, { color: colors.primary }]}>
-                    Noble Enclave Showroom
-                  </Text>
-                  <View style={{ backgroundColor: "#E6F4EA", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                    <Text style={{ color: "#137333", fontSize: 11, fontWeight: "700" }}>FREE</Text>
+            {pickupLocations.map((location) => {
+              const isSelected = pickupLocation?.id === location.id;
+              return (
+                <TouchableOpacity
+                  key={location.id}
+                  style={[
+                    styles.cardSelectable,
+                    { marginBottom: 8 },
+                    isSelected && { backgroundColor: "#FAF7F5", borderColor: colors.primary },
+                  ]}
+                  onPress={() => setPickupLocationId(location.id)}
+                  activeOpacity={0.8}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isSelected }}
+                >
+                  <View style={styles.cardContentLeft}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                      <Text style={[styles.paymentMethodText, isSelected && { color: colors.primary }]}>
+                        {location.name}
+                      </Text>
+                      <View style={{ backgroundColor: "#E6F4EA", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ color: "#137333", fontSize: 11, fontWeight: "700" }}>FREE</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.addressDetail}>
+                      {[location.address, location.city].filter(Boolean).join(", ")}
+                    </Text>
+                    {location.hours ? (
+                      <Text style={[styles.paymentMethodSub, { marginTop: 4 }]}>{location.hours}</Text>
+                    ) : null}
                   </View>
-                </View>
-                <Text style={styles.addressDetail}>
-                  Spintex Road / Airport Residential, Accra
-                </Text>
-                <Text style={[styles.paymentMethodSub, { marginTop: 4 }]}>
-                  Opening Hours: Mon – Sat, 9:00 AM – 6:00 PM
-                </Text>
-                <Text style={[styles.paymentMethodSub, { color: colors.primary, marginTop: 2 }]}>
-                  • Ready for collection within 2–4 hours
-                </Text>
-              </View>
-            </View>
+                  {isSelected && <Feather name="check" size={18} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
@@ -1258,7 +1287,7 @@ export function StorefrontCartScreen({
                 <TouchableOpacity
                   key={option.id}
                   style={[styles.networkChip, isSelected && styles.networkChipSelected]}
-                  onPress={() => setPayWith(option.id)}
+                  onPress={() => choosePayWith(option.id)}
                   activeOpacity={0.8}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: isSelected }}
@@ -1276,6 +1305,37 @@ export function StorefrontCartScreen({
             })}
           </View>
         </View>
+
+        {/* A network that takes both: Direct Debit prompt or Paystack page */}
+        {directAllowed && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionHeaderLabel}>HOW WOULD YOU LIKE TO PAY?</Text>
+            {(
+              [
+                { id: "direct", title: "Direct Debit", note: "We send a prompt to your phone. Approve with your PIN." },
+                { id: "hosted", title: "Paystack", note: "Enter your number on Paystack's secure page." },
+              ] as const
+            ).map((choice) => {
+              const isSelected = momoRoute === choice.id;
+              return (
+                <TouchableOpacity
+                  key={choice.id}
+                  style={[styles.paymentOption, isSelected && styles.paymentOptionActive]}
+                  onPress={() => setMomoRoute(choice.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isSelected }}
+                >
+                  <Feather name={choice.id === "direct" ? "smartphone" : "external-link"} size={20} color={colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.paymentOptionLabel}>{choice.title}</Text>
+                    <Text style={styles.paymentOptionSub}>{choice.note}</Text>
+                  </View>
+                  {isSelected && <Feather name="check" size={18} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Details for the chosen way to pay */}
         {selectedPayment !== null && (
@@ -1639,14 +1699,14 @@ export function StorefrontCartScreen({
                 option.id === "card"
                   ? "Visa · Mastercard"
                   : directNetworks.includes(option.id as NetworkId)
-                    ? "Prompt on your phone"
-                    : "Secure payment page";
+                    ? "Direct Debit or Paystack"
+                    : "Paystack secure page";
               return (
                 <TouchableOpacity
                   key={option.id}
                   style={[styles.paymentOption, payWith === option.id && styles.paymentOptionActive]}
                   onPress={() => {
-                    setPayWith(option.id);
+                    choosePayWith(option.id);
                     setShowPaymentModal(false);
                   }}
                 >

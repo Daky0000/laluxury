@@ -12,6 +12,7 @@ import { normalisePhone } from "@/lib/phone";
 import { quoteShipping } from "@/lib/shipping";
 import { recordRedemption, validateDiscount, type DiscountLine } from "@/lib/discounts";
 import { getCommerceSettings } from "@/lib/settings";
+import { pickupAddressLines } from "@/lib/pickup-locations";
 import { getIntegrations, activePaystack } from "@/lib/integrations";
 import { notifyOrder } from "@/lib/notify";
 import { reconcilePendingPaymentsSoon } from "@/lib/checkout-payment";
@@ -226,15 +227,20 @@ export const POST = withApiAuth(async (request: Request) => {
       (ship.line1 && ship.line1.toString().toLowerCase().includes("showroom"));
 
     if (isPickup) {
-      if (!ship.line1 || !ship.line1.toString().trim()) {
-        ship.line1 = "Noble Enclave Showroom (Self-Pickup)";
+      // The location the app picked, else the store's first pickup point.
+      const locations = (await getCommerceSettings()).pickupLocations;
+      const chosen =
+        locations.find((l) => l.id === raw.pickupLocationId) ?? locations[0] ?? null;
+      if (chosen && (raw.pickupLocationId || !ship.line1 || !ship.line1.toString().trim())) {
+        const lines = pickupAddressLines(chosen);
+        ship.line1 = lines.line1;
+        ship.line2 = lines.line2;
+        ship.city = chosen.city;
+        ship.region = chosen.region;
       }
-      if (!ship.city || !ship.city.toString().trim()) {
-        ship.city = "Accra";
-      }
-      if (!ship.region || !ship.region.toString().trim()) {
-        ship.region = "Greater Accra";
-      }
+      if (!ship.line1 || !ship.line1.toString().trim()) ship.line1 = "Pickup";
+      if (!ship.city || !ship.city.toString().trim()) ship.city = "Accra";
+      if (!ship.region || !ship.region.toString().trim()) ship.region = "Greater Accra";
     }
 
     raw.customer = cust;

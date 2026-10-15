@@ -297,6 +297,8 @@ export type AppConfig = {
   };
   /** MoMo networks that get the direct PIN prompt; others pay on the hosted page. */
   momoDirectNetworks?: ("mtn" | "vod" | "atl")[];
+  /** Where orders can be collected; empty means no pickup. */
+  pickupLocations?: PickupLocation[];
   supportEmail: string;
   supportPhone: string;
   whatsappNumber: string;
@@ -509,4 +511,13 @@ export type BulkImportDetail = {
   photoCount: number;
   batch: BulkImportBatch;
   items: BulkImportItem[];
+};
+
+export type PickupLocation = {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  region: string;
+  hours: string;
 };

@@ -79,6 +79,7 @@ export default async function CheckoutPage() {
         hasPreorderItems={hasPreorderItems}
         freeShippingThreshold={settings.freeShippingThreshold}
         directNetworks={settings.momoDirectNetworks}
+        pickupLocations={settings.pickupLocations}
         items={totals.lines.map((line) => ({
           id: line.id,
           title: line.productTitle,

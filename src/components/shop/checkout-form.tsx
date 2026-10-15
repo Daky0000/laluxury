@@ -12,12 +12,15 @@ import {
   Lock,
   ShieldCheck,
   ShoppingBag,
+  Store,
+  Truck,
   Smartphone,
 } from "lucide-react";
 import { placeOrderAction, type CheckoutState } from "@/app/actions/checkout";
 import { formatPrice } from "@/lib/money";
 import { GHANA_REGIONS } from "@/lib/constants";
-import { MOMO_NETWORK_OPTIONS, momoRouteFor, type MomoNetworkId } from "@/lib/momo-networks";
+import { MOMO_NETWORK_OPTIONS, type MomoNetworkId } from "@/lib/momo-networks";
+import type { PickupLocation } from "@/lib/pickup-locations";
 import { cn } from "@/lib/utils";
 import { CheckoutSteps } from "./checkout-steps";
 
@@ -68,7 +71,7 @@ const DELIVERY_FIELDS = [
   "line2",
   "city",
   "region",
-  "postalCode",
+  "pickupLocationId",
   "shippingRateId",
   "password",
 ];
@@ -107,6 +110,7 @@ export function CheckoutForm({
   hasPreorderItems = false,
   freeShippingThreshold,
   directNetworks,
+  pickupLocations,
   items,
   discount,
 }: {
@@ -120,6 +124,8 @@ export function CheckoutForm({
   freeShippingThreshold: number | null;
   /** Networks that get the PIN prompt on the phone; the rest use Paystack's page. */
   directNetworks: MomoNetworkId[];
+  /** Where an order can be collected; empty hides the pickup option. */
+  pickupLocations: PickupLocation[];
   items: CheckoutSummaryItem[];
   discount: ReactNode;
 }) {
@@ -137,13 +143,17 @@ export function CheckoutForm({
   const [lastName, setLastName] = useState(defaults.lastName);
   const [phone, setPhone] = useState(defaults.phone);
   const [email, setEmail] = useState(defaults.email);
-  const [line1, setLine1] = useState(defaults.line1);
+  // One field takes a street address or a digital address (GA-123-4567).
+  const [line1, setLine1] = useState(defaults.line1 || defaults.postalCode);
   const [line2, setLine2] = useState(defaults.line2);
   const [city, setCity] = useState(defaults.city || "Accra");
   const [region, setRegion] = useState(defaults.region || "Greater Accra");
-  const [postalCode, setPostalCode] = useState(defaults.postalCode);
   const [selectedAddressId, setSelectedAddressId] = useState<string>(
     savedAddresses[0]?.id ?? "",
+  );
+  const [fulfilment, setFulfilment] = useState<"delivery" | "pickup">("delivery");
+  const [pickupLocationId, setPickupLocationId] = useState<string>(
+    pickupLocations.length === 1 ? pickupLocations[0].id : "",
   );
 
   const [rates, setRates] = useState<Rate[]>([]);
@@ -151,6 +161,7 @@ export function CheckoutForm({
   const [loadingRates, setLoadingRates] = useState(false);
   // Nothing is picked for the shopper: they name their network (or card) first.
   const [payWith, setPayWith] = useState<PayWith | null>(null);
+  const [momoRoute, setMomoRoute] = useState<"direct" | "hosted" | null>(null);
   // Follows the delivery phone until the shopper types a different wallet.
   const [momoPhone, setMomoPhone] = useState<string | null>(null);
   const [preorderDepositOption, setPreorderDepositOption] = useState<"deposit_50" | "full">(
@@ -164,11 +175,10 @@ export function CheckoutForm({
     setFirstName(addr.firstName);
     setLastName(addr.lastName);
     setPhone(addr.phone);
-    setLine1(addr.line1);
+    setLine1(addr.line1 || addr.postalCode);
     setLine2(addr.line2);
     setCity(addr.city);
     setRegion(addr.region);
-    setPostalCode(addr.postalCode);
   }
 
   useEffect(() => {
@@ -207,9 +217,13 @@ export function CheckoutForm({
     }
   }
 
+  const isPickup = fulfilment === "pickup";
+  const pickupLocation = pickupLocations.find((l) => l.id === pickupLocationId) ?? null;
   const visibleRates = region ? rates : [];
-  const selectedRate = visibleRates.find((r) => r.id === rateId);
+  const selectedRate = isPickup ? undefined : visibleRates.find((r) => r.id === rateId);
   const shippingTotal = selectedRate?.price ?? 0;
+  // Ready to price: a pickup point, or a delivery option for the address.
+  const fulfilmentChosen = isPickup ? Boolean(pickupLocation) : Boolean(selectedRate);
   const total = goodsTotal + shippingTotal;
   const depositDueNow =
     hasPreorderItems && preorderDepositOption === "deposit_50"
@@ -223,8 +237,21 @@ export function CheckoutForm({
       : 0;
 
   const errors = state?.fieldErrors ?? {};
+  // A network on the direct list offers a choice: phone prompt or Paystack's
+  // page. Any other network goes to Paystack's page with nothing to choose.
+  const directAllowed = payWith !== null && payWith !== "card" && directNetworks.includes(payWith);
   const route =
-    payWith === null ? null : payWith === "card" ? "card" : momoRouteFor(payWith, directNetworks);
+    payWith === null
+      ? null
+      : payWith === "card"
+        ? "card"
+        : !directAllowed
+          ? "mobile_money"
+          : momoRoute === "direct"
+            ? "direct_debit"
+            : momoRoute === "hosted"
+              ? "mobile_money"
+              : null;
   const blockingProblem = items.find((item) => item.stockProblem)?.stockProblem ?? null;
 
   function scrollToTop() {
@@ -241,8 +268,10 @@ export function CheckoutForm({
         return;
       }
     }
-    if (!selectedRate) {
-      setStepError("Choose a delivery option to continue.");
+    if (!fulfilmentChosen) {
+      setStepError(
+        isPickup ? "Choose where you will collect your order." : "Choose a delivery option to continue.",
+      );
       return;
     }
     setStepError(null);
@@ -290,7 +319,9 @@ export function CheckoutForm({
       ? `Send prompt · ${formatPrice(depositDueNow)}`
       : route === "mobile_money" || route === "card"
         ? `Pay now · ${formatPrice(depositDueNow)}`
-        : "Choose a payment method";
+        : payWith && payWith !== "card"
+          ? "Choose Direct Debit or Paystack"
+          : "Choose a payment method";
 
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -347,9 +378,11 @@ export function CheckoutForm({
           </div>
         ) : null}
         <div className="flex justify-between py-1.5 text-[var(--text-secondary)]">
-          <dt>Delivery</dt>
+          <dt>{isPickup ? "Pickup" : "Delivery"}</dt>
           <dd className="tabular-nums">
-            {!selectedRate
+            {isPickup
+              ? "Free"
+              : !selectedRate
               ? "Enter address"
               : shippingTotal === 0
                 ? "Free"
@@ -358,7 +391,7 @@ export function CheckoutForm({
         </div>
       </dl>
 
-      {freeGap > 0 ? (
+      {freeGap > 0 && !isPickup ? (
         <p className="pt-1 text-xs text-sage-600">
           Add {formatPrice(freeGap)} more for free delivery to your station
         </p>
@@ -502,265 +535,341 @@ export function CheckoutForm({
               </p>
             </section>
 
-            {/* Address */}
+            {/* How the order reaches the buyer */}
             <section className="mt-10">
-              <h2 className={sectionHeading}>Delivery address</h2>
-
-              {isSignedIn && savedAddresses.length > 0 ? (
-                <div className="mb-4 flex flex-wrap gap-2">
-                  {savedAddresses.map((addr) => {
-                    const active = selectedAddressId === addr.id;
-                    return (
-                      <button
-                        key={addr.id}
-                        type="button"
-                        onClick={() => applySavedAddress(addr)}
-                        className={cn(
-                          "min-h-10 border px-3 py-2 text-left text-sm transition-colors",
-                          active
-                            ? "border-[var(--accent)] bg-[var(--accent)]/10 font-medium"
-                            : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]",
-                        )}
-                      >
-                        {addr.line1}, {addr.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              <div className="grid gap-3.5 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="firstName" className={labelClass}>
-                    First name
-                  </label>
-                  <input
-                    id="firstName"
-                    name="firstName"
-                    required
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    autoComplete="given-name"
-                    className={field}
-                  />
-                  {errors.firstName ? (
-                    <p className="mt-1.5 text-sm text-danger">{errors.firstName}</p>
-                  ) : null}
-                </div>
-                <div>
-                  <label htmlFor="lastName" className={labelClass}>
-                    Last name
-                  </label>
-                  <input
-                    id="lastName"
-                    name="lastName"
-                    required
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    autoComplete="family-name"
-                    className={field}
-                  />
-                  {errors.lastName ? (
-                    <p className="mt-1.5 text-sm text-danger">{errors.lastName}</p>
-                  ) : null}
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label htmlFor="line1" className={labelClass}>
-                    Address
-                  </label>
-                  <input
-                    id="line1"
-                    name="line1"
-                    required
-                    value={line1}
-                    onChange={(e) => setLine1(e.target.value)}
-                    autoComplete="address-line1"
-                    placeholder="Street, area or house number"
-                    className={field}
-                  />
-                  {errors.line1 ? <p className="mt-1.5 text-sm text-danger">{errors.line1}</p> : null}
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label htmlFor="line2" className={labelClass}>
-                    Apartment or landmark <span className="text-[var(--text-muted)]">(optional)</span>
-                  </label>
-                  <input
-                    id="line2"
-                    name="line2"
-                    value={line2}
-                    onChange={(e) => setLine2(e.target.value)}
-                    autoComplete="address-line2"
-                    className={field}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="region" className={labelClass}>
-                    Region
-                  </label>
-                  <select
-                    id="region"
-                    name="region"
-                    required
-                    value={region}
-                    onChange={(event) => setRegion(event.target.value)}
-                    className={`${field} cursor-pointer`}
-                  >
-                    <option value="">Choose a region</option>
-                    {GHANA_REGIONS.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.region ? <p className="mt-1.5 text-sm text-danger">{errors.region}</p> : null}
-                </div>
-
-                <div>
-                  <label htmlFor="city" className={labelClass}>
-                    City or town
-                  </label>
-                  <input
-                    id="city"
-                    name="city"
-                    required
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    autoComplete="address-level2"
-                    className={field}
-                  />
-                  {errors.city ? <p className="mt-1.5 text-sm text-danger">{errors.city}</p> : null}
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label htmlFor="postalCode" className={labelClass}>
-                    Digital address <span className="text-[var(--text-muted)]">(optional)</span>
-                  </label>
-                  <input
-                    id="postalCode"
-                    name="postalCode"
-                    value={postalCode}
-                    onChange={(e) => setPostalCode(e.target.value)}
-                    autoComplete="postal-code"
-                    placeholder="GA-123-4567"
-                    className={field}
-                  />
-                </div>
+              <h2 className={sectionHeading}>Delivery or pickup</h2>
+              <input type="hidden" name="fulfilment" value={fulfilment} />
+              <div
+                className={cn("grid gap-3", pickupLocations.length > 0 && "grid-cols-2")}
+                role="radiogroup"
+                aria-label="Delivery or pickup"
+              >
+                {(
+                  [
+                    { id: "delivery", label: "Delivery", note: "To your address", Icon: Truck },
+                    ...(pickupLocations.length > 0
+                      ? [{ id: "pickup", label: "Pickup", note: "Collect it · Free", Icon: Store }]
+                      : []),
+                  ] as const
+                ).map(({ id, label, note, Icon }) => {
+                  const active = fulfilment === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => {
+                        setFulfilment(id as "delivery" | "pickup");
+                        setStepError(null);
+                      }}
+                      className={cn(
+                        "flex min-h-16 items-center gap-3 border px-4 py-3 text-left transition-colors",
+                        active
+                          ? "border-[var(--accent)] bg-[var(--accent)]/5"
+                          : "border-[var(--border-strong)] bg-[var(--surface-raised)] hover:bg-[var(--surface-sunken)]",
+                      )}
+                    >
+                      <Icon
+                        className={cn("h-5 w-5 shrink-0", active ? "text-[var(--accent)]" : "text-[var(--text-muted)]")}
+                        aria-hidden
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium">{label}</span>
+                        <span className="block text-xs text-[var(--text-muted)]">{note}</span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </section>
 
-            {/* Delivery method */}
-            <section className="mt-10">
-              <h2 className={sectionHeading}>Delivery method</h2>
-              {!region ? (
-                <p className="border border-[var(--border-subtle)] px-4 py-3.5 text-sm text-[var(--text-secondary)]">
-                  Choose a region to see delivery options.
-                </p>
-              ) : loadingRates ? (
-                <p className="flex items-center gap-2 border border-[var(--border-subtle)] px-4 py-3.5 text-sm text-[var(--text-secondary)]">
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  Checking options…
-                </p>
-              ) : visibleRates.length === 0 ? (
-                <p className="border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
-                  We do not deliver to that region yet. Contact us and we will sort something out.
-                </p>
-              ) : (
+            {isPickup ? (
+              <section className="mt-8">
+                <h3 className="mb-3 text-base font-medium">Pickup location</h3>
                 <div className={optionGroup}>
-                  {visibleRates.map((rate) => {
-                    const active = rateId === rate.id;
+                  {pickupLocations.map((location) => {
+                    const active = pickupLocationId === location.id;
                     return (
-                      <label key={rate.id} className={optionRow(active)}>
+                      <label key={location.id} className={optionRow(active)}>
                         <input
                           type="radio"
-                          name="shippingRateId"
-                          value={rate.id}
+                          name="pickupLocationId"
+                          value={location.id}
                           checked={active}
-                          onChange={() => setRateId(rate.id)}
+                          onChange={() => setPickupLocationId(location.id)}
                           className="sr-only"
                         />
                         {radioDot(active)}
                         <span className="min-w-0 flex-1 text-left text-sm">
-                          <span className="block">{rate.name}</span>
-                          {rate.estimatedDaysMin !== null ? (
-                            <span className="mt-0.5 block text-[var(--text-muted)]">
-                              {rate.estimatedDaysMin === 0
-                                ? "Today or tomorrow"
-                                : `${rate.estimatedDaysMin}–${rate.estimatedDaysMax} days`}
-                            </span>
+                          <span className="block font-medium">{location.name}</span>
+                          <span className="mt-0.5 block text-[var(--text-muted)]">
+                            {[location.address, location.city].filter(Boolean).join(", ")}
+                          </span>
+                          {location.hours ? (
+                            <span className="block text-[var(--text-muted)]">{location.hours}</span>
                           ) : null}
                         </span>
-                        <span className="shrink-0 whitespace-nowrap text-sm font-medium tabular-nums">
-                          {rate.price === 0 ? "Free" : formatPrice(rate.price)}
-                        </span>
+                        <span className="shrink-0 text-sm font-medium">Free</span>
                       </label>
                     );
                   })}
                 </div>
-              )}
-            </section>
+                {errors.pickupLocationId ? (
+                  <p className="mt-1.5 text-sm text-danger">{errors.pickupLocationId}</p>
+                ) : null}
 
-            {/* Extras, folded away so they do not slow anyone down */}
-            <section className="mt-8 flex flex-col gap-3">
-              <details className="group border border-[var(--border-subtle)] px-4 py-3">
-                <summary className="flex cursor-pointer list-none items-center justify-between text-sm">
-                  <span>
-                    Add an order note <span className="text-[var(--text-muted)]">(optional)</span>
-                  </span>
-                  <ChevronDown
-                    className="ml-auto h-4 w-4 text-[var(--text-muted)] transition-transform group-open:rotate-180"
-                    aria-hidden
-                  />
-                </summary>
-                <label htmlFor="customerNote" className="sr-only">
-                  Order note
-                </label>
-                <textarea
-                  id="customerNote"
-                  name="customerNote"
-                  rows={3}
-                  placeholder="Anything we should know about delivery or room access."
-                  className={`${field} mt-3 resize-y`}
-                />
-              </details>
-
-              {!isSignedIn ? (
-                <div className="border border-[var(--border-subtle)] px-4 py-3">
-                  <label className="flex min-h-9 cursor-pointer items-center gap-2.5 text-sm">
+                <h3 className="mb-3 mt-8 text-base font-medium">Who will collect it?</h3>
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="firstName" className={labelClass}>
+                      First name
+                    </label>
                     <input
-                      type="checkbox"
-                      name="createAccount"
-                      checked={createAccount}
-                      onChange={(event) => setCreateAccount(event.target.checked)}
-                      className="h-5 w-5 shrink-0 accent-[var(--accent)]"
+                      id="firstName"
+                      name="firstName"
+                      required
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      autoComplete="given-name"
+                      className={field}
                     />
-                    Save my details for next time
-                  </label>
-                  {createAccount ? (
-                    <div className="mt-3 max-w-md">
-                      <label htmlFor="password" className={labelClass}>
-                        Choose a password
-                      </label>
-                      <input
-                        id="password"
-                        name="password"
-                        type="password"
-                        minLength={8}
-                        required={createAccount}
-                        autoComplete="new-password"
-                        placeholder="8+ characters, a capital and a number"
-                        className={field}
-                      />
-                      {errors.password ? (
-                        <p className="mt-1.5 text-sm text-danger">{errors.password}</p>
-                      ) : null}
-                    </div>
-                  ) : null}
+                    {errors.firstName ? (
+                      <p className="mt-1.5 text-sm text-danger">{errors.firstName}</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <label htmlFor="lastName" className={labelClass}>
+                      Last name
+                    </label>
+                    <input
+                      id="lastName"
+                      name="lastName"
+                      required
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      autoComplete="family-name"
+                      className={field}
+                    />
+                  </div>
                 </div>
-              ) : null}
+              </section>
+            ) : (
+              <section className="mt-8">
+                <label htmlFor="shippingRateId" className="mb-1.5 block text-base font-medium">
+                  Delivery method
+                </label>
+                {loadingRates ? (
+                  <p className="flex items-center gap-2 border border-[var(--border-subtle)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    Checking options for {region}…
+                  </p>
+                ) : visibleRates.length === 0 ? (
+                  <p className="border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
+                    {region
+                      ? `We do not deliver to ${region} yet.${pickupLocations.length ? " Choose Pickup, or contact us." : " Contact us and we will sort something out."}`
+                      : "Choose your region below to see delivery options."}
+                  </p>
+                ) : (
+                  <select
+                    id="shippingRateId"
+                    name="shippingRateId"
+                    required
+                    value={rateId}
+                    onChange={(e) => setRateId(e.target.value)}
+                    className={`${field} cursor-pointer`}
+                  >
+                    {visibleRates.map((rate) => (
+                      <option key={rate.id} value={rate.id}>
+                        {rate.name} · {rate.price === 0 ? "Free" : formatPrice(rate.price)}
+                        {rate.estimatedDaysMin !== null
+                          ? ` · ${rate.estimatedDaysMin === 0 ? "today or tomorrow" : `${rate.estimatedDaysMin}–${rate.estimatedDaysMax} days`}`
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+                  Options and prices follow the region you choose below.
+                </p>
+
+                <h3 className="mb-3 mt-8 text-base font-medium">Delivery details</h3>
+                {isSignedIn && savedAddresses.length > 0 ? (
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {savedAddresses.map((addr) => {
+                      const active = selectedAddressId === addr.id;
+                      return (
+                        <button
+                          key={addr.id}
+                          type="button"
+                          onClick={() => applySavedAddress(addr)}
+                          className={cn(
+                            "min-h-10 border px-3 py-2 text-left text-sm transition-colors",
+                            active
+                              ? "border-[var(--accent)] bg-[var(--accent)]/10 font-medium"
+                              : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]",
+                          )}
+                        >
+                          {addr.line1}, {addr.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="firstName" className={labelClass}>
+                      First name
+                    </label>
+                    <input
+                      id="firstName"
+                      name="firstName"
+                      required
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      autoComplete="given-name"
+                      className={field}
+                    />
+                    {errors.firstName ? (
+                      <p className="mt-1.5 text-sm text-danger">{errors.firstName}</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <label htmlFor="lastName" className={labelClass}>
+                      Last name
+                    </label>
+                    <input
+                      id="lastName"
+                      name="lastName"
+                      required
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      autoComplete="family-name"
+                      className={field}
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label htmlFor="line1" className={labelClass}>
+                      Address / digital address
+                    </label>
+                    <input
+                      id="line1"
+                      name="line1"
+                      required
+                      value={line1}
+                      onChange={(e) => setLine1(e.target.value)}
+                      autoComplete="address-line1"
+                      placeholder="House number and street, or GA-123-4567"
+                      className={field}
+                    />
+                    {errors.line1 ? <p className="mt-1.5 text-sm text-danger">{errors.line1}</p> : null}
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label htmlFor="line2" className={labelClass}>
+                      Landmark <span className="text-[var(--text-muted)]">(optional)</span>
+                    </label>
+                    <input
+                      id="line2"
+                      name="line2"
+                      value={line2}
+                      onChange={(e) => setLine2(e.target.value)}
+                      autoComplete="address-line2"
+                      placeholder="Near the church, opposite the school…"
+                      className={field}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="region" className={labelClass}>
+                      Region
+                    </label>
+                    <select
+                      id="region"
+                      name="region"
+                      required
+                      value={region}
+                      onChange={(event) => setRegion(event.target.value)}
+                      className={`${field} cursor-pointer`}
+                    >
+                      <option value="">Choose a region</option>
+                      {GHANA_REGIONS.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.region ? <p className="mt-1.5 text-sm text-danger">{errors.region}</p> : null}
+                  </div>
+
+                  <div>
+                    <label htmlFor="city" className={labelClass}>
+                      City or town
+                    </label>
+                    <input
+                      id="city"
+                      name="city"
+                      required
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      autoComplete="address-level2"
+                      className={field}
+                    />
+                    {errors.city ? <p className="mt-1.5 text-sm text-danger">{errors.city}</p> : null}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            <section className="mt-8">
+              <label htmlFor="customerNote" className={labelClass}>
+                Note <span className="text-[var(--text-muted)]">(optional)</span>
+              </label>
+              <textarea
+                id="customerNote"
+                name="customerNote"
+                rows={3}
+                placeholder={
+                  isPickup
+                    ? "Anything we should know about your pickup."
+                    : "Anything we should know about delivery or access."
+                }
+                className={`${field} resize-y`}
+              />
             </section>
+
+            {!isSignedIn ? (
+              <label className="mt-4 flex min-h-9 cursor-pointer items-center gap-2.5 text-sm">
+                <input
+                  type="checkbox"
+                  name="createAccount"
+                  checked={createAccount}
+                  onChange={(event) => setCreateAccount(event.target.checked)}
+                  className="h-5 w-5 shrink-0 accent-[var(--accent)]"
+                />
+                Save my details for next time
+              </label>
+            ) : null}
+            {!isSignedIn && createAccount ? (
+              <div className="mt-3 max-w-md">
+                <label htmlFor="password" className={labelClass}>
+                  Choose a password
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  minLength={8}
+                  required
+                  autoComplete="new-password"
+                  placeholder="8+ characters, a capital and a number"
+                  className={field}
+                />
+                {errors.password ? <p className="mt-1.5 text-sm text-danger">{errors.password}</p> : null}
+              </div>
+            ) : null}
 
             {stepError || blockingProblem ? (
               <p role="alert" className="mt-6 text-sm text-danger">
@@ -792,15 +901,24 @@ export function CheckoutForm({
             <dl className="divide-y divide-[var(--border-subtle)] border border-[var(--border-strong)] bg-[var(--surface-raised)] px-4 text-sm">
               {[
                 { label: "Contact", value: `${email} · ${phone}` },
-                {
-                  label: "Deliver to",
-                  value: `${firstName} ${lastName}, ${line1}${line2 ? `, ${line2}` : ""}, ${city}, ${region}`,
-                },
+                isPickup
+                  ? {
+                      label: "Pickup",
+                      value: pickupLocation
+                        ? `${firstName} ${lastName} collects from ${pickupLocation.name}${pickupLocation.address ? `, ${pickupLocation.address}` : ""}`
+                        : "—",
+                    }
+                  : {
+                      label: "Deliver to",
+                      value: `${firstName} ${lastName}, ${line1}${line2 ? ` (${line2})` : ""}, ${city}, ${region}`,
+                    },
                 {
                   label: "Method",
-                  value: selectedRate
-                    ? `${selectedRate.name} · ${selectedRate.price === 0 ? "Free" : formatPrice(selectedRate.price)}`
-                    : "—",
+                  value: isPickup
+                    ? "Pickup · Free"
+                    : selectedRate
+                      ? `${selectedRate.name} · ${selectedRate.price === 0 ? "Free" : formatPrice(selectedRate.price)}`
+                      : "—",
                 },
               ].map((row) => (
                 <div key={row.label} className="flex items-start gap-3 py-3">
@@ -882,14 +1000,17 @@ export function CheckoutForm({
                           name="payWith"
                           value={option.id}
                           checked={active}
-                          onChange={() => setPayWith(option.id)}
+                          onChange={() => {
+                            setPayWith(option.id);
+                            setMomoRoute(null);
+                          }}
                           className="sr-only"
                         />
                         {radioDot(active)}
                         <span className="min-w-0 flex-1 text-left text-sm">
                           <span className="block font-medium">{option.label}</span>
                           <span className="mt-0.5 block text-[var(--text-muted)]">
-                            {direct ? "Approve with a prompt on your phone" : "Pay on a secure payment page"}
+                            {direct ? "Direct Debit or Paystack" : "Paystack secure page"}
                           </span>
                         </span>
                         <span
@@ -899,8 +1020,60 @@ export function CheckoutForm({
                         />
                       </label>
 
+                      {/* Two ways to pay on this network: let the buyer choose. */}
+                      {active && direct ? (
+                        <div className="border-t border-[var(--border-subtle)] bg-[var(--surface-sunken)] px-4 pt-4">
+                          <p className="mb-2 text-sm text-[var(--text-secondary)]">
+                            How would you like to pay with {option.label}?
+                          </p>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {(
+                              [
+                                {
+                                  id: "direct",
+                                  title: "Direct Debit",
+                                  note: "We send a prompt to your phone. Approve with your PIN.",
+                                },
+                                {
+                                  id: "hosted",
+                                  title: "Paystack",
+                                  note: "Enter your number on Paystack's secure page.",
+                                },
+                              ] as const
+                            ).map((choice) => {
+                              const chosen = momoRoute === choice.id;
+                              return (
+                                <label
+                                  key={choice.id}
+                                  className={cn(
+                                    "flex cursor-pointer items-start gap-2.5 border px-3 py-3 transition-colors",
+                                    chosen
+                                      ? "border-[var(--accent)] bg-[var(--surface-raised)]"
+                                      : "border-[var(--border-strong)] hover:bg-[var(--surface-raised)]",
+                                  )}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="momoRoute"
+                                    value={choice.id}
+                                    checked={chosen}
+                                    onChange={() => setMomoRoute(choice.id)}
+                                    className="sr-only"
+                                  />
+                                  <span className="mt-0.5">{radioDot(chosen)}</span>
+                                  <span className="text-sm">
+                                    <span className="block font-medium">{choice.title}</span>
+                                    <span className="block text-[var(--text-muted)]">{choice.note}</span>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
                       {active && route === "direct_debit" ? (
-                        <div className="border-t border-[var(--border-subtle)] bg-[var(--surface-sunken)] px-4 py-4">
+                        <div className="bg-[var(--surface-sunken)] px-4 py-4">
                           <label
                             htmlFor="momoPhone"
                             className="mb-1.5 flex items-center gap-1.5 text-sm text-[var(--text-secondary)]"
@@ -933,8 +1106,14 @@ export function CheckoutForm({
                         </div>
                       ) : null}
 
+                      {active && !direct ? <input type="hidden" name="momoRoute" value="hosted" /> : null}
                       {active && route === "mobile_money" ? (
-                        <p className="flex items-start gap-2.5 border-t border-[var(--border-subtle)] bg-[var(--surface-sunken)] px-4 py-4 text-sm leading-relaxed text-[var(--text-secondary)]">
+                        <p
+                          className={cn(
+                            "flex items-start gap-2.5 bg-[var(--surface-sunken)] px-4 py-4 text-sm leading-relaxed text-[var(--text-secondary)]",
+                            !direct && "border-t border-[var(--border-subtle)]",
+                          )}
+                        >
                           <ExternalLink className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                           <span>
                             After you select Pay now, you will go to our payment partner&apos;s
@@ -988,7 +1167,7 @@ export function CheckoutForm({
               </button>
               <button
                 type="submit"
-                disabled={pending || !route || !selectedRate || Boolean(blockingProblem)}
+                disabled={pending || !route || !fulfilmentChosen || Boolean(blockingProblem)}
                 className={primaryButton}
               >
                 {pending ? (
