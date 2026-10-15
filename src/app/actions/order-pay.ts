@@ -230,6 +230,14 @@ export async function customerSubmitMomoOtpAction(args: {
   reference: string;
   otp: string;
 }): Promise<CustomerMomoPushResult> {
+  const payment = await db.payment.findUnique({
+    where: { reference: args.reference },
+    select: { orderId: true, status: true },
+  });
+  if (!payment || payment.orderId !== args.orderId || payment.status !== "PENDING") {
+    return { ok: false, error: "This payment is no longer awaiting a code." };
+  }
+
   try {
     const res = await submitMobileMoneyOtp({
       reference: args.reference,

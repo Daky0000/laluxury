@@ -616,6 +616,19 @@ export function CheckoutForm({
             {errors.momoPhone ? (
               <p className="mt-1.5 text-sm text-danger">{errors.momoPhone}</p>
             ) : null}
+            <label
+              htmlFor="momoProvider"
+              className="mb-2 mt-4 block text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]"
+            >
+              Network
+            </label>
+            {/* A ported number keeps its old prefix, so the guess can be wrong. */}
+            <select id="momoProvider" name="momoProvider" defaultValue="auto" className={field}>
+              <option value="auto">Detect from number</option>
+              <option value="mtn">MTN MoMo</option>
+              <option value="vod">Telecel Cash</option>
+              <option value="atl">AT Money</option>
+            </select>
           </div>
         ) : null}
 

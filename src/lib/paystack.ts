@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "./env";
 import { getIntegrations, activePaystack } from "./integrations";
+import { networkOf, normalisePhone } from "./phone";
 
 /**
  * Paystack client.
@@ -44,11 +45,16 @@ async function call<T>(
   });
 
   const payload = (await response.json().catch(() => null)) as
-    | { status: boolean; message: string; data: T }
+    | { status: boolean; message: string; data: T & { message?: string; gateway_response?: string } }
     | null;
 
   if (!response.ok || !payload?.status) {
-    const rawMsg = payload?.message ?? `Paystack request failed (${response.status}).`;
+    // A refused charge says why in `data`; "Charge attempted" on top is noise.
+    const rawMsg =
+      payload?.data?.message ??
+      payload?.data?.gateway_response ??
+      payload?.message ??
+      `Paystack request failed (${response.status}).`;
     const friendlyMsg =
       rawMsg.toLowerCase().includes("invalid key") || response.status === 401
         ? "Paystack payment processor error: The API key was rejected by Paystack (Invalid key). Please verify your credentials or select another payment option."
@@ -192,30 +198,29 @@ export const MOMO_PROVIDER_LABELS: Record<MomoProvider, string> = {
 };
 
 /**
- * Auto-detects the Ghanaian mobile money network from standard phone prefixes:
- * - MTN: 024, 054, 055, 059, 025
- * - Telecel (Vodafone): 020, 050
- * - AT (AirtelTigo): 027, 057, 026, 056
+ * The Paystack provider code for a Ghana number, from the NCA prefix table in
+ * `phone.ts` (which also knows 053). Ported numbers keep their old prefix, so
+ * checkout lets the shopper name the network; this is only the default.
  */
 export function detectGhanaMomoProvider(rawPhone: string): MomoProvider {
-  const digits = rawPhone.replace(/\D/g, "");
-  // Normalise 233XXXXXXXXX -> 0XXXXXXXXX
-  const local = digits.startsWith("233") && digits.length >= 12
-    ? "0" + digits.slice(3)
-    : digits;
-
-  const prefix = local.slice(0, 3);
-  if (["020", "050"].includes(prefix)) return "vod";
-  if (["027", "057", "026", "056"].includes(prefix)) return "atl";
-  return "mtn";
+  switch (networkOf(normaliseGhanaMomoPhone(rawPhone))) {
+    case "Telecel":
+      return "vod";
+    case "AirtelTigo":
+      return "atl";
+    default:
+      return "mtn";
+  }
 }
 
 /** Normalises a Ghana number into 0XXXXXXXXX format expected by Paystack Charge API. */
 export function normaliseGhanaMomoPhone(rawPhone: string): string {
-  const digits = rawPhone.replace(/\D/g, "");
-  if (digits.startsWith("233") && digits.length >= 12) {
-    return "0" + digits.slice(3, 12);
-  }
+  // "+233 (0)24 ..." keeps a stray trunk zero, which would shift every digit.
+  const tidied = (rawPhone ?? "").trim().replace(/^(\+?233)[\s-]*\(?0\)?/, "$1");
+  const canonical = normalisePhone(tidied);
+  if (canonical && /^233[0-9]{9}$/.test(canonical)) return `0${canonical.slice(3)}`;
+
+  const digits = tidied.replace(/\D/g, "");
   if (digits.startsWith("0") && digits.length >= 10) {
     return digits.slice(0, 10);
   }

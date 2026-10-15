@@ -9,6 +9,7 @@ import {
   MOMO_PROVIDER_LABELS,
 } from "@/lib/paystack";
 import { markOrderPaid, markPaymentFailed } from "@/lib/orders";
+import { isFinalFailure } from "@/lib/checkout-payment";
 import { getIntegrations, activePaystack } from "@/lib/integrations";
 
 export const runtime = "nodejs";
@@ -125,7 +126,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    if (verified.status === "failed" || verified.status === "abandoned") {
+    // The app polls from the moment the Paystack page opens, when Paystack
+    // already reads "abandoned"; only a settled failure is recorded.
+    if (isFinalFailure(verified.status, payment.createdAt)) {
       await markPaymentFailed({
         orderId: payment.orderId,
         reference,
@@ -176,9 +179,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const pending = await db.payment.findUnique({
+      where: { reference: String(reference).trim() },
+      select: { status: true, provider: true },
+    });
+    if (!pending || pending.provider !== "paystack" || pending.status !== "PENDING") {
+      return NextResponse.json({ ok: false, error: "This payment is no longer awaiting a code." }, { status: 404 });
+    }
+
     const res = await submitMobileMoneyOtp({
-      reference: reference.trim(),
-      otp: otp.trim(),
+      reference: String(reference).trim(),
+      otp: String(otp).trim(),
     });
 
     return NextResponse.json({

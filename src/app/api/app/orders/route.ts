@@ -745,6 +745,22 @@ export const POST = withApiAuth(async (request: Request) => {
     const providerLabel = MOMO_PROVIDER_LABELS[provider] || "Mobile Money";
 
     try {
+        // The row goes in before the charge, so a webhook or OTP for this
+        // reference always finds it. It stays PENDING until the webhook or
+        // verification endpoint sees the money.
+        await db.payment.create({
+            data: {
+              orderId: order.id,
+              reference,
+              provider: "paystack",
+              channel: "mobile_money",
+              mobileMoneyNumber: momoPhone,
+              amount: chargeAmount,
+              currency: order.currency,
+              status: "PENDING",
+            },
+          });
+
         const chargeRes = await chargeMobileMoney({
           email: data.customer.email.toLowerCase().trim(),
           amount: chargeAmount,
@@ -759,21 +775,13 @@ export const POST = withApiAuth(async (request: Request) => {
             chargeScope: depositAmount ? "DEPOSIT_50" : "FULL",
           },
         });
-
-        // A charge response is not proof of settlement. Store it as pending;
-        // the webhook or verification endpoint is the only path to SUCCESS.
-        await db.payment.create({
-            data: {
-              orderId: order.id,
-              reference,
-              provider: "paystack",
-              channel: "mobile_money",
-              mobileMoneyNumber: momoPhone,
-              amount: chargeAmount,
-              currency: order.currency,
-              status: "PENDING",
-            },
-          });
+        if (chargeRes.status === "failed") {
+          throw new Error(
+            chargeRes.display_text ||
+              chargeRes.message ||
+              "That MoMo number could not be charged. Check the number and network, or choose another payment method.",
+          );
+        }
 
         await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
           console.error("[notify] order.placed SMS error:", err),
@@ -791,6 +799,9 @@ export const POST = withApiAuth(async (request: Request) => {
               `A prompt has been sent to ${momoPhone}. Please check your approvals and enter your 4-digit MoMo PIN to authorize.`,
         };
     } catch (chargeErr) {
+        await db.payment
+          .updateMany({ where: { reference, status: "PENDING" }, data: { status: "FAILED" } })
+          .catch(() => {});
         await cancelOrder(order.id, "Payment gateway initialization failed.", null, { notify: false }).catch((err) =>
           console.error("[app.checkout] cancelOrder after charge error:", err),
         );

@@ -72,6 +72,8 @@ export async function reconcilePaystackPayment(
     // the shopper is still looking at. Only the shopper's own page settles it
     // as failed; background checks leave it for the webhook or expiry.
     if (options.recordFailure === false) return "pending";
+    const row = await db.payment.findUnique({ where: { reference }, select: { createdAt: true } });
+    if (!isFinalFailure(transaction.status, row?.createdAt ?? null)) return "pending";
     await markPaymentFailed({
       orderId,
       reference,
@@ -81,6 +83,21 @@ export async function reconcilePaystackPayment(
   }
 
   return "pending";
+}
+
+/**
+ * How long an "abandoned" payment is given before it counts as failed. Paystack
+ * reports "abandoned" for a hosted page the shopper is still filling in and for
+ * a MoMo prompt not yet approved, so reading it as failure straight away told
+ * people their payment failed while they were still paying.
+ */
+const ABANDONED_GRACE_MS = 20 * 60 * 1000;
+
+/** True when a provider status means the attempt is over and unpaid. */
+export function isFinalFailure(status: string, startedAt: Date | null): boolean {
+  if (status === "failed") return true;
+  if (status !== "abandoned") return false;
+  return !startedAt || Date.now() - startedAt.getTime() > ABANDONED_GRACE_MS;
 }
 
 /** How far back an unsettled payment is still worth asking the provider about. */

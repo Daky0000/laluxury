@@ -48,6 +48,7 @@ const schema = z.object({
   shippingRateId: z.string().optional(),
   paymentMethod: z.enum(["direct_debit", "mobile_money", "bank_card"]).optional(),
   momoPhone: z.string().trim().optional(),
+  momoProvider: z.enum(["auto", "mtn", "vod", "atl"]).optional(),
   preorderDepositOption: z.enum(["full", "deposit_50"]).optional(),
   customerNote: z.string().optional(),
   createAccount: z.boolean().optional(),
@@ -71,6 +72,7 @@ export async function placeOrderAction(
     shippingRateId: formData.get("shippingRateId") || undefined,
     paymentMethod: formData.get("paymentMethod") || undefined,
     momoPhone: formData.get("momoPhone") || undefined,
+    momoProvider: formData.get("momoProvider") || undefined,
     preorderDepositOption: formData.get("preorderDepositOption") || undefined,
     customerNote: formData.get("customerNote") || undefined,
     createAccount: formData.get("createAccount") === "on",
@@ -235,11 +237,15 @@ export async function placeOrderAction(
           where: { reference },
           data: { channel: "mobile_money", mobileMoneyNumber: momoPhone },
         });
-        await chargeMobileMoney({
+        const charge = await chargeMobileMoney({
           email,
           amount: chargeAmount,
           phone: momoPhone,
-          provider: detectGhanaMomoProvider(momoPhone),
+          // Ported numbers keep their old prefix, so the shopper's choice wins.
+          provider:
+            data.momoProvider && data.momoProvider !== "auto"
+              ? data.momoProvider
+              : detectGhanaMomoProvider(momoPhone),
           reference,
           metadata: {
             orderId: order.id,
@@ -248,10 +254,21 @@ export async function placeOrderAction(
             channel: "direct_debit",
           },
         });
+        if (charge.status === "failed") {
+          throw new Error(
+            charge.display_text ||
+              charge.message ||
+              "That MoMo number could not be charged. Check the number and network, or choose another payment method.",
+          );
+        }
         await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
           console.error("[notify] web direct debit order.placed error:", err),
         );
-        redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}`;
+        // Telecel (and sometimes MTN) sends a code first; no PIN prompt appears
+        // until it is entered, so the confirmation page has to ask for it.
+        redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}${
+          charge.status === "send_otp" ? "&step=otp" : ""
+        }`;
       } else {
         const init = await initializeTransaction({
               email,
@@ -281,6 +298,9 @@ export async function placeOrderAction(
       }
     } catch (gatewayError) {
       // Compensate: cancel order immediately to release reserved stock and restore discounts
+      await db.payment
+        .updateMany({ where: { reference, status: "PENDING" }, data: { status: "FAILED" } })
+        .catch(() => {});
       const { cancelOrder } = await import("@/lib/orders");
       await cancelOrder(order.id, "Payment gateway initialization failed.", null, { notify: false }).catch((err) =>
         console.error("[checkout] failed to cancel order after gateway error:", err),

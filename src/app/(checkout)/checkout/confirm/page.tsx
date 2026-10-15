@@ -13,6 +13,7 @@ import { getSettings } from "@/lib/settings";
 import { ProductTile } from "@/components/shop/product-tile";
 import { Footer } from "@/components/shop/footer";
 import { PaymentStatusRefresher } from "@/components/shop/payment-status-refresher";
+import { MomoOtpForm } from "@/components/shop/momo-otp-form";
 import { LinkButton } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Order confirmation" };
@@ -342,8 +343,11 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
 
   // Direct Debit sends a MoMo prompt straight to the phone; nothing moves
   // until the shopper approves it there.
-  const awaitsPhoneApproval =
-    fresh.paymentMethod === "direct_debit" || latestPayment?.channel === "mobile_money";
+  // Only a direct charge records the wallet up front; a hosted Paystack page
+  // asks for it there, so no prompt has been sent on its behalf yet.
+  const directCharge = fresh.payments.find((p) => p.reference === reference && p.mobileMoneyNumber);
+  const awaitsPhoneApproval = Boolean(directCharge);
+  const codeRequested = (Array.isArray(params.step) ? params.step[0] : params.step) === "otp";
 
   return (
     <Shell
@@ -357,10 +361,10 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
               Check your approvals
             </p>
             <p className="mt-2 text-[var(--text-secondary)]">
-              A payment request for {formatPrice(latestPayment?.amount ?? fresh.total)} was sent to{" "}
-              {latestPayment?.mobileMoneyNumber ? (
+              A payment request for {formatPrice(directCharge?.amount ?? fresh.total)} was sent to{" "}
+              {directCharge?.mobileMoneyNumber ? (
                 <strong className="font-medium text-[var(--text-primary)]">
-                  {formatPhone(latestPayment.mobileMoneyNumber)}
+                  {formatPhone(directCharge.mobileMoneyNumber)}
                 </strong>
               ) : (
                 "your phone"
@@ -368,8 +372,15 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
               . Please check your approvals and approve it.
             </p>
             <p className="mt-2 text-[var(--text-secondary)]">
+              No pop-up? On MTN dial *170#, choose My Wallet, then My Approvals. On Telecel,
+              look for an SMS code and enter it below.
+            </p>
+            <p className="mt-2 text-[var(--text-secondary)]">
               Your bag is saved, so you can go back and choose another payment method at any time.
             </p>
+            {directCharge && directCharge.status === "PENDING" ? (
+              <MomoOtpForm orderId={fresh.id} reference={reference} required={codeRequested} />
+            ) : null}
           </div>
         ) : null
       }
