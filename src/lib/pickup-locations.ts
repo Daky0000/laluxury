@@ -93,3 +93,11 @@ export function pickupAddressLines(location: PickupLocation): { line1: string; l
     line2: [location.address, location.hours].filter(Boolean).join(" · ") || null,
   };
 }
+
+/**
+ * True for an address written for a pickup order. Uses the same wording test
+ * as the app order API, so older "(Self-Pickup)" orders are caught too.
+ */
+export function isPickupAddress(line1: string | null | undefined): boolean {
+  return /pickup|showroom/i.test(line1 ?? "");
+}

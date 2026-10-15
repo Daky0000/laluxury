@@ -5,6 +5,7 @@ import { computeCartTotals, readCart } from "@/lib/cart";
 import { currentUser } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { formatPhone } from "@/lib/phone";
+import { isPickupAddress } from "@/lib/pickup-locations";
 import { CheckoutForm, type CheckoutDefaults } from "@/components/shop/checkout-form";
 import { DiscountForm } from "@/components/shop/cart-lines";
 
@@ -23,12 +24,19 @@ export default async function CheckoutPage() {
     getSettings(),
   ]);
 
+  // Every order's address is kept on the account, pickup orders included, so
+  // the list is cleaned: pickup points are not delivery addresses, and the
+  // same address used for several orders is offered once.
   const savedAddresses = user
-    ? await db.address.findMany({
-        where: { userId: user.id },
-        orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
-        take: 6,
-      })
+    ? dedupeAddresses(
+        (
+          await db.address.findMany({
+            where: { userId: user.id },
+            orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
+            take: 40,
+          })
+        ).filter((a) => !isPickupAddress(a.line1)),
+      ).slice(0, 6)
     : [];
 
   // A bag coming back from an unfinished payment keeps what was typed last time,
@@ -39,7 +47,11 @@ export default async function CheckoutPage() {
         select: { email: true, shippingAddress: true },
       })
     : null;
-  const lastAddress = earlierOrder?.shippingAddress ?? savedAddresses[0] ?? null;
+  const earlierDelivery =
+    earlierOrder?.shippingAddress && !isPickupAddress(earlierOrder.shippingAddress.line1)
+      ? earlierOrder.shippingAddress
+      : null;
+  const lastAddress = earlierDelivery ?? savedAddresses[0] ?? null;
 
   const defaults: CheckoutDefaults = {
     email: user?.email ?? earlierOrder?.email ?? cart.email ?? "",
@@ -94,4 +106,17 @@ export default async function CheckoutPage() {
       />
     </div>
   );
+}
+
+/** Keeps the first of each address that differs only by which order saved it. */
+function dedupeAddresses<T extends { line1: string; line2: string | null; city: string; region: string }>(
+  addresses: T[],
+): T[] {
+  const seen = new Set<string>();
+  return addresses.filter((a) => {
+    const key = [a.line1, a.line2 ?? "", a.city, a.region].map((s) => s.trim().toLowerCase()).join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

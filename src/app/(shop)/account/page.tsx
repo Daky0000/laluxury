@@ -1,3 +1,4 @@
+import { isPickupAddress } from "@/lib/pickup-locations";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -27,7 +28,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const { notificationsBefore } = await searchParams;
   const inbox = await listNotifications(user.id, notificationsBefore, 10);
 
-  const [orders, wishlist, addresses] = await Promise.all([
+  const [orders, wishlist, allAddresses] = await Promise.all([
     db.order.findMany({
       where: { userId: user.id },
       orderBy: { placedAt: "desc" },
@@ -48,8 +49,20 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         },
       },
     }),
-    db.address.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 4 }),
+    db.address.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 40 }),
   ]);
+
+  // Pickup points and repeats of the same address are not worth listing.
+  const seenAddresses = new Set<string>();
+  const addresses = allAddresses
+    .filter((a) => !isPickupAddress(a.line1))
+    .filter((a) => {
+      const key = [a.line1, a.line2 ?? "", a.city, a.region].join("|").toLowerCase();
+      if (seenAddresses.has(key)) return false;
+      seenAddresses.add(key);
+      return true;
+    })
+    .slice(0, 4);
 
   const { supportEmail } = await getSettings();
   const paid = orders.filter((o) => o.paymentStatus === "SUCCESS");
