@@ -10,6 +10,7 @@ import { ORDER_STATUS_LABELS } from "@/lib/constants";
 import { Card, Badge, Alert, EmptyState } from "@/components/ui";
 import { Thumb } from "@/components/shop/photo";
 import { OrderPaymentCard } from "@/components/shop/order-payment-card";
+import { getSettings } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: "Track an order",
@@ -59,6 +60,7 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
     }
   }
   const accessToken = order ? orderAccessToken(order.orderNumber) : "";
+  const { momoDirectNetworks } = await getSettings();
 
   const searched = Boolean(orderNumber);
   const currentStep = order ? STEPS.indexOf(order.status as (typeof STEPS)[number]) : -1;
@@ -251,6 +253,8 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
             <OrderPaymentCard
               orderId={order.id}
               orderNumber={order.orderNumber}
+              accessToken={accessToken}
+              directNetworks={momoDirectNetworks}
               defaultPhone={order.phone ?? ""}
               amountDueMinor={initialAmountDue}
               isPreorderDeposit={isPreorderDepositDue}
@@ -263,6 +267,8 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
             <OrderPaymentCard
               orderId={order.id}
               orderNumber={order.orderNumber}
+              accessToken={accessToken}
+              directNetworks={momoDirectNetworks}
               defaultPhone={order.phone ?? ""}
               amountDueMinor={balanceRemaining}
               isPreorderDeposit={false}

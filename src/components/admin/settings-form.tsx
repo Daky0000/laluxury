@@ -10,6 +10,7 @@ import {
 } from "@/lib/nav-config";
 import type { StoreSettings } from "@/lib/settings";
 import { LANDING_PAGES, type LandingPage } from "@/lib/landing";
+import { MOMO_NETWORK_OPTIONS } from "@/lib/momo-networks";
 import { Card, Field, Alert } from "@/components/ui";
 import { ImageUrlField } from "./image-url-field";
 import { toMajorUnits } from "@/lib/money";
@@ -114,6 +115,32 @@ export function SettingsForm({ settings }: { settings: StoreSettings }) {
               All checkout purchases on both web & mobile app are simulated. No real money moves. Perfect for testing orders, invoices, and workflows.
             </p>
           </label>
+        </div>
+
+        <div className="border-t border-[var(--border-subtle)] pt-4">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+            Direct phone prompt (website &amp; app)
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
+            Ticked networks get the MoMo PIN prompt sent straight to the customer&apos;s phone.
+            Unticked networks are still accepted: the customer finishes on Paystack&apos;s secure
+            payment page instead. Untick a network if its customers report prompts not arriving.
+          </p>
+          <input type="hidden" name="momoNetworksConfigured" value="1" />
+          <div className="mt-3 flex flex-wrap gap-4">
+            {MOMO_NETWORK_OPTIONS.map((network) => (
+              <label key={network.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="momoDirectNetworks"
+                  value={network.id}
+                  defaultChecked={settings.momoDirectNetworks.includes(network.id)}
+                  className="h-4 w-4 accent-[var(--accent)]"
+                />
+                {network.label}
+              </label>
+            ))}
+          </div>
         </div>
       </Card>
 

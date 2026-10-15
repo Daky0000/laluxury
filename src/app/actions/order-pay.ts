@@ -1,7 +1,8 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { canViewOrder } from "@/lib/order-access";
+import { getCommerceSettings } from "@/lib/settings";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getIntegrations, isReady, activePaystack } from "@/lib/integrations";
@@ -30,23 +31,34 @@ export type CustomerMomoPushResult = {
 };
 
 /**
- * 1. Customer initiates online checkout payment via Paystack (Card, MoMo, Bank)
+ * The tracking page opens with a signed link, the order email, or the owner's
+ * session; paying from it needs the same proof, not just an order id.
  */
-export async function customerPayOnlineAction(formData: FormData): Promise<void> {
-  const orderId = String(formData.get("orderId") ?? "");
-  const paymentMethod = String(formData.get("paymentMethod") ?? "mobile_money");
-  if (!(["mobile_money", "bank_card"] as const).includes(paymentMethod as "mobile_money" | "bank_card")) {
-    throw new Error("Choose a valid payment method.");
+async function loadPayableOrder(orderId: string, token: string) {
+  if (!orderId) return null;
+  const order = await db.order.findUnique({ where: { id: orderId } });
+  if (!order) return null;
+  return (await canViewOrder(order, { token })) ? order : null;
+}
+
+/**
+ * 1. Customer pays on Paystack's hosted page (card, or a MoMo network that
+ * does not take the direct prompt). Returns the page to open, or why not.
+ */
+export async function customerPayOnlineAction(args: {
+  orderId: string;
+  token: string;
+  paymentMethod: "mobile_money" | "bank_card";
+}): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const paymentMethod = args.paymentMethod;
+  if (paymentMethod !== "mobile_money" && paymentMethod !== "bank_card") {
+    return { ok: false, error: "Choose a valid payment method." };
   }
-  if (!orderId) throw new Error("Order ID is required.");
 
-  const order = await db.order.findUnique({
-    where: { id: orderId },
-  });
-
-  if (!order) throw new Error("Order not found.");
+  const order = await loadPayableOrder(args.orderId, args.token);
+  if (!order) return { ok: false, error: "We could not open this order. Reload the page and try again." };
   if (order.status === "CANCELLED" || order.status === "REFUNDED") {
-    throw new Error("This order has been cancelled or refunded.");
+    return { ok: false, error: "This order has been cancelled or refunded." };
   }
 
   // Calculate amount:
@@ -60,12 +72,17 @@ export async function customerPayOnlineAction(formData: FormData): Promise<void>
       ? order.depositAmount
       : order.total;
 
+  if (order.paidAt && (!order.depositAmount || order.balancePaidAt || order.depositAmount >= order.total)) {
+    return { ok: false, error: "This order is already paid. Refresh the order status." };
+  }
   if (amountToPay <= 0) {
-    throw new Error("No outstanding balance on this order.");
+    return { ok: false, error: "No outstanding balance on this order." };
   }
 
   const integrations = await getIntegrations();
-  const paystackConfigured = isReady(integrations, "paystack");
+  if (!isReady(integrations, "paystack")) {
+    return { ok: false, error: "Online payment is temporarily unavailable. Please try again shortly." };
+  }
 
   const reference = `${order.orderNumber}-${isBalancePayment ? "BAL" : "PAY"}-${Date.now().toString(36).toUpperCase()}`;
 
@@ -81,7 +98,7 @@ export async function customerPayOnlineAction(formData: FormData): Promise<void>
     },
   });
 
-  if (paystackConfigured) {
+  try {
     const init = await initializeTransaction({
       email: order.email,
       amount: amountToPay,
@@ -95,10 +112,17 @@ export async function customerPayOnlineAction(formData: FormData): Promise<void>
         source: "customer_tracking",
       },
     });
-
-    redirect(init.authorization_url);
-  } else {
-    throw new Error("Online payment gateway is currently unavailable. Please contact concierge support.");
+    return { ok: true, url: init.authorization_url };
+  } catch (error) {
+    await db.payment.update({ where: { reference }, data: { status: "FAILED" } }).catch(() => {});
+    const raw = error instanceof Error ? error.message : "";
+    return {
+      ok: false,
+      error:
+        raw && !/key/i.test(raw)
+          ? raw.replace(/Paystack/gi, "payment provider")
+          : "We could not open the payment page. Please try again shortly.",
+    };
   }
 }
 
@@ -107,15 +131,18 @@ export async function customerPayOnlineAction(formData: FormData): Promise<void>
  */
 export async function customerInitiateMomoPushAction(args: {
   orderId: string;
+  token: string;
   phone: string;
-  provider?: "auto" | MomoProvider;
+  provider: MomoProvider;
 }): Promise<CustomerMomoPushResult> {
-  const order = await db.order.findUnique({
-    where: { id: args.orderId },
-  });
+  const order = await loadPayableOrder(args.orderId, args.token);
 
   if (!order) {
-    return { ok: false, error: "Order not found." };
+    return { ok: false, error: "We could not open this order. Reload the page and try again." };
+  }
+  const { momoDirectNetworks } = await getCommerceSettings();
+  if (!momoDirectNetworks.includes(args.provider)) {
+    return { ok: false, error: "This network pays on the secure payment page. Choose Pay online." };
   }
   if (order.status === "CANCELLED" || order.status === "REFUNDED") {
     return { ok: false, error: "This order has been cancelled or refunded." };
@@ -132,10 +159,7 @@ export async function customerInitiateMomoPushAction(args: {
     };
   }
 
-  const provider: MomoProvider =
-    !args.provider || args.provider === "auto"
-      ? detectGhanaMomoProvider(cleanPhone)
-      : args.provider;
+  const provider: MomoProvider = args.provider;
   const providerLabel = MOMO_PROVIDER_LABELS[provider];
 
   const isBalancePayment = Boolean(order.depositAmount && order.paidAt && !order.balancePaidAt);
@@ -156,7 +180,8 @@ export async function customerInitiateMomoPushAction(args: {
     db.order.update({
       where: { id: order.id },
       data: {
-        phone: cleanPhone,
+        // The paying wallet is often not the delivery contact; keep the latter.
+        ...(order.phone ? {} : { phone: cleanPhone }),
         paymentMethod: "mobile_money_push",
         events: {
           create: {
@@ -198,6 +223,11 @@ export async function customerInitiateMomoPushAction(args: {
           source: "customer_tracking",
         },
       });
+      if (charge.status === "failed") {
+        throw new Error(
+          charge.display_text || charge.message || "That MoMo number could not be charged. Check the number and network.",
+        );
+      }
 
       revalidatePath(`/orders/track`);
       return {
@@ -212,13 +242,16 @@ export async function customerInitiateMomoPushAction(args: {
           `Live ${providerLabel} prompt sent to ${cleanPhone}. Please check your approvals and enter your 4-digit MoMo PIN to authorize.`,
       };
     } catch (err) {
+      // No prompt went out, so this attempt is over; it must not linger as pending.
+      await db.payment.update({ where: { reference }, data: { status: "FAILED" } }).catch(() => {});
       return {
         ok: false,
-        error: err instanceof Error ? err.message : "Failed to dispatch Mobile Money prompt.",
+        error: err instanceof Error ? err.message.replace(/Paystack/gi, "payment provider") : "Failed to dispatch Mobile Money prompt.",
       };
     }
   }
 
+  await db.payment.update({ where: { reference }, data: { status: "FAILED" } }).catch(() => {});
   return { ok: false, error: "Online payment is temporarily unavailable. Please try again shortly." };
 }
 

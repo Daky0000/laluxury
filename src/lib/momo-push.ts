@@ -101,7 +101,8 @@ export async function initiateMomoPinPush(args: {
     db.order.update({
       where: { id: order.id },
       data: {
-        phone: cleanPhone,
+        // The paying wallet is often not the delivery contact; keep the latter.
+        ...(order.phone ? {} : { phone: cleanPhone }),
         paymentMethod: "mobile_money_push",
         ...(args.chargeScope === "DEPOSIT_50" && !order.depositAmount
           ? { depositAmount: amountToCharge, hasPreorderItems: true }
@@ -147,6 +148,11 @@ export async function initiateMomoPinPush(args: {
           initiatedByStaff: staff.email,
         },
       });
+      if (charge.status === "failed") {
+        throw new Error(
+          charge.display_text || charge.message || "That MoMo number could not be charged. Check the number and network.",
+        );
+      }
 
       if (charge.status === "success") {
         await finalizeMomoOrderPayment({
@@ -178,6 +184,8 @@ export async function initiateMomoPinPush(args: {
         simulated: false,
       };
     } catch (err) {
+      // No prompt went out, so this attempt is over; it must not linger as pending.
+      await db.payment.update({ where: { reference }, data: { status: "FAILED" } }).catch(() => {});
       return {
         ok: false,
         error: err instanceof Error ? err.message : "Failed to trigger Paystack Mobile Money charge.",

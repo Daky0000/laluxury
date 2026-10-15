@@ -6,6 +6,11 @@ import {
   type HomeSection,
 } from "./home-sections";
 import { isLandingPage, type LandingPage } from "./landing";
+import {
+  DEFAULT_MOMO_DIRECT_NETWORKS,
+  normaliseDirectNetworks,
+  type MomoNetworkId,
+} from "./momo-networks";
 
 /**
  * Store settings live in a key/value table so the owner can change copy,
@@ -66,6 +71,11 @@ export type StoreSettings = {
   hiddenStorefrontNavItems: string[];
   /** Checkout and payment processing mode: "live" (real money) or "test" (simulated orders). */
   paymentMode: "live" | "test";
+  /**
+   * MoMo networks that get a PIN prompt pushed to the phone. Every other
+   * network is paid on Paystack's hosted page. See `momo-networks.ts`.
+   */
+  momoDirectNetworks: MomoNetworkId[];
 };
 
 export {
@@ -138,6 +148,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   hiddenAdminNavItems: DEFAULT_HIDDEN_ADMIN_NAV_ITEMS,
   hiddenStorefrontNavItems: ["pre-order"],
   paymentMode: "live",
+  momoDirectNetworks: DEFAULT_MOMO_DIRECT_NETWORKS,
 };
 
 const SETTINGS_KEY = "store";
@@ -193,6 +204,7 @@ async function fetchSettings(): Promise<StoreSettings> {
     hiddenStorefrontNavItems: Array.isArray(stored.hiddenStorefrontNavItems)
       ? stored.hiddenStorefrontNavItems
       : DEFAULT_SETTINGS.hiddenStorefrontNavItems,
+    momoDirectNetworks: normaliseDirectNetworks(stored.momoDirectNetworks),
   };
 
   cachedSettings = { data: resolved, expiresAt: now + SETTINGS_CACHE_TTL_MS };

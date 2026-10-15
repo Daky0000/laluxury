@@ -11,6 +11,7 @@ import {
   type StoreSettings,
 } from "@/lib/settings";
 import { isLandingPage } from "@/lib/landing";
+import { normaliseDirectNetworks } from "@/lib/momo-networks";
 import { normaliseSections } from "@/lib/home-sections";
 import { runAgentTurn } from "@/lib/agent/runtime";
 import { pingAgent } from "@/lib/agent/provider";
@@ -77,6 +78,10 @@ export async function updateSettingsAction(
     newsletterTitle: text("newsletterTitle"),
     newsletterBody: text("newsletterBody"),
   };
+
+  if (formData.has("momoNetworksConfigured")) {
+    patch.momoDirectNetworks = normaliseDirectNetworks(formData.getAll("momoDirectNetworks").map(String));
+  }
 
   if (formData.has("navMenusConfigured")) {
     patch.hiddenAdminNavItems = ADMIN_NAV_MENU_ITEMS.map((item) => item.href).filter(

@@ -4,7 +4,12 @@ import { cancelOrder, logOrderEvent, markOrderPaid, markPaymentFailed } from "./
 import { postAlert } from "./agent/slack";
 import { formatMoney } from "./money";
 
-export type PaymentOutcome = "paid" | "failed" | "pending" | "held";
+/**
+ * "unfinished": Paystack says nobody has paid yet, but it is too soon to call
+ * it failed. The shopper may have closed the payment page, or be about to
+ * approve the prompt.
+ */
+export type PaymentOutcome = "paid" | "failed" | "pending" | "held" | "unfinished";
 
 /**
  * Asks the payment provider where a storefront payment stands and records the
@@ -73,7 +78,7 @@ export async function reconcilePaystackPayment(
     // as failed; background checks leave it for the webhook or expiry.
     if (options.recordFailure === false) return "pending";
     const row = await db.payment.findUnique({ where: { reference }, select: { createdAt: true } });
-    if (!isFinalFailure(transaction.status, row?.createdAt ?? null)) return "pending";
+    if (!isFinalFailure(transaction.status, row?.createdAt ?? null)) return "unfinished";
     await markPaymentFailed({
       orderId,
       reference,
@@ -102,6 +107,7 @@ export function isFinalFailure(status: string, startedAt: Date | null): boolean 
 
 /** How far back an unsettled payment is still worth asking the provider about. */
 const RECONCILE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+const FAILED_RECHECK_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Asks the provider about payments still marked pending and records what it
@@ -118,9 +124,17 @@ export async function reconcilePendingPayments(
   const payments = await db.payment.findMany({
     where: {
       provider: "paystack",
-      status: "PENDING",
-      createdAt: { gte: new Date(Date.now() - RECONCILE_WINDOW_MS) },
       ...(options.orderId ? { orderId: options.orderId } : {}),
+      OR: [
+        { status: "PENDING", createdAt: { gte: new Date(Date.now() - RECONCILE_WINDOW_MS) } },
+        // A prompt approved after it was recorded as failed (a timeout, a
+        // missed webhook) is still money received. Asked about for a day.
+        {
+          status: "FAILED",
+          createdAt: { gte: new Date(Date.now() - FAILED_RECHECK_WINDOW_MS) },
+          order: { paymentStatus: { not: "SUCCESS" } },
+        },
+      ],
     },
     select: {
       orderId: true,

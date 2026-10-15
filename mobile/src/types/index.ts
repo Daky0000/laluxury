@@ -295,6 +295,8 @@ export type AppConfig = {
     mode: "live" | "test";
     publicKey: string | null;
   };
+  /** MoMo networks that get the direct PIN prompt; others pay on the hosted page. */
+  momoDirectNetworks?: ("mtn" | "vod" | "atl")[];
   supportEmail: string;
   supportPhone: string;
   whatsappNumber: string;

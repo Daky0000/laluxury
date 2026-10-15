@@ -20,6 +20,8 @@ import {
 import { InsufficientStockError } from "@/lib/inventory";
 import { GHANA_REGIONS } from "@/lib/constants";
 import { MOMO_NETWORKS, networkOf, normalisePhone } from "@/lib/phone";
+import { getCommerceSettings } from "@/lib/settings";
+import { momoRouteFor } from "@/lib/momo-networks";
 
 export type CheckoutState = {
   ok: boolean;
@@ -46,9 +48,8 @@ const schema = z.object({
   }),
   postalCode: z.string().optional(),
   shippingRateId: z.string().optional(),
-  paymentMethod: z.enum(["direct_debit", "mobile_money", "bank_card"]).optional(),
+  payWith: z.enum(["mtn", "vod", "atl", "card"], { message: "Choose how you will pay." }),
   momoPhone: z.string().trim().optional(),
-  momoProvider: z.enum(["auto", "mtn", "vod", "atl"]).optional(),
   preorderDepositOption: z.enum(["full", "deposit_50"]).optional(),
   customerNote: z.string().optional(),
   createAccount: z.boolean().optional(),
@@ -70,9 +71,8 @@ export async function placeOrderAction(
     region: formData.get("region"),
     postalCode: formData.get("postalCode") || undefined,
     shippingRateId: formData.get("shippingRateId") || undefined,
-    paymentMethod: formData.get("paymentMethod") || undefined,
+    payWith: formData.get("payWith") || undefined,
     momoPhone: formData.get("momoPhone") || undefined,
-    momoProvider: formData.get("momoProvider") || undefined,
     preorderDepositOption: formData.get("preorderDepositOption") || undefined,
     customerNote: formData.get("customerNote") || undefined,
     createAccount: formData.get("createAccount") === "on",
@@ -99,11 +99,20 @@ export async function placeOrderAction(
   const email = data.email.toLowerCase().trim();
   const phone = normalisePhone(data.phone)!;
 
+  // The shopper names their network first. The store decides which networks
+  // get a prompt pushed to the phone; the rest finish on Paystack's page.
+  const settings = await getCommerceSettings();
+  const network = data.payWith === "card" ? null : data.payWith;
+  const paymentMethod = network
+    ? momoRouteFor(network, settings.momoDirectNetworks)
+    : "bank_card";
+  const isDirectDebit = paymentMethod === "direct_debit";
+
   // Direct Debit pushes the prompt to the wallet the shopper names, which is
   // not always the delivery phone. Checked before any account is created.
   const momoNumber = data.momoPhone || data.phone;
   const momoNetwork = networkOf(momoNumber);
-  if (data.paymentMethod === "direct_debit" && !(momoNetwork && MOMO_NETWORKS.includes(momoNetwork))) {
+  if (isDirectDebit && !(momoNetwork && MOMO_NETWORKS.includes(momoNetwork))) {
     return {
       ok: false,
       fieldErrors: {
@@ -187,8 +196,6 @@ export async function placeOrderAction(
     if (paidReference) redirect(`/checkout/confirm?reference=${encodeURIComponent(paidReference)}`);
   }
 
-  const paymentMethod = data.paymentMethod ?? "mobile_money";
-  const isDirectDebit = paymentMethod === "direct_debit";
   const depositPercent = data.preorderDepositOption === "deposit_50" ? 50 : null;
 
   let redirectUrl = "";
@@ -242,10 +249,7 @@ export async function placeOrderAction(
           amount: chargeAmount,
           phone: momoPhone,
           // Ported numbers keep their old prefix, so the shopper's choice wins.
-          provider:
-            data.momoProvider && data.momoProvider !== "auto"
-              ? data.momoProvider
-              : detectGhanaMomoProvider(momoPhone),
+          provider: network ?? detectGhanaMomoProvider(momoPhone),
           reference,
           metadata: {
             orderId: order.id,

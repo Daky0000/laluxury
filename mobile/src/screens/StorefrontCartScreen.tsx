@@ -43,62 +43,25 @@ type Props = {
 };
 
 type PaymentMethod = "direct_debit" | "mobile_money" | "bank_card";
-
-const PAYMENT_METHODS: readonly {
-  id: PaymentMethod;
-  label: string;
-  subtitle: string;
-  icon: "smartphone" | "credit-card";
-  badge?: string;
-}[] = [
-  {
-    id: "direct_debit",
-    label: "Direct Debit",
-    subtitle: "Receive an instant payment prompt on your phone",
-    icon: "smartphone" as const,
-    badge: "POPULAR IN GHANA",
-  },
-  {
-    id: "mobile_money",
-    label: "Mobile Money",
-    subtitle: "Pay securely with MTN, Telecel or AT Money",
-    icon: "smartphone" as const,
-  },
-  {
-    id: "bank_card",
-    label: "Bank Card",
-    subtitle: "Pay securely with Visa or Mastercard",
-    icon: "credit-card" as const,
-  },
-];
+type NetworkId = "mtn" | "vod" | "atl";
+type PayWith = NetworkId | "card";
 
 const NETWORKS: {
-  id: "mtn" | "vod" | "atl";
+  id: NetworkId;
   name: string;
   badgeColor: string;
   badgeTextColor: string;
 }[] = [
-  { id: "mtn", name: "MTN Mobile Money", badgeColor: "#FFCC00", badgeTextColor: "#000000" },
-  { id: "vod", name: "Telecel (Vodafone)", badgeColor: "#E60000", badgeTextColor: "#FFFFFF" },
-  { id: "atl", name: "AT Money (AirtelTigo)", badgeColor: "#003399", badgeTextColor: "#FFFFFF" },
+  { id: "mtn", name: "MTN MoMo", badgeColor: "#FFCC00", badgeTextColor: "#000000" },
+  { id: "vod", name: "Telecel Cash", badgeColor: "#E60000", badgeTextColor: "#FFFFFF" },
+  { id: "atl", name: "AT Money", badgeColor: "#003399", badgeTextColor: "#FFFFFF" },
 ];
 
-function detectMoMoProvider(phone: string): "mtn" | "vod" | "atl" {
-  const clean = phone.replace(/[^0-9]/g, "");
-  let prefix = "";
-  if (clean.startsWith("233")) {
-    prefix = clean.substring(3, 5);
-  } else if (clean.startsWith("0")) {
-    prefix = clean.substring(1, 3);
-  } else {
-    prefix = clean.substring(0, 2);
-  }
-
-  if (["24", "54", "55", "59", "53"].includes(prefix)) return "mtn";
-  if (["20", "50"].includes(prefix)) return "vod";
-  if (["27", "57", "26", "56"].includes(prefix)) return "atl";
-  return "mtn";
-}
+/**
+ * Used until the store config arrives. The backend decides for real: a network
+ * not on its direct list is sent to the hosted payment page whatever we ask.
+ */
+const DEFAULT_DIRECT_NETWORKS: NetworkId[] = ["mtn", "atl"];
 
 export function StorefrontCartScreen({
   cart,
@@ -117,7 +80,20 @@ export function StorefrontCartScreen({
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [showPickupContactModal, setShowPickupContactModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>(PAYMENT_METHODS[0].id);
+  // The shopper names their network (or card) first; nothing is preselected.
+  // Networks on the store's direct list get a prompt on the phone, the rest
+  // and cards finish on the hosted payment page.
+  const [payWith, setPayWith] = useState<PayWith | null>(null);
+  const [directNetworks, setDirectNetworks] = useState<NetworkId[]>(DEFAULT_DIRECT_NETWORKS);
+  const selectedPayment: PaymentMethod | null =
+    payWith === null
+      ? null
+      : payWith === "card"
+        ? "bank_card"
+        : directNetworks.includes(payWith)
+          ? "direct_debit"
+          : "mobile_money";
+  const momoProvider: NetworkId | null = payWith && payWith !== "card" ? payWith : null;
   const [isTestMode, setIsTestMode] = useState(false);
   const [deliveryType, setDeliveryType] = useState<"delivery" | "pickup">("delivery");
   const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
@@ -129,7 +105,6 @@ export function StorefrontCartScreen({
 
   // Customer contact states for instant MoMo and receipt delivery (no prefill, placeholders show)
   const [momoPhone, setMomoPhone] = useState(user?.phone || "");
-  const [momoProvider, setMomoProvider] = useState<"mtn" | "vod" | "atl">("mtn");
   const [customerEmail, setCustomerEmail] = useState(user?.email || "");
 
   // MoMo Authorization Prompt Modal states
@@ -179,6 +154,7 @@ export function StorefrontCartScreen({
           setFreeShippingThreshold(cfg.freeShippingThreshold);
         }
         if (cfg.regions?.length) setAvailableRegions(cfg.regions);
+        if (Array.isArray(cfg.momoDirectNetworks)) setDirectNetworks(cfg.momoDirectNetworks);
       })
       .catch(() => {});
   }, []);
@@ -544,6 +520,21 @@ export function StorefrontCartScreen({
       }
     }
 
+    if (!selectedPayment) {
+      if (onNotify) {
+        onNotify({
+          title: "Choose How to Pay",
+          message: "Pick your Mobile Money network, or pay by card.",
+          type: "warning",
+          icon: "smartphone",
+        });
+      } else {
+        toast("Choose How to Pay", "Pick your Mobile Money network, or pay by card.");
+      }
+      setShowPaymentModal(true);
+      return;
+    }
+
     if (selectedPayment === "direct_debit") {
       const cleanMomo = (momoPhone || shippingAddress.phone || "").replace(/[^0-9]/g, "");
       if (cleanMomo.length < 9) {
@@ -610,7 +601,7 @@ export function StorefrontCartScreen({
         preorderDepositOption: hasPreorderItems ? preorderDepositOption : null,
         paymentMethod: selectedPayment,
         momoPhone: selectedPayment === "direct_debit" ? (momoPhone || safePhone) : undefined,
-        momoProvider: selectedPayment === "direct_debit" ? momoProvider : undefined,
+        momoProvider: momoProvider ?? undefined,
         idempotencyKey: `mob-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
       };
 
@@ -742,39 +733,9 @@ export function StorefrontCartScreen({
         msg.toLowerCase().includes("online payment is temporarily unavailable")
       ) {
         Alert.alert(
-          "Payment Gateway Unavailable",
-          "Online payment is temporarily unavailable. You can retry using Direct Debit, Mobile Money, or Bank Card.",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Use Direct Debit",
-              onPress: () => {
-                setSelectedPayment("direct_debit");
-                if (onNotify) {
-                  onNotify({
-                    title: "Payment Method Updated",
-                    message: "Switched to Direct Debit. Tap the payment button to retry.",
-                    type: "info",
-                    icon: "check-circle",
-                  });
-                }
-              },
-            },
-            {
-              text: "Use Bank Card",
-              onPress: () => {
-                setSelectedPayment("bank_card");
-                if (onNotify) {
-                  onNotify({
-                    title: "Payment Method Updated",
-                    message: "Switched to Bank Card. Tap the payment button to retry.",
-                    type: "info",
-                    icon: "check-circle",
-                  });
-                }
-              },
-            },
-          ]
+          "Payment Unavailable",
+          "We could not start the payment. Please try again, or choose another network or card.",
+          [{ text: "Choose how to pay", onPress: () => setShowPaymentModal(true) }, { text: "OK", style: "cancel" }],
         );
         return;
       }
@@ -793,9 +754,6 @@ export function StorefrontCartScreen({
       setSubmitting(false);
     }
   };
-
-  const currentPayment =
-    PAYMENT_METHODS.find((p) => p.id === selectedPayment) || PAYMENT_METHODS[0];
 
   if (cart.length === 0) {
     return (
@@ -1289,74 +1247,56 @@ export function StorefrontCartScreen({
           )}
         </View>
 
-        {/* 3. PAYMENT METHOD (Comes AFTER Subtotal and Total!) */}
+        {/* 3. HOW WILL YOU PAY: network first, then the route that network uses */}
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionHeaderLabel}>PAYMENT METHOD</Text>
-          <TouchableOpacity
-            style={styles.cardSelectable}
-            onPress={() => setShowPaymentModal(true)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.cardContentLeft}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Text style={styles.paymentMethodText}>{currentPayment.label}</Text>
-                {currentPayment.badge && (
-                  <View style={{ backgroundColor: "#F3E8EC", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                    <Text style={{ color: colors.primary, fontSize: 10, fontWeight: "700" }}>{currentPayment.badge}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.paymentMethodSub}>{currentPayment.subtitle}</Text>
-            </View>
-            <Feather name="chevron-right" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
+          <Text style={styles.sectionHeaderLabel}>HOW WILL YOU PAY?</Text>
+          <Text style={styles.paymentMethodSub}>Choose your Mobile Money network, or pay by card.</Text>
+          <View style={[styles.networkSelectorRow, { flexWrap: "wrap", marginTop: 10 }]}>
+            {[...NETWORKS.map((net) => ({ id: net.id as PayWith, name: net.name, color: net.badgeColor })), { id: "card" as PayWith, name: "Bank Card", color: colors.primary }].map((option) => {
+              const isSelected = payWith === option.id;
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[styles.networkChip, isSelected && styles.networkChipSelected]}
+                  onPress={() => setPayWith(option.id)}
+                  activeOpacity={0.8}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isSelected }}
+                >
+                  {option.id === "card" ? (
+                    <Feather name="credit-card" size={12} color={isSelected ? colors.primary : colors.textSecondary} />
+                  ) : (
+                    <View style={[styles.networkDot, { backgroundColor: option.color }]} />
+                  )}
+                  <Text style={[styles.networkChipText, isSelected && styles.networkChipTextSelected]}>
+                    {option.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
-        {/* Mobile Money Inline Configuration */}
-        {selectedPayment === "direct_debit" && (
+        {/* Details for the chosen way to pay */}
+        {selectedPayment !== null && (
           <View style={styles.momoCard}>
             <View style={styles.momoCardHeader}>
-              <Feather name="smartphone" size={16} color={colors.primary} />
-              <Text style={styles.momoCardTitle}>INSTANT MOBILE MONEY PROMPT</Text>
+              <Feather name={selectedPayment === "bank_card" ? "credit-card" : "smartphone"} size={16} color={colors.primary} />
+              <Text style={styles.momoCardTitle}>
+                {selectedPayment === "direct_debit"
+                  ? "PROMPT ON YOUR PHONE"
+                  : "SECURE PAYMENT PAGE"}
+              </Text>
             </View>
             <Text style={styles.momoCardSubtitle}>
-              We will send a USSD prompt with the exact amount to your phone. Simply enter your 4-digit MoMo PIN to approve.
+              {selectedPayment === "direct_debit"
+                ? "We will send a request for the exact amount to your phone. Approve it with your MoMo PIN."
+                : selectedPayment === "mobile_money"
+                  ? "You will finish on our payment partner's secure page. Enter your MoMo number there and follow its steps to approve."
+                  : "You will enter your card details on our payment partner's secure page."}
             </Text>
 
-            {/* Network Chips */}
-            <Text style={styles.momoInputLabel}>SELECT NETWORK</Text>
-            <View style={styles.networkSelectorRow}>
-              {NETWORKS.map((net) => {
-                const isSelected = momoProvider === net.id;
-                return (
-                  <TouchableOpacity
-                    key={net.id}
-                    style={[
-                      styles.networkChip,
-                      isSelected && styles.networkChipSelected,
-                    ]}
-                    onPress={() => setMomoProvider(net.id)}
-                    activeOpacity={0.8}
-                  >
-                    <View
-                      style={[
-                        styles.networkDot,
-                        { backgroundColor: net.badgeColor },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.networkChipText,
-                        isSelected && styles.networkChipTextSelected,
-                      ]}
-                    >
-                      {net.name.split(" ")[0]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
+            {selectedPayment === "direct_debit" && (<>
             {/* MoMo Phone Number Input */}
             <Text style={styles.momoInputLabel}>MOMO PHONE NUMBER (FOR PIN PROMPT & SMS)</Text>
             <View style={styles.momoPhoneInputWrapper}>
@@ -1369,12 +1309,10 @@ export function StorefrontCartScreen({
                 placeholderTextColor="#999"
                 keyboardType="phone-pad"
                 value={momoPhone}
-                onChangeText={(val) => {
-                  setMomoPhone(val);
-                  setMomoProvider(detectMoMoProvider(val));
-                }}
+                onChangeText={setMomoPhone}
               />
             </View>
+            </>)}
 
             {/* Email Input for PDF Receipt */}
             <Text style={styles.momoInputLabel}>EMAIL FOR RECEIPT & INVOICE (PDF)</Text>
@@ -1394,7 +1332,7 @@ export function StorefrontCartScreen({
             <View style={styles.momoSecurityNotice}>
               <Feather name="shield" size={12} color={colors.primary} />
               <Text style={styles.momoSecurityNoticeText}>
-                No card details needed. Safe & direct USSD authentication from your telco.
+                Nothing is taken until you approve it.
               </Text>
             </View>
           </View>
@@ -1411,10 +1349,9 @@ export function StorefrontCartScreen({
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <Text style={styles.placeOrderText}>
-              {selectedPayment === "direct_debit"
-                ? "SEND PAYMENT PROMPT · "
-                : "CONTINUE TO PAYMENT · "}
-              {formatCurrency(amountDueNow)}
+              {selectedPayment === null
+                ? "CHOOSE HOW TO PAY"
+                : `${selectedPayment === "direct_debit" ? "SEND PROMPT TO MY PHONE" : "CONTINUE TO SECURE PAYMENT"} · ${formatCurrency(amountDueNow)}`}
             </Text>
           )}
         </TouchableOpacity>
@@ -1691,41 +1628,37 @@ export function StorefrontCartScreen({
         >
           <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 24) }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Choose Payment Method</Text>
+              <Text style={styles.modalTitle}>How will you pay?</Text>
               <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
                 <Feather name="x" size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
 
-            {PAYMENT_METHODS.map((pm) => (
-              <TouchableOpacity
-                key={pm.id}
-                style={[
-                  styles.paymentOption,
-                  selectedPayment === pm.id && styles.paymentOptionActive,
-                ]}
-                onPress={() => {
-                  setSelectedPayment(pm.id);
-                  setShowPaymentModal(false);
-                }}
-              >
-                <Feather name={pm.icon} size={20} color={colors.primary} />
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Text style={styles.paymentOptionLabel}>{pm.label}</Text>
-                    {pm.badge && (
-                      <View style={{ backgroundColor: "#F3E8EC", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                        <Text style={{ color: colors.primary, fontSize: 10, fontWeight: "700" }}>{pm.badge}</Text>
-                      </View>
-                    )}
+            {[...NETWORKS.map((net) => ({ id: net.id as PayWith, name: net.name })), { id: "card" as PayWith, name: "Bank Card" }].map((option) => {
+              const subtitle =
+                option.id === "card"
+                  ? "Visa · Mastercard"
+                  : directNetworks.includes(option.id as NetworkId)
+                    ? "Prompt on your phone"
+                    : "Secure payment page";
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[styles.paymentOption, payWith === option.id && styles.paymentOptionActive]}
+                  onPress={() => {
+                    setPayWith(option.id);
+                    setShowPaymentModal(false);
+                  }}
+                >
+                  <Feather name={option.id === "card" ? "credit-card" : "smartphone"} size={20} color={colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.paymentOptionLabel}>{option.name}</Text>
+                    <Text style={styles.paymentOptionSub}>{subtitle}</Text>
                   </View>
-                  <Text style={styles.paymentOptionSub}>{pm.subtitle}</Text>
-                </View>
-                {selectedPayment === pm.id && (
-                  <Feather name="check" size={18} color={colors.primary} />
-                )}
-              </TouchableOpacity>
-            ))}
+                  {payWith === option.id && <Feather name="check" size={18} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </KeyboardAvoidingView>
       </Modal>

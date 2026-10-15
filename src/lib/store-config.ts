@@ -25,6 +25,8 @@ export async function getPublicStoreConfig() {
         mode: activeMode,
         publicKey: paystack?.publicKey ? `${paystack.publicKey.slice(0, 8)}...` : null,
       },
+      // Networks that get the direct PIN prompt; the rest use Paystack's page.
+      momoDirectNetworks: settings.momoDirectNetworks,
       supportEmail: settings?.supportEmail || "contact@nobleenclave.com",
       supportPhone: settings?.supportPhone || "",
       whatsappNumber: settings?.whatsappNumber || "",

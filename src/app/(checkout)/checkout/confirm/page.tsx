@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Clock, XCircle } from "lucide-react";
 import { db } from "@/lib/db";
 import { describeChannel } from "@/lib/paystack";
-import { reconcilePaystackPayment } from "@/lib/checkout-payment";
+import { reconcilePaystackPayment, type PaymentOutcome } from "@/lib/checkout-payment";
+import { CheckoutSteps } from "@/components/shop/checkout-steps";
 import { productCardSelect } from "@/lib/catalog";
 import { toTile } from "@/lib/product-view";
 import { formatPrice } from "@/lib/money";
@@ -61,9 +62,10 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
 
   const order = payment.order;
   // A callback is not proof of payment. Verify every unsettled provider payment.
+  let outcome: PaymentOutcome | null = null;
   if (payment.provider === "paystack" && payment.status !== "SUCCESS") {
     try {
-      await reconcilePaystackPayment({
+      outcome = await reconcilePaystackPayment({
         orderId: order.id,
         orderNumber: order.orderNumber,
         reference,
@@ -124,7 +126,8 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
 
     return (
       <>
-        <section className="lx-container max-w-[760px] pb-10 pt-16 text-center">
+        <section className="lx-container max-w-[760px] pb-10 pt-12 text-center">
+          <CheckoutSteps current={3} />
           <span className="lx-pop mx-auto grid h-[76px] w-[76px] place-items-center rounded-full border border-sage-200 bg-sage-100">
             <svg viewBox="0 0 24 24" className="lx-draw h-[34px] w-[34px]" fill="none" aria-hidden>
               <path
@@ -333,6 +336,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
   if (fresh.paymentStatus === "FAILED") {
     return (
       <Shell
+        step={1}
         icon={<XCircle className="h-10 w-10 text-danger" aria-hidden />}
         title="That payment did not go through"
         body="Nothing has been charged. Your bag is still saved, so you can try again with another method."
@@ -349,10 +353,27 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
   const awaitsPhoneApproval = Boolean(directCharge);
   const codeRequested = (Array.isArray(params.step) ? params.step[0] : params.step) === "otp";
 
+  // Back from the hosted page without paying: say so plainly rather than
+  // "processing". It is not recorded as failed yet, in case they pay late.
+  if (outcome === "unfinished" && !directCharge) {
+    return (
+      <Shell
+        step={1}
+        icon={<XCircle className="h-10 w-10 text-warning" aria-hidden />}
+        title="Payment not finished"
+        body={`Nothing has been taken for ${fresh.orderNumber}. Your bag is saved, so you can pay now or choose another way to pay.`}
+        action={<LinkButton href="/checkout">Return to payment</LinkButton>}
+      >
+        <PaymentStatusRefresher intervalMs={8000} maxChecks={15} />
+      </Shell>
+    );
+  }
+
   return (
     <Shell
+      step={2}
       icon={<Clock className="h-10 w-10 text-warning" aria-hidden />}
-      title="Payment is still processing"
+      title={awaitsPhoneApproval ? "Approve the payment on your phone" : "Payment is still processing"}
       body={`We are waiting on confirmation for ${fresh.orderNumber}. This page updates on its own, and we will email you as soon as it clears.`}
       note={
         awaitsPhoneApproval ? (
@@ -389,8 +410,8 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
           <LinkButton href={`/checkout/confirm?reference=${encodeURIComponent(reference)}`}>
             Refresh
           </LinkButton>
-          <Link href="/cart" className="self-center text-sm underline-offset-4 hover:underline">
-            Back to bag
+          <Link href="/checkout" className="self-center text-sm underline-offset-4 hover:underline">
+            Choose another way to pay
           </Link>
         </>
       }
@@ -401,6 +422,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
 }
 
 function Shell({
+  step,
   icon,
   title,
   body,
@@ -408,6 +430,8 @@ function Shell({
   action,
   children,
 }: {
+  /** Where this page sits in the checkout steps; omitted off the checkout path. */
+  step?: number;
   icon: React.ReactNode;
   title: string;
   body: string;
@@ -416,7 +440,8 @@ function Shell({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="lx-container max-w-lg py-24 text-center">
+    <div className="lx-container max-w-lg py-16 text-center sm:py-20">
+      {step !== undefined ? <CheckoutSteps current={step} /> : null}
       {children}
       <div className="flex justify-center">{icon}</div>
       <h1 className="mt-4 text-3xl">{title}</h1>

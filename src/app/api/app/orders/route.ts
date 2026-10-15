@@ -484,6 +484,18 @@ export const POST = withApiAuth(async (request: Request) => {
     );
   }
 
+  // Only networks on the store's direct list get a phone prompt. A network
+  // taken off it (or an older app build asking anyway) finishes on Paystack's
+  // page, which the app already opens when no prompt comes back.
+  const requestedNetwork =
+    data.momoProvider ?? (data.momoPhone ? detectGhanaMomoProvider(data.momoPhone) : null);
+  const paymentMethod =
+    data.paymentMethod === "direct_debit" &&
+    requestedNetwork &&
+    !settings.momoDirectNetworks.includes(requestedNetwork)
+      ? "mobile_money"
+      : data.paymentMethod;
+
   const storeFreeThreshold = settings?.freeShippingThreshold;
   const storeFreeApplies =
     storeFreeThreshold !== null &&
@@ -619,7 +631,7 @@ export const POST = withApiAuth(async (request: Request) => {
         status: "PENDING",
         paymentStatus: "PENDING",
         hasPreorderItems,
-        paymentMethod: data.paymentMethod,
+        paymentMethod: paymentMethod,
         depositAmount,
         subtotal,
         discountTotal,
@@ -731,7 +743,7 @@ export const POST = withApiAuth(async (request: Request) => {
     displayText: string;
   } | null = null;
 
-  const isDirectDebit = data.paymentMethod === "direct_debit";
+  const isDirectDebit = paymentMethod === "direct_debit";
 
   if (activeMode === "test") {
     isTestOrder = true;
@@ -830,7 +842,7 @@ export const POST = withApiAuth(async (request: Request) => {
         reference,
         callbackUrl: `${env.siteUrl()}/checkout/confirm?reference=${encodeURIComponent(reference)}`,
         currency: order.currency,
-        channels: data.paymentMethod === "mobile_money" ? ["mobile_money"] : ["card"],
+        channels: paymentMethod === "mobile_money" ? ["mobile_money"] : ["card"],
         metadata: {
           orderId: order.id,
           orderNumber: order.orderNumber,
@@ -845,7 +857,7 @@ export const POST = withApiAuth(async (request: Request) => {
           orderId: order.id,
           reference,
           provider: "paystack",
-          channel: data.paymentMethod,
+          channel: paymentMethod,
           amount: chargeAmount,
           currency: order.currency,
           status: "PENDING",
@@ -880,7 +892,7 @@ export const POST = withApiAuth(async (request: Request) => {
   await logOrderEvent({
     orderId: order.id,
     type: "order.placed",
-    message: `Mobile order ${order.orderNumber} placed via ${data.paymentMethod}${isTestOrder ? " [TEST MODE]" : ""}. Total: ${grandTotal}${depositAmount ? ` (50% deposit: ${depositAmount})` : ""}.${paymentUrl ? " Paystack transaction initialized." : ""}`,
+    message: `Mobile order ${order.orderNumber} placed via ${paymentMethod}${isTestOrder ? " [TEST MODE]" : ""}. Total: ${grandTotal}${depositAmount ? ` (50% deposit: ${depositAmount})` : ""}.${paymentUrl ? " Paystack transaction initialized." : ""}`,
     actorId: userId,
   });
 

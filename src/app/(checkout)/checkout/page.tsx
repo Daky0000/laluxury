@@ -8,7 +8,7 @@ import { formatPhone } from "@/lib/phone";
 import { CheckoutForm, type CheckoutDefaults } from "@/components/shop/checkout-form";
 import { CartLines, DiscountForm } from "@/components/shop/cart-lines";
 
-export const metadata: Metadata = { title: "Your bag" };
+export const metadata: Metadata = { title: "Checkout" };
 export const dynamic = "force-dynamic";
 
 export default async function CheckoutPage() {
@@ -31,10 +31,18 @@ export default async function CheckoutPage() {
       })
     : [];
 
-  const lastAddress = savedAddresses[0] ?? null;
+  // A bag coming back from an unfinished payment keeps what was typed last time,
+  // so a guest retrying does not fill the delivery form in again.
+  const earlierOrder = cart.convertedOrderId
+    ? await db.order.findUnique({
+        where: { id: cart.convertedOrderId },
+        select: { email: true, shippingAddress: true },
+      })
+    : null;
+  const lastAddress = earlierOrder?.shippingAddress ?? savedAddresses[0] ?? null;
 
   const defaults: CheckoutDefaults = {
-    email: user?.email ?? cart.email ?? "",
+    email: user?.email ?? earlierOrder?.email ?? cart.email ?? "",
     firstName: lastAddress?.firstName ?? user?.firstName ?? "",
     lastName: lastAddress?.lastName ?? user?.lastName ?? "",
     phone: formatPhone(lastAddress?.phone ?? user?.phone ?? ""),
@@ -48,7 +56,7 @@ export default async function CheckoutPage() {
   const hasPreorderItems = totals.lines.some((line) => line.isPreorder);
   return (
     <div className="lx-container py-12 sm:py-16">
-      <h1 className="mb-8 text-[clamp(2rem,5vw,3rem)]">Your bag &amp; checkout</h1>
+      <h1 className="mb-6 text-[clamp(2rem,5vw,3rem)]">Checkout</h1>
 
       <CheckoutForm
         subtotal={totals.subtotal}
@@ -70,6 +78,7 @@ export default async function CheckoutPage() {
         isSignedIn={Boolean(user)}
         hasPreorderItems={hasPreorderItems}
         freeShippingThreshold={settings.freeShippingThreshold}
+        directNetworks={settings.momoDirectNetworks}
         lines={<CartLines lines={totals.lines} />}
         discount={<DiscountForm appliedCode={totals.discountCode} />}
       />
