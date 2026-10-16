@@ -50,3 +50,60 @@ export function momoRouteFor(
 ): "direct_debit" | "mobile_money" {
   return directNetworks.includes(network) ? "direct_debit" : "mobile_money";
 }
+
+/** A direct charge's state as Paystack reports it; see `paystack.ts`. */
+export type DirectChargeStatus = "pay_offline" | "send_otp" | "success" | "pending" | "failed";
+
+/**
+ * What to tell a payer about an unsettled direct MoMo charge, network by
+ * network. Paystack's own `display_text` comes first when it sent one,
+ * because it names the exact step the network wants.
+ */
+export function momoApprovalHelp(
+  provider: MomoNetworkId,
+  status: DirectChargeStatus | null,
+  displayText?: string | null,
+): { headline: string; steps: string[]; needsCode: boolean } {
+  const fromPaystack = displayText?.trim() || null;
+  if (status === "send_otp") {
+    return {
+      headline: "Your network needs a code before it sends the prompt",
+      steps:
+        provider === "vod"
+          ? [
+              fromPaystack ?? "Dial *110# to generate a voucher code. Then input the voucher below.",
+              "Type the voucher code below and tap Submit. Nothing is taken until you approve it.",
+            ]
+          : [
+              fromPaystack ?? "Your network has sent you a one-time code by SMS.",
+              "Type the code below and tap Submit. The PIN prompt follows.",
+            ],
+      needsCode: true,
+    };
+  }
+  if (status === "pending") {
+    return {
+      headline: "Sending the prompt to your phone",
+      steps: [
+        "Your network is still processing the request. Keep this page open; it updates by itself.",
+        "Keep your phone unlocked with signal, and close any other USSD menu that is open.",
+      ],
+      needsCode: false,
+    };
+  }
+  const approvals =
+    provider === "mtn"
+      ? "No pop-up? Dial *170#, choose My Wallet, then My Approvals, pick this payment and enter your PIN."
+      : provider === "atl"
+        ? "No pop-up? Dial *110#, open your AT Money wallet's approvals menu, pick this payment and enter your PIN."
+        : "No pop-up? Dial *110# and check for a payment waiting for approval.";
+  return {
+    headline: "Approve the payment on your phone",
+    steps: [
+      fromPaystack ?? "A payment prompt has been sent to your phone. Enter your MoMo PIN to approve it.",
+      approvals,
+      "The prompt lasts about a minute. If it timed out, send it again below.",
+    ],
+    needsCode: false,
+  };
+}

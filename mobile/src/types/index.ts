@@ -305,6 +305,8 @@ export type AppConfig = {
   addressLine?: string;
   instagramUrl?: string;
   freeShippingThreshold: number | null;
+  /** The one delivery fee in minor units (absent on older servers). */
+  deliveryFee?: number;
   regions?: readonly string[];
   lowStockThreshold?: number;
   announcementBar?: string;

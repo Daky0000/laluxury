@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "./env";
 import { getIntegrations, activePaystack } from "./integrations";
 import { networkOf, normalisePhone } from "./phone";
+import type { DirectChargeStatus } from "./momo-networks";
 
 /**
  * Paystack client.
@@ -230,12 +231,20 @@ export function normaliseGhanaMomoPhone(rawPhone: string): string {
   return digits;
 }
 
-export type PaystackChargeStatus =
-  | "pay_offline" // USSD prompt pushed to customer's phone awaiting 4-digit MoMo PIN
-  | "send_otp"    // Telco sent SMS OTP first before triggering PIN prompt
-  | "success"     // Immediately authorised & paid
-  | "pending"
-  | "failed";
+/**
+ * Where a direct MoMo charge stands, as `POST /charge` and
+ * `GET /charge/:reference` report it (Paystack "Charge" API):
+ *
+ * - `pay_offline`: the prompt is on its way to the phone (MTN, AT). Nothing
+ *   else is sent; the payer approves it with their PIN, or from the wallet's
+ *   approvals menu if the pop-up was missed.
+ * - `send_otp`: the network needs a code first (Telecel's voucher from
+ *   *110#). Nothing reaches the phone until it is posted to `/charge/submit_otp`.
+ * - `pending`: Paystack is still talking to the network. Ask again with
+ *   `GET /charge/:reference` after about ten seconds; it moves on to one of
+ *   the others.
+ */
+export type PaystackChargeStatus = DirectChargeStatus;
 
 export type PaystackChargeResult = {
   reference: string;
@@ -292,3 +301,15 @@ export async function submitMobileMoneyOtp(args: {
     },
   });
 }
+
+/**
+ * Checks a charge that has not settled (`GET /charge/:reference`).
+ *
+ * Paystack's guidance for a `pending` charge: wait about ten seconds and ask
+ * again here. Unlike `/transaction/verify`, this also says when the network
+ * has since asked for a code (`send_otp`), which verify cannot.
+ */
+export async function checkPendingCharge(reference: string): Promise<PaystackChargeResult> {
+  return call<PaystackChargeResult>(`/charge/${encodeURIComponent(reference)}`);
+}
+

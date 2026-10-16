@@ -167,10 +167,14 @@ try {
   }
 
   const shippingService = fs.readFileSync(path.join(ROOT, "src", "lib", "shipping.ts"), "utf-8");
-  if (shippingService.includes("getSettings") && shippingService.includes("freeShippingThreshold")) {
-    pass("Shared shipping engine applies store-wide free-shipping threshold");
+  if (
+    /get(Commerce)?Settings/.test(shippingService) &&
+    shippingService.includes("freeShippingThreshold") &&
+    shippingService.includes("deliveryFee")
+  ) {
+    pass("Shared shipping engine prices the fixed delivery fee and store-wide free-shipping threshold");
   } else {
-    fail("Shared Shipping", "Store-wide free-shipping threshold is not enforced by src/lib/shipping.ts");
+    fail("Shared Shipping", "The fixed delivery fee or free-shipping threshold is not applied by src/lib/shipping.ts");
   }
 
   if (!ordersRoute.includes("db.shippingRate.findUnique")) {

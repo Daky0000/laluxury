@@ -152,6 +152,14 @@ export function OrderPromptModal({
           setPushDisplayText("Payment verified successfully! Order updated to PAID.");
           clearInterval(timer);
           onSuccessRef.current(`Payment confirmed for Order #${order.orderNumber}!`);
+        } else if (check.chargeStatus === "send_otp") {
+          // A charge that started "pending" can ask for a code later
+          // (Telecel's voucher from *110#); show the code field.
+          setPushStatus("send_otp");
+          if (check.displayText) setPushDisplayText(check.displayText);
+        } else if (check.chargeStatus === "failed") {
+          clearInterval(timer);
+          setPushDisplayText(check.message);
         }
       } catch {
         // Continue polling silently

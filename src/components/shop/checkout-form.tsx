@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -24,14 +24,12 @@ import type { PickupLocation } from "@/lib/pickup-locations";
 import { cn } from "@/lib/utils";
 import { CheckoutSteps } from "./checkout-steps";
 
-type Rate = {
-  id: string;
-  name: string;
+/** The one delivery option: the store's fixed fee, quoted on the server. */
+export type CheckoutDelivery = {
+  /** Sent back with the order so the server can check the price. */
+  rateId: string;
+  /** Minor units; 0 when free. */
   price: number;
-  zoneName: string;
-  estimatedDaysMin: number | null;
-  estimatedDaysMax: number | null;
-  isFree: boolean;
 };
 
 export type SavedAddressOption = {
@@ -68,12 +66,10 @@ const DELIVERY_FIELDS = [
   "lastName",
   "phone",
   "line1",
-  "line2",
   "city",
   "region",
   "pickupLocationId",
   "shippingRateId",
-  "password",
 ];
 
 // 16px on phones: anything smaller makes iOS zoom into the field on focus.
@@ -109,6 +105,7 @@ export function CheckoutForm({
   isSignedIn,
   hasPreorderItems = false,
   freeShippingThreshold,
+  delivery,
   directNetworks,
   pickupLocations,
   items,
@@ -122,6 +119,7 @@ export function CheckoutForm({
   isSignedIn: boolean;
   hasPreorderItems?: boolean;
   freeShippingThreshold: number | null;
+  delivery: CheckoutDelivery;
   /** Networks that get the PIN prompt on the phone; the rest use Paystack's page. */
   directNetworks: MomoNetworkId[];
   /** Where an order can be collected; empty hides the pickup option. */
@@ -145,7 +143,6 @@ export function CheckoutForm({
   const [email, setEmail] = useState(defaults.email);
   // One field takes a street address or a digital address (GA-123-4567).
   const [line1, setLine1] = useState(defaults.line1 || defaults.postalCode);
-  const [line2, setLine2] = useState(defaults.line2);
   const [city, setCity] = useState(defaults.city || "Accra");
   const [region, setRegion] = useState(defaults.region || "Greater Accra");
   const [selectedAddressId, setSelectedAddressId] = useState<string>(
@@ -156,9 +153,6 @@ export function CheckoutForm({
     pickupLocations.length === 1 ? pickupLocations[0].id : "",
   );
 
-  const [rates, setRates] = useState<Rate[]>([]);
-  const [rateId, setRateId] = useState<string>("");
-  const [loadingRates, setLoadingRates] = useState(false);
   // Nothing is picked for the shopper: they name their network (or card) first.
   const [payWith, setPayWith] = useState<PayWith | null>(null);
   const [momoRoute, setMomoRoute] = useState<"direct" | "hosted" | null>(null);
@@ -167,7 +161,6 @@ export function CheckoutForm({
   const [preorderDepositOption, setPreorderDepositOption] = useState<"deposit_50" | "full">(
     hasPreorderItems ? "deposit_50" : "full",
   );
-  const [createAccount, setCreateAccount] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
 
   function applySavedAddress(addr: SavedAddressOption) {
@@ -176,36 +169,9 @@ export function CheckoutForm({
     setLastName(addr.lastName);
     setPhone(addr.phone);
     setLine1(addr.line1 || addr.postalCode);
-    setLine2(addr.line2);
     setCity(addr.city);
     setRegion(addr.region);
   }
-
-  useEffect(() => {
-    if (!region) return;
-
-    const controller = new AbortController();
-
-    const timer = setTimeout(() => {
-      setLoadingRates(true);
-
-      fetch(`/api/shipping/quote?region=${encodeURIComponent(region)}`, {
-        signal: controller.signal,
-      })
-        .then((r) => r.json())
-        .then((data: { rates: Rate[] }) => {
-          setRates(data.rates ?? []);
-          setRateId(data.rates?.[0]?.id ?? "");
-        })
-        .catch(() => {})
-        .finally(() => setLoadingRates(false));
-    }, 60);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [region]);
 
   // A server error about delivery details sends the shopper back to fix them.
   // Adjusted during render, once per new result, rather than in an effect.
@@ -219,11 +185,10 @@ export function CheckoutForm({
 
   const isPickup = fulfilment === "pickup";
   const pickupLocation = pickupLocations.find((l) => l.id === pickupLocationId) ?? null;
-  const visibleRates = region ? rates : [];
-  const selectedRate = isPickup ? undefined : visibleRates.find((r) => r.id === rateId);
-  const shippingTotal = selectedRate?.price ?? 0;
-  // Ready to price: a pickup point, or a delivery option for the address.
-  const fulfilmentChosen = isPickup ? Boolean(pickupLocation) : Boolean(selectedRate);
+  // One fixed delivery fee, whatever the region; pickup is free.
+  const shippingTotal = isPickup ? 0 : delivery.price;
+  // Ready to price: a pickup point, or delivery (always available).
+  const fulfilmentChosen = isPickup ? Boolean(pickupLocation) : true;
   const total = goodsTotal + shippingTotal;
   const depositDueNow =
     hasPreorderItems && preorderDepositOption === "deposit_50"
@@ -380,13 +345,7 @@ export function CheckoutForm({
         <div className="flex justify-between py-1.5 text-[var(--text-secondary)]">
           <dt>{isPickup ? "Pickup" : "Delivery"}</dt>
           <dd className="tabular-nums">
-            {isPickup
-              ? "Free"
-              : !selectedRate
-              ? "Enter address"
-              : shippingTotal === 0
-                ? "Free"
-                : formatPrice(shippingTotal)}
+            {shippingTotal === 0 ? "Free" : formatPrice(shippingTotal)}
           </dd>
         </div>
       </dl>
@@ -483,14 +442,7 @@ export function CheckoutForm({
                   <span className="text-sm text-[var(--text-secondary)]">
                     Signed in as {defaults.email}
                   </span>
-                ) : (
-                  <Link
-                    href="/login?next=/checkout"
-                    className="text-sm text-[var(--accent)] underline-offset-4 hover:underline"
-                  >
-                    Have an account? Sign in
-                  </Link>
-                )}
+                ) : null}
               </div>
               <div className="grid gap-3.5 sm:grid-cols-2">
                 <div>
@@ -532,6 +484,9 @@ export function CheckoutForm({
               </div>
               <p className="mt-2 text-xs text-[var(--text-muted)]">
                 We send your receipt and delivery updates here.
+                {isSignedIn
+                  ? null
+                  : " New here? Your account is made from this order once it is paid, and we text you how to sign in."}
               </p>
             </section>
 
@@ -656,41 +611,18 @@ export function CheckoutForm({
               </section>
             ) : (
               <section className="mt-8">
-                <label htmlFor="shippingRateId" className="mb-1.5 block text-base font-medium">
-                  Delivery method
-                </label>
-                {loadingRates ? (
-                  <p className="flex items-center gap-2 border border-[var(--border-subtle)] px-4 py-3 text-sm text-[var(--text-secondary)]">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                    Checking options for {region}…
-                  </p>
-                ) : visibleRates.length === 0 ? (
-                  <p className="border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
-                    {region
-                      ? `We do not deliver to ${region} yet.${pickupLocations.length ? " Choose Pickup, or contact us." : " Contact us and we will sort something out."}`
-                      : "Choose your region below to see delivery options."}
-                  </p>
-                ) : (
-                  <select
-                    id="shippingRateId"
-                    name="shippingRateId"
-                    required
-                    value={rateId}
-                    onChange={(e) => setRateId(e.target.value)}
-                    className={`${field} cursor-pointer`}
-                  >
-                    {visibleRates.map((rate) => (
-                      <option key={rate.id} value={rate.id}>
-                        {rate.name} · {rate.price === 0 ? "Free" : formatPrice(rate.price)}
-                        {rate.estimatedDaysMin !== null
-                          ? ` · ${rate.estimatedDaysMin === 0 ? "today or tomorrow" : `${rate.estimatedDaysMin}–${rate.estimatedDaysMax} days`}`
-                          : ""}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                <input type="hidden" name="shippingRateId" value={delivery.rateId} />
+                <div className="flex items-center justify-between gap-3 border border-[var(--border-strong)] bg-[var(--surface-raised)] px-4 py-3.5 text-sm">
+                  <span className="flex items-center gap-2.5">
+                    <Truck className="h-4 w-4 text-[var(--accent)]" aria-hidden />
+                    <span className="font-medium">Delivery</span>
+                  </span>
+                  <span className="font-medium tabular-nums">
+                    {delivery.price === 0 ? "Free" : formatPrice(delivery.price)}
+                  </span>
+                </div>
                 <p className="mt-1.5 text-xs text-[var(--text-muted)]">
-                  Options and prices follow the region you choose below.
+                  One delivery fee for every region.
                 </p>
 
                 <h3 className="mb-3 mt-8 text-base font-medium">Delivery details</h3>
@@ -767,21 +699,6 @@ export function CheckoutForm({
                     {errors.line1 ? <p className="mt-1.5 text-sm text-danger">{errors.line1}</p> : null}
                   </div>
 
-                  <div className="sm:col-span-2">
-                    <label htmlFor="line2" className={labelClass}>
-                      Landmark <span className="text-[var(--text-muted)]">(optional)</span>
-                    </label>
-                    <input
-                      id="line2"
-                      name="line2"
-                      value={line2}
-                      onChange={(e) => setLine2(e.target.value)}
-                      autoComplete="address-line2"
-                      placeholder="Near the church, opposite the school…"
-                      className={field}
-                    />
-                  </div>
-
                   <div>
                     <label htmlFor="region" className={labelClass}>
                       Region
@@ -840,37 +757,6 @@ export function CheckoutForm({
               />
             </section>
 
-            {!isSignedIn ? (
-              <label className="mt-4 flex min-h-9 cursor-pointer items-center gap-2.5 text-sm">
-                <input
-                  type="checkbox"
-                  name="createAccount"
-                  checked={createAccount}
-                  onChange={(event) => setCreateAccount(event.target.checked)}
-                  className="h-5 w-5 shrink-0 accent-[var(--accent)]"
-                />
-                Save my details for next time
-              </label>
-            ) : null}
-            {!isSignedIn && createAccount ? (
-              <div className="mt-3 max-w-md">
-                <label htmlFor="password" className={labelClass}>
-                  Choose a password
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  minLength={8}
-                  required
-                  autoComplete="new-password"
-                  placeholder="8+ characters, a capital and a number"
-                  className={field}
-                />
-                {errors.password ? <p className="mt-1.5 text-sm text-danger">{errors.password}</p> : null}
-              </div>
-            ) : null}
-
             {stepError || blockingProblem ? (
               <p role="alert" className="mt-6 text-sm text-danger">
                 {stepError ?? blockingProblem}
@@ -910,15 +796,13 @@ export function CheckoutForm({
                     }
                   : {
                       label: "Deliver to",
-                      value: `${firstName} ${lastName}, ${line1}${line2 ? ` (${line2})` : ""}, ${city}, ${region}`,
+                      value: `${firstName} ${lastName}, ${line1}, ${city}, ${region}`,
                     },
                 {
                   label: "Method",
                   value: isPickup
                     ? "Pickup · Free"
-                    : selectedRate
-                      ? `${selectedRate.name} · ${selectedRate.price === 0 ? "Free" : formatPrice(selectedRate.price)}`
-                      : "—",
+                    : `Delivery · ${delivery.price === 0 ? "Free" : formatPrice(delivery.price)}`,
                 },
               ].map((row) => (
                 <div key={row.label} className="flex items-start gap-3 py-3">

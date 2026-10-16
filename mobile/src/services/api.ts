@@ -13,7 +13,6 @@ import {
   ShippingRate,
   AppConfig,
   ServerCart,
-  ShippingZoneDetail,
   WishlistItem,
   ProductReviews,
   SearchSuggestion,
@@ -745,60 +744,36 @@ class ApiService {
     orderId: string,
     reference: string,
     chargeScope: "FULL" | "DEPOSIT_50" = "FULL",
-  ): Promise<{ ok: boolean; paid: boolean; status?: string; message: string }> {
+  ): Promise<{
+    ok: boolean;
+    paid: boolean;
+    status?: string;
+    /** Paystack's charge state while unpaid: "send_otp" means a code is wanted. */
+    chargeStatus?: string | null;
+    displayText?: string | null;
+    message: string;
+  }> {
     return this.request(
       `/api/app/orders/${encodeURIComponent(orderId)}/momo-push?reference=${encodeURIComponent(reference)}&chargeScope=${chargeScope}`,
     );
   }
 
-  async getShippingZones(): Promise<{
+  /** The one delivery fee (staff, `settings:manage`). Minor units. */
+  async getDeliveryFee(): Promise<{
     ok: boolean;
-    availableRegions: readonly string[];
-    zones: ShippingZoneDetail[];
+    deliveryFee: number;
+    freeShippingThreshold: number | null;
   }> {
     return this.request("/api/app/shipping/zones");
   }
 
-  async saveShippingZone(data: {
-    id?: string;
-    name: string;
-    regions: string[];
-    isActive?: boolean;
-  }): Promise<{ ok: boolean; message: string; zone: any }> {
+  async saveDeliveryFee(deliveryFee: number): Promise<{ ok: boolean; message: string; deliveryFee?: number }> {
     return this.request("/api/app/shipping/zones", {
       method: "POST",
-      body: JSON.stringify({ action: "save_zone", ...data }),
+      body: JSON.stringify({ action: "save_fee", deliveryFee }),
     });
   }
 
-  async saveShippingRate(data: {
-    id?: string;
-    zoneId: string;
-    name: string;
-    price: number;
-    freeAboveSubtotal?: number | null;
-    estimatedDaysMin?: number | null;
-    estimatedDaysMax?: number | null;
-    isActive?: boolean;
-    position?: number;
-  }): Promise<{ ok: boolean; message: string; rate: any }> {
-    return this.request("/api/app/shipping/zones", {
-      method: "POST",
-      body: JSON.stringify({ action: "save_rate", ...data }),
-    });
-  }
-
-  async deleteShippingZone(id: string): Promise<{ ok: boolean; message: string }> {
-    return this.request(`/api/app/shipping/zones?action=zone&id=${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
-  }
-
-  async deleteShippingRate(id: string): Promise<{ ok: boolean; message: string }> {
-    return this.request(`/api/app/shipping/zones?action=rate&id=${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
-  }
 
   // --- Cart Continuity (Server & Local) -------------------------------------
 

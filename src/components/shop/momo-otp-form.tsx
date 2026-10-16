@@ -5,19 +5,22 @@ import { useRouter } from "next/navigation";
 import { customerSubmitMomoOtpAction } from "@/app/actions/order-pay";
 
 /**
- * Some networks (Telecel always, MTN now and then) text a code before the
- * MoMo PIN prompt appears. Paystack holds the charge until that code comes
- * back, so without this field the shopper never sees a prompt at all.
+ * Some networks need a code before the MoMo prompt appears: Telecel asks for
+ * a voucher the payer generates on *110#, and other networks now and then
+ * text a one-time code. Paystack holds the charge until that code comes back,
+ * so without this field the payer never sees a prompt at all.
  */
 export function MomoOtpForm({
   orderId,
   reference,
   required,
+  network,
 }: {
   orderId: string;
   reference: string;
-  /** Paystack asked for a code when the charge started. */
+  /** Paystack asked for a code (charge status `send_otp`). */
   required: boolean;
+  network?: "mtn" | "vod" | "atl" | null;
 }) {
   const router = useRouter();
   const [otp, setOtp] = useState("");
@@ -48,12 +51,18 @@ export function MomoOtpForm({
   return (
     <form onSubmit={submit} className="mt-4 border-t border-[var(--border-subtle)] pt-4">
       <label htmlFor="momo-otp" className="block text-sm font-medium text-[var(--text-primary)]">
-        {required ? "Enter the code sent to your phone" : "Received a code by SMS?"}
+        {required
+          ? network === "vod"
+            ? "Enter your Telecel Cash voucher code"
+            : "Enter the code from your network"
+          : "Asked for a code or voucher?"}
       </label>
       <p className="mt-1 text-[var(--text-secondary)]">
         {required
-          ? "Your network sent a one-time code. Enter it here and the PIN prompt will appear on your phone."
-          : "Telecel Cash and some MTN wallets send a code first. Enter it here to receive the PIN prompt."}
+          ? network === "vod"
+            ? "Dial *110#, generate a voucher with your PIN, then type the voucher here."
+            : "Type the code your network sent you. The payment prompt follows."
+          : "If your network sent a code, or Telecel asked you to generate a voucher on *110#, enter it here."}
       </p>
       <div className="mt-3 flex gap-2">
         <input

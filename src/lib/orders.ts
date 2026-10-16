@@ -19,8 +19,13 @@ import {
   stockLinesForOrder,
 } from "./inventory";
 import { notifyOrder, notifyOwnerOfPaidOrder } from "./notify";
-import { quoteShipping } from "./shipping";
+import { quoteShipping, shippingRateIdForOrder } from "./shipping";
 import { describeChannel } from "./paystack";
+import { env } from "./env";
+import { formatPhone, normalisePhone } from "./phone";
+import { isPickupAddress } from "./pickup-locations";
+import { getSettings } from "./settings";
+import { sendSms } from "./sms";
 import { postAlert } from "./agent/slack";
 import { MANUAL_PAYMENT_METHODS, type ManualPaymentMethod } from "./constants";
 import type { OrderNotice } from "./notify";
@@ -115,10 +120,10 @@ export async function createOrderFromCart(args: {
   } else if (args.shippingRateId) {
     const chosen = quotes.find((q) => q.id === args.shippingRateId);
     if (!chosen) throw new Error("That delivery option is not available for your address.");
-    shippingRateId = chosen.id;
+    shippingRateId = shippingRateIdForOrder(chosen.id);
     shippingTotal = chosen.price;
   } else if (quotes.length > 0) {
-    shippingRateId = quotes[0].id;
+    shippingRateId = shippingRateIdForOrder(quotes[0].id);
     shippingTotal = quotes[0].price;
   } else {
     // No rate covers this address: refuse rather than deliver for free.
@@ -444,6 +449,14 @@ export async function markOrderPaid(args: {
 
   await applySoldStock(order);
 
+  // A first-time buyer's order becomes their account.
+  if (!order.userId) {
+    order.userId = await ensureCustomerAccount(order.id).catch((error) => {
+      console.error("[orders] could not create the buyer's account", order.orderNumber, error);
+      return null;
+    });
+  }
+
   // Count the discount only on a real sale.
   if (order.discountTotal > 0 && order.redemptions.length === 0) {
     const cart = await db.cart.findFirst({
@@ -523,6 +536,96 @@ export async function markOrderPaid(args: {
   await notifyOwnerOfPaidOrder(order.id, args.reference);
 
   return { alreadyPaid: false };
+}
+
+/**
+ * Checkout has no sign-in. On a guest's first paid order this makes their
+ * account from the order itself, the name on the delivery and the phone
+ * number, and texts them that they can now sign in with that number (sign-in
+ * is by a code texted to the phone, so no password is needed). An existing
+ * account with the same phone or email gets the order instead, without a
+ * text. Returns the account the order now belongs to.
+ */
+export async function ensureCustomerAccount(orderId: string): Promise<string | null> {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      userId: true,
+      email: true,
+      phone: true,
+      shippingAddress: { select: { id: true, firstName: true, lastName: true, phone: true, line1: true } },
+      billingAddressId: true,
+    },
+  });
+  if (!order) return null;
+  if (order.userId) return order.userId;
+
+  const phone = normalisePhone(order.phone ?? order.shippingAddress?.phone ?? "");
+  // Showroom sales carry a made-up address (pos.ts); it is nobody's email.
+  const rawEmail = order.email?.trim().toLowerCase() || null;
+  const email = rawEmail && !/^showroom\.\d+@/.test(rawEmail) ? rawEmail : null;
+  if (!phone) return null;
+
+  const link = async (userId: string) => {
+    await db.order.update({ where: { id: order.id }, data: { userId } });
+    // The delivery address goes on the account too, so the next checkout
+    // offers it. A pickup point is not a delivery address.
+    if (order.shippingAddress && !isPickupAddress(order.shippingAddress.line1)) {
+      await db.address.updateMany({
+        where: { id: { in: [order.shippingAddress.id, order.billingAddressId ?? ""] }, userId: null },
+        data: { userId },
+      });
+    }
+  };
+
+  const existing = await db.user.findFirst({
+    where: { OR: [{ phone }, ...(email ? [{ email }] : [])] },
+    select: { id: true },
+  });
+  if (existing) {
+    await link(existing.id);
+    return existing.id;
+  }
+
+  let userId: string;
+  try {
+    const created = await db.user.create({
+      data: {
+        phone,
+        email,
+        firstName: order.shippingAddress?.firstName?.trim() || null,
+        lastName: order.shippingAddress?.lastName?.trim() || null,
+      },
+      select: { id: true },
+    });
+    userId = created.id;
+  } catch (error) {
+    // Two payment paths for the same order raced here; the other one won.
+    const winner = await db.user.findFirst({
+      where: { OR: [{ phone }, ...(email ? [{ email }] : [])] },
+      select: { id: true },
+    });
+    if (!winner) throw error;
+    await link(winner.id);
+    return winner.id;
+  }
+  await link(userId);
+
+  const settings = await getSettings();
+  const name = order.shippingAddress?.firstName?.trim();
+  const message =
+    `${name ? `Hi ${name}, your` : "Your"} ${settings.storeName} account has been created with ${formatPhone(phone)}. ` +
+    `Sign in with this number at ${env.siteUrl()}/login to track your orders and check out faster.`;
+  const sent = await sendSms(phone, message);
+  if (!sent.ok) console.warn("[orders] account-created SMS not sent", sent.message);
+  await logOrderEvent({
+    orderId: order.id,
+    type: "customer.account_created",
+    message: `Account created for ${formatPhone(phone)} from this order${sent.ok ? "; sign-in SMS sent" : "; the sign-in SMS could not be sent"}.`,
+    meta: { userId },
+  });
+  return userId;
 }
 
 /** Records the remaining balance on a deposit order, exactly once. */

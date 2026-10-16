@@ -1,20 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
+import { getCommerceSettings } from "@/lib/settings";
 import { SectionHeading } from "@/components/ui";
-import { DeliveryManager } from "@/components/admin/delivery-manager";
+import { DeliveryFeeForm } from "@/components/admin/delivery-fee-form";
 
 export const metadata: Metadata = { title: "Delivery" };
+export const dynamic = "force-dynamic";
 
 export default async function AdminDeliveryPage() {
   await requirePermission("settings:manage");
 
-  const zones = await db.shippingZone.findMany({
-    include: { rates: { orderBy: [{ position: "asc" }, { price: "asc" }] } },
-    orderBy: { createdAt: "asc" },
-  });
+  const settings = await getCommerceSettings();
 
   return (
     <div className="flex flex-col gap-6">
@@ -28,26 +26,12 @@ export default async function AdminDeliveryPage() {
 
       <SectionHeading
         title="Delivery"
-        description="Zones group the regions that cost the same to reach. The rates inside a zone are what a shopper chooses between at checkout."
+        description="One delivery fee for every order and every region. Shoppers see it at checkout on the website and in the app."
       />
 
-      <DeliveryManager
-        zones={zones.map((zone) => ({
-          id: zone.id,
-          name: zone.name,
-          regions: zone.regions,
-          isActive: zone.isActive,
-          rates: zone.rates.map((rate) => ({
-            id: rate.id,
-            name: rate.name,
-            price: rate.price,
-            freeAboveSubtotal: rate.freeAboveSubtotal,
-            estimatedDaysMin: rate.estimatedDaysMin,
-            estimatedDaysMax: rate.estimatedDaysMax,
-            isActive: rate.isActive,
-            position: rate.position,
-          })),
-        }))}
+      <DeliveryFeeForm
+        deliveryFee={settings.deliveryFee}
+        freeShippingThreshold={settings.freeShippingThreshold}
       />
     </div>
   );

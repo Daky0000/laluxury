@@ -18,6 +18,13 @@ import {
 } from "@/lib/paystack";
 import { formatMoney } from "@/lib/money";
 import { markOrderPaid } from "@/lib/orders";
+import {
+  readDirectCharge,
+  recordDirectCharge,
+  refreshDirectCharge,
+  resendDirectDebitPrompt,
+} from "@/lib/momo-push";
+import type { DirectChargeStatus } from "@/lib/momo-networks";
 
 export type CustomerMomoPushResult = {
   ok: boolean;
@@ -228,6 +235,7 @@ export async function customerInitiateMomoPushAction(args: {
           charge.display_text || charge.message || "That MoMo number could not be charged. Check the number and network.",
         );
       }
+      await recordDirectCharge(reference, provider, charge);
 
       revalidatePath(`/orders/track`);
       return {
@@ -265,7 +273,7 @@ export async function customerSubmitMomoOtpAction(args: {
 }): Promise<CustomerMomoPushResult> {
   const payment = await db.payment.findUnique({
     where: { reference: args.reference },
-    select: { orderId: true, status: true },
+    select: { orderId: true, status: true, rawResponse: true, mobileMoneyNumber: true },
   });
   if (!payment || payment.orderId !== args.orderId || payment.status !== "PENDING") {
     return { ok: false, error: "This payment is no longer awaiting a code." };
@@ -276,6 +284,17 @@ export async function customerSubmitMomoOtpAction(args: {
       reference: args.reference,
       otp: args.otp,
     });
+    if (res.status === "failed") {
+      return {
+        ok: false,
+        error: res.display_text || res.message || "That code was not accepted. Generate a new one and try again.",
+      };
+    }
+    await recordDirectCharge(
+      args.reference,
+      readDirectCharge(payment.rawResponse).provider ?? detectGhanaMomoProvider(payment.mobileMoneyNumber ?? ""),
+      res,
+    );
 
     return {
       ok: true,
@@ -299,7 +318,14 @@ export async function customerSubmitMomoOtpAction(args: {
 export async function customerCheckMomoPinAction(args: {
   orderId: string;
   reference: string;
-}): Promise<{ ok: boolean; paid: boolean; message: string }> {
+}): Promise<{
+  ok: boolean;
+  paid: boolean;
+  message: string;
+  /** Paystack's charge state while unpaid; "send_otp" means a code is wanted. */
+  chargeStatus?: DirectChargeStatus | null;
+  displayText?: string | null;
+}> {
   const payment = await db.payment.findUnique({
     where: { reference: args.reference },
     include: { order: true },
@@ -345,18 +371,27 @@ export async function customerCheckMomoPinAction(args: {
         };
       }
 
-      if (verified.status === "failed" || verified.status === "abandoned") {
+      // Paystack also calls a prompt not yet approved "abandoned", so only the
+      // charge itself can say the attempt is over.
+      const charge = await refreshDirectCharge(args.reference);
+      if (verified.status === "failed" || charge.status === "failed") {
         return {
           ok: true,
           paid: false,
-          message: `Payment timed out or cancelled (${verified.gateway_response ?? verified.status}). Please try sending the prompt again.`,
+          chargeStatus: "failed",
+          message: `Payment timed out or was declined (${verified.gateway_response ?? "not approved"}). Please send the prompt again.`,
         };
       }
 
       return {
         ok: true,
         paid: false,
-        message: "Waiting for you to enter your 4-digit MoMo PIN on your phone...",
+        chargeStatus: charge.status,
+        displayText: charge.displayText,
+        message:
+          charge.status === "send_otp"
+            ? (charge.displayText ?? "Your network needs a code before it sends the prompt. Enter it below.")
+            : "Waiting for you to approve the payment with your MoMo PIN on your phone.",
       };
     } catch {
       return {
@@ -395,4 +430,17 @@ async function finalizeCustomerMomoPayment(args: {
   revalidatePath("/orders/track");
   revalidatePath(`/admin/orders/${args.orderId}`);
   revalidatePath("/admin/orders");
+}
+
+/**
+ * 5. The confirmation page's "Send the prompt again": same wallet, same
+ * network, same amount, a new reference. Returns where to look next.
+ */
+export async function resendCheckoutPromptAction(
+  reference: string,
+): Promise<{ ok: true; reference: string } | { ok: false; error: string }> {
+  if (!reference || typeof reference !== "string") return { ok: false, error: "Missing payment reference." };
+  const result = await resendDirectDebitPrompt(reference);
+  if (result.ok) revalidatePath("/checkout/confirm");
+  return result;
 }

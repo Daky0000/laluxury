@@ -9,7 +9,7 @@ import { orderPath } from "@/lib/order-access";
 import { availableOf, InsufficientStockError, reserveStock } from "@/lib/inventory";
 import { cancelOrder, logOrderEvent, sweepStalePendingOrdersSoon, uniqueOrderNumber } from "@/lib/orders";
 import { normalisePhone } from "@/lib/phone";
-import { quoteShipping } from "@/lib/shipping";
+import { quoteShipping, shippingRateIdForOrder } from "@/lib/shipping";
 import { recordRedemption, validateDiscount, type DiscountLine } from "@/lib/discounts";
 import { getCommerceSettings } from "@/lib/settings";
 import { pickupAddressLines } from "@/lib/pickup-locations";
@@ -23,6 +23,7 @@ import {
   MOMO_PROVIDER_LABELS,
   type MomoProvider,
 } from "@/lib/paystack";
+import { recordDirectCharge } from "@/lib/momo-push";
 import { formatMoney } from "@/lib/money";
 
 export const runtime = "nodejs";
@@ -646,7 +647,7 @@ export const POST = withApiAuth(async (request: Request) => {
         total: grandTotal,
         shippingAddressId: shipping.id,
         billingAddressId: shipping.id,
-        shippingRateId: appliedShippingRateId,
+        shippingRateId: shippingRateIdForOrder(appliedShippingRateId),
         customerNote: combinedCustomerNote,
         items: {
           create: lineItemsData,
@@ -800,6 +801,7 @@ export const POST = withApiAuth(async (request: Request) => {
               "That MoMo number could not be charged. Check the number and network, or choose another payment method.",
           );
         }
+        await recordDirectCharge(reference, provider, chargeRes);
 
         await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
           console.error("[notify] order.placed SMS error:", err),

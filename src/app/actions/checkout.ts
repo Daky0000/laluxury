@@ -9,8 +9,8 @@ import { getOrCreateCart } from "@/lib/cart";
 import { createOrderFromCart } from "@/lib/orders";
 import { settleEarlierCheckout } from "@/lib/checkout-payment";
 import { notifyOrder } from "@/lib/notify";
-import { createSessionCookie, getSession } from "@/lib/auth/session";
-import { hashPassword, passwordProblems } from "@/lib/auth/password";
+import { getSession } from "@/lib/auth/session";
+import { recordDirectCharge } from "@/lib/momo-push";
 import {
   chargeMobileMoney,
   detectGhanaMomoProvider,
@@ -44,7 +44,6 @@ const schema = z.object({
   pickupLocationId: z.string().optional(),
   // Address fields are only required for delivery; checked after parsing.
   line1: z.string().trim().optional(),
-  line2: z.string().trim().optional(),
   city: z.string().trim().optional(),
   region: z.string().optional(),
   shippingRateId: z.string().optional(),
@@ -54,8 +53,6 @@ const schema = z.object({
   momoPhone: z.string().trim().optional(),
   preorderDepositOption: z.enum(["full", "deposit_50"]).optional(),
   customerNote: z.string().optional(),
-  createAccount: z.boolean().optional(),
-  password: z.string().optional(),
 });
 
 export async function placeOrderAction(
@@ -70,7 +67,6 @@ export async function placeOrderAction(
     fulfilment: formData.get("fulfilment") || undefined,
     pickupLocationId: formData.get("pickupLocationId") || undefined,
     line1: formData.get("line1") || undefined,
-    line2: formData.get("line2") || undefined,
     city: formData.get("city") || undefined,
     region: formData.get("region") || undefined,
     shippingRateId: formData.get("shippingRateId") || undefined,
@@ -79,8 +75,6 @@ export async function placeOrderAction(
     momoPhone: formData.get("momoPhone") || undefined,
     preorderDepositOption: formData.get("preorderDepositOption") || undefined,
     customerNote: formData.get("customerNote") || undefined,
-    createAccount: formData.get("createAccount") === "on",
-    password: formData.get("password") || undefined,
   });
 
   if (!parsed.success) {
@@ -128,7 +122,7 @@ export async function placeOrderAction(
         city: pickupLocation.city,
         region: pickupLocation.region,
       }
-    : { line1: data.line1!, line2: data.line2 || null, city: data.city!, region: data.region! };
+    : { line1: data.line1!, line2: null, city: data.city!, region: data.region! };
 
   // The shopper names their network first. A network on the store's direct
   // list lets them choose the phone prompt or Paystack's page; any other
@@ -154,64 +148,18 @@ export async function placeOrderAction(
     };
   }
 
+  // No sign-in at checkout. A signed-in shopper's order goes on their account;
+  // a guest's goes on the account that already has this email or phone. A
+  // first-time buyer gets an account made from this order once it is paid
+  // (see `markOrderPaid`), and is texted that they can sign in.
   const session = await getSession();
   let userId = session?.userId ?? null;
-
-  // Optional 1-click account creation at checkout for guests.
-  if (!userId && data.createAccount) {
-    const problems = passwordProblems(data.password ?? "");
-    if (problems.length) return { ok: false, fieldErrors: { password: problems[0] } };
-
+  if (!userId) {
     const existing = await db.user.findFirst({
-      where: { OR: [{ email }, { phone }] },
+      where: { OR: [{ phone }, { email }] },
       select: { id: true },
     });
-    if (existing) {
-      return {
-        ok: false,
-        message:
-          "There is already an account with that email or phone number. Sign in first, or untick 'Create my account' to check out as a guest.",
-      };
-    }
-
-    const created = await db.user.create({
-      data: {
-        email,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        phone,
-        phoneVerified: new Date(),
-        passwordHash: await hashPassword(data.password ?? ""),
-      },
-    });
-    userId = created.id;
-
-    // Save their delivery address (not a pickup point) and log them in.
-    if (!isPickup) {
-      await db.address.create({
-        data: {
-          userId: created.id,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          phone,
-          ...shippingAddress,
-          country: "GH",
-          isDefault: true,
-        },
-      });
-    }
-
-    await createSessionCookie({ userId: created.id, role: created.role });
-  } else if (!userId) {
-    // Guest checkout: if an existing user matches this email or phone, link the
-    // order to their profile so it appears in their order history later.
-    const existing = await db.user.findFirst({
-      where: { OR: [{ email }, { phone }] },
-      select: { id: true },
-    });
-    if (existing) {
-      userId = existing.id;
-    }
+    userId = existing?.id ?? null;
   }
 
   const cart = await getOrCreateCart();
@@ -293,14 +241,13 @@ export async function placeOrderAction(
               "That MoMo number could not be charged. Check the number and network, or choose another payment method.",
           );
         }
+        await recordDirectCharge(reference, network ?? detectGhanaMomoProvider(momoPhone), charge);
         await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
           console.error("[notify] web direct debit order.placed error:", err),
         );
-        // Telecel (and sometimes MTN) sends a code first; no PIN prompt appears
-        // until it is entered, so the confirmation page has to ask for it.
-        redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}${
-          charge.status === "send_otp" ? "&step=otp" : ""
-        }`;
+        // The confirmation page reads the charge's state itself: a code to
+        // enter (Telecel's voucher), a prompt to approve, or still pending.
+        redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}`;
       } else {
         const init = await initializeTransaction({
               email,

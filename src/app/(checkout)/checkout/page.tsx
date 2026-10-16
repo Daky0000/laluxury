@@ -6,6 +6,7 @@ import { currentUser } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { formatPhone } from "@/lib/phone";
 import { isPickupAddress } from "@/lib/pickup-locations";
+import { quoteShipping } from "@/lib/shipping";
 import { CheckoutForm, type CheckoutDefaults } from "@/components/shop/checkout-form";
 import { DiscountForm } from "@/components/shop/cart-lines";
 
@@ -19,10 +20,13 @@ export default async function CheckoutPage() {
   const totals = await computeCartTotals(cart);
   if (totals.lines.length === 0) redirect("/cart");
 
-  const [user, settings] = await Promise.all([
+  const [user, settings, quotes] = await Promise.all([
     currentUser(),
     getSettings(),
+    // One fixed fee for every region, so it is known before an address is typed.
+    quoteShipping({ subtotal: totals.subtotal, totalWeightGrams: totals.totalWeightGrams }),
   ]);
+  const deliveryQuote = quotes[0];
 
   // Every order's address is kept on the account, pickup orders included, so
   // the list is cleaned: pickup points are not delivery addresses, and the
@@ -90,6 +94,11 @@ export default async function CheckoutPage() {
         isSignedIn={Boolean(user)}
         hasPreorderItems={hasPreorderItems}
         freeShippingThreshold={settings.freeShippingThreshold}
+        delivery={{
+          rateId: deliveryQuote?.id ?? "",
+          // A FREE_SHIPPING code zeroes delivery, as the order will.
+          price: totals.freeShipping ? 0 : (deliveryQuote?.price ?? 0),
+        }}
         directNetworks={settings.momoDirectNetworks}
         pickupLocations={settings.pickupLocations}
         items={totals.lines.map((line) => ({

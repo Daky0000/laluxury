@@ -15,6 +15,9 @@ import { ProductTile } from "@/components/shop/product-tile";
 import { Footer } from "@/components/shop/footer";
 import { PaymentStatusRefresher } from "@/components/shop/payment-status-refresher";
 import { MomoOtpForm } from "@/components/shop/momo-otp-form";
+import { MomoResendButton } from "@/components/shop/momo-resend-button";
+import { refreshDirectCharge } from "@/lib/momo-push";
+import { momoApprovalHelp } from "@/lib/momo-networks";
 import { LinkButton } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Order confirmation" };
@@ -351,7 +354,6 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
   // asks for it there, so no prompt has been sent on its behalf yet.
   const directCharge = fresh.payments.find((p) => p.reference === reference && p.mobileMoneyNumber);
   const awaitsPhoneApproval = Boolean(directCharge);
-  const codeRequested = (Array.isArray(params.step) ? params.step[0] : params.step) === "otp";
 
   // Back from the hosted page without paying: say so plainly rather than
   // "processing". It is not recorded as failed yet, in case they pay late.
@@ -369,39 +371,63 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
     );
   }
 
+  // Where the direct charge stands right now, from Paystack's charge check:
+  // a code wanted (Telecel's voucher), a prompt out, or still pending.
+  const charge =
+    directCharge && directCharge.status === "PENDING" ? await refreshDirectCharge(reference) : null;
+  const chargeOver = Boolean(directCharge && (directCharge.status === "FAILED" || charge?.status === "failed"));
+  const help = charge?.provider ? momoApprovalHelp(charge.provider, charge.status, charge.displayText) : null;
+  const orderOpen = fresh.status !== "CANCELLED" && fresh.status !== "REFUNDED";
+
   return (
     <Shell
       step={2}
       icon={<Clock className="h-10 w-10 text-warning" aria-hidden />}
-      title={awaitsPhoneApproval ? "Approve the payment on your phone" : "Payment is still processing"}
-      body={`We are waiting on confirmation for ${fresh.orderNumber}. This page updates on its own, and we will email you as soon as it clears.`}
+      title={
+        awaitsPhoneApproval
+          ? chargeOver
+            ? "The prompt was not approved"
+            : (help?.headline ?? "Approve the payment on your phone")
+          : "Payment is still processing"
+      }
+      body={
+        chargeOver
+          ? `Nothing has been taken for ${fresh.orderNumber}. Send the prompt again, or choose another way to pay.`
+          : `We are waiting on confirmation for ${fresh.orderNumber}. This page updates on its own, and we will email you as soon as it clears.`
+      }
       note={
-        awaitsPhoneApproval ? (
+        awaitsPhoneApproval && directCharge ? (
           <div className="mt-6 border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-5 text-left text-sm leading-relaxed">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
-              Check your approvals
+              {formatPrice(directCharge.amount)} to{" "}
+              {directCharge.mobileMoneyNumber ? formatPhone(directCharge.mobileMoneyNumber) : "your phone"}
             </p>
-            <p className="mt-2 text-[var(--text-secondary)]">
-              A payment request for {formatPrice(directCharge?.amount ?? fresh.total)} was sent to{" "}
-              {directCharge?.mobileMoneyNumber ? (
-                <strong className="font-medium text-[var(--text-primary)]">
-                  {formatPhone(directCharge.mobileMoneyNumber)}
-                </strong>
-              ) : (
-                "your phone"
-              )}
-              . Please check your approvals and approve it.
-            </p>
-            <p className="mt-2 text-[var(--text-secondary)]">
-              No pop-up? On MTN dial *170#, choose My Wallet, then My Approvals. On Telecel,
-              look for an SMS code and enter it below.
-            </p>
-            <p className="mt-2 text-[var(--text-secondary)]">
+            {chargeOver ? (
+              <p className="mt-2 text-[var(--text-secondary)]">
+                The request timed out or was declined. MoMo prompts only last about a minute, so
+                keep your phone unlocked and approve it as soon as it appears.
+              </p>
+            ) : (
+              <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-[var(--text-secondary)]">
+                {(help?.steps ?? [
+                  "A payment request was sent to your phone. Approve it with your MoMo PIN.",
+                ]).map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            )}
+            {!chargeOver && directCharge.status === "PENDING" ? (
+              <MomoOtpForm
+                orderId={fresh.id}
+                reference={reference}
+                required={Boolean(help?.needsCode)}
+                network={charge?.provider ?? null}
+              />
+            ) : null}
+            {orderOpen && !help?.needsCode ? <MomoResendButton reference={reference} /> : null}
+            <p className="mt-4 text-[var(--text-secondary)]">
               Your bag is saved, so you can go back and choose another payment method at any time.
             </p>
-            {directCharge && directCharge.status === "PENDING" ? (
-              <MomoOtpForm orderId={fresh.id} reference={reference} required={codeRequested} />
-            ) : null}
           </div>
         ) : null
       }
@@ -416,7 +442,12 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
         </>
       }
     >
-      <PaymentStatusRefresher />
+      {/* Paystack asks for a pending charge to be checked again after about ten seconds. */}
+      {chargeOver || help?.needsCode ? null : awaitsPhoneApproval ? (
+        <PaymentStatusRefresher intervalMs={8000} maxChecks={30} />
+      ) : (
+        <PaymentStatusRefresher />
+      )}
     </Shell>
   );
 }

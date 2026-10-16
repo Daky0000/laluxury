@@ -606,6 +606,7 @@ export function StorefrontCartScreen({
               lastName: safeLast,
               phone: safePhone,
               line1: trimmedLine1,
+              // No landmark field any more; older saved addresses may still carry one.
               line2: shippingAddress.line2?.trim() || null,
               city: trimmedCity,
               region: shippingAddress.region || "Greater Accra",
@@ -1254,7 +1255,7 @@ export function StorefrontCartScreen({
             <Text style={styles.summaryLabel}>
               {deliveryType === "pickup"
                 ? "STORE PICKUP"
-                : `DELIVERY (${selectedRate ? selectedRate.name.toUpperCase() : "STANDARD"})`}
+                : "DELIVERY"}
             </Text>
             <Text style={styles.summaryValue}>
               {deliveryType === "pickup" ? "FREE" : isFreeDelivery ? "FREE" : formatCurrency(shippingFee)}
@@ -1507,17 +1508,6 @@ export function StorefrontCartScreen({
                 placeholderTextColor="#999"
                 onChangeText={(val) =>
                   setShippingAddress((prev) => ({ ...prev, line1: val }))
-                }
-              />
-
-              <Text style={styles.inputLabel}>Apartment / Suite / Landmark (Optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={shippingAddress.line2 || ""}
-                placeholder="e.g. Near Koala Supermarket, Apt 4B"
-                placeholderTextColor="#999"
-                onChangeText={(val) =>
-                  setShippingAddress((prev) => ({ ...prev, line2: val }))
                 }
               />
 

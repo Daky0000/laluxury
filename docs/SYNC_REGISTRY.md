@@ -1,5 +1,29 @@
 # Noble Enclave Cross-Platform Module & Settings Registry
 
+## Checkout, delivery and Direct Debit update — 2026-10-16
+
+- **Delivery is one fixed fee.** `deliveryFee` (minor units, default 5000 = GH₵50) in
+  `Setting["store"]`, edited at Admin → Settings → Delivery and in the app's Delivery screen
+  (`GET`/`POST {action:"save_fee"}` on `/api/app/shipping/zones`). `quoteShipping` returns one
+  option, id `standard-delivery`, for every region; orders at that fee store no
+  `shippingRateId`. The store-wide `freeShippingThreshold` still applies. Zones and rates no
+  longer price anything; zone/rate edits from older app builds get 410. `deliveryFee` is also in
+  `/api/app/config` and `/api/store/config`.
+- **No sign-in at checkout.** The web checkout no longer links to sign-in or offers a password.
+  `markOrderPaid` → `ensureCustomerAccount`: a guest's first paid order (web or app) creates
+  an account from the delivery name and phone (and email), attaches the order and its delivery
+  address, and texts the buyer that they can sign in with that number. An existing account with
+  the same phone or email gets the order instead, with no text.
+- **No landmark field** in the web delivery form or the app's address form.
+- **Direct Debit follows Paystack's Charge API states.** Every direct charge (web checkout,
+  tracking page, app checkout, staff push) stores Paystack's latest `status`, network and
+  `display_text` on `Payment.rawResponse.directCharge`. Unsettled charges are checked with
+  `GET /charge/:reference`, which (unlike verify) reports a later `send_otp`. The confirm page,
+  `customerCheckMomoPinAction` and `GET /api/app/orders/[id]/momo-push` (new `chargeStatus`,
+  `displayText`) show the code field when Paystack asks for one (Telecel's *110# voucher),
+  network-specific approval steps (MTN *170# → My Wallet → My Approvals), and a resend. A
+  verify status of "abandoned" no longer reads as "timed out" while the prompt is still open.
+
 ## Final synchronization audit — 2026-10-03
 
 Static contract audit covered every shared mobile module: authentication, public storefront,
@@ -102,11 +126,11 @@ Classification:
 | Late Payment Reconciliation | `src/lib/checkout-payment.ts` (`reconcilePendingPayments`) | Background check from the header-state heartbeat and admin orders list; inline on admin order page and `/orders/track`; expiry verifies before cancelling | Background check from `GET /api/app/orders` | Page/API traffic (2 min throttle) & `POST /api/cron/expire-orders` | **Shared (Parity Achieved)** | Pending Paystack payments from the last 3 days are verified; only successes are recorded in the background, so abandoned checkouts are never texted as failed |
 | Owner Paid-Order SMS | `settings.orderAlertPhones` (falls back to `supportPhone`) & `notifyOwnerOfPaidOrder` | Set in /admin/settings; queued from `markOrderPaid` | Same `markOrderPaid` path for app payments | Payment success | **Shared (Parity Achieved)** | Owner text carries the order number, total, items and customer; customer SMS always includes the order number |
 | Staff Order Status Changes | `changeOrderStatusByStaff` in `src/lib/orders.ts` | Admin order page: Awaiting payment to Paid (cash, MoMo, bank transfer) or Cancelled; Cancelled reopens to Awaiting payment or Paid; forward steps unchanged | `PATCH /api/app/orders/[id]` (`status`, optional `paymentMethod`, `reason`) uses the same function | Staff action | **Shared (Parity Achieved)** | Marking paid checks Paystack first, then runs `markOrderPaid` (stock, receipt SMS, owner SMS); reopening re-reserves stock |
-| Shipping Zones & Rates | `db.shippingZone` / `src/lib/shipping.ts` | `quoteShipping` & `/admin/shipping` | `GET /api/app/shipping/rates` & `DeliverySettingsScreen` | Address/Region change & Admin mutation | **Shared (Parity Achieved)** | Dynamic rates based on Ghanaian regions with in-app zone and fee editor |
+| Delivery fee | `deliveryFee` in `Setting["store"]` / `src/lib/shipping.ts` | `quoteShipping` & `/admin/settings/delivery` | `GET /api/app/shipping/rates` & `DeliverySettingsScreen` | Checkout & Admin mutation | **Shared (Parity Achieved)** | One fixed fee (default GH₵50) for every region; zones and rates retired |
 | Flat GH₵25 Removal | `src/lib/shipping.ts` | Eliminated | Eliminated | Build & API verification | **Shared (Parity Achieved)** | Real calculated shipping replacing hardcode |
 | Pre-order 50% Deposit | `src/lib/orders.ts` | Supported | Supported in checkout API & cart | User selection | **Shared (Parity Achieved)** | Allows 50% advance for bespoke items |
 | Discount Codes | `src/lib/discounts.ts` | Supported | Supported in checkout API & cart | User coupon entry | **Shared (Parity Achieved)** | Validated on backend against order subtotal |
-| Payment methods | Network first: MTN MoMo, Telecel Cash, AT Money, Bank Card (nothing preselected) | Checkout steps Delivery → Payment → Approve → Receipt; tracking page uses the same picker | App cart: inline network chips + modal | Checkout / order payment | **Shared (Parity Achieved)** | `momoDirectNetworks` setting (admin Settings → Payment, default MTN + AT) decides which networks get the direct phone prompt; other networks and cards use the hosted page. Exposed as `momoDirectNetworks` in `/api/app/config` and `/api/store/config`. On a listed network the buyer chooses Direct Debit or Paystack (web `momoRoute` direct/hosted, app sends `direct_debit` or `mobile_money`); off-list networks are Paystack only, enforced on the server. Fulfilment: Delivery (method dropdown + first/last name, address or digital address, landmark, region, city, note) or Pickup from `pickupLocations` (admin Settings → Payment; `pickupLocations` in `/api/app/config`, app sends `pickupLocationId`). Pickup orders are written with "<name> (Pickup)" as line1 and no delivery fee. |
+| Payment methods | Network first: MTN MoMo, Telecel Cash, AT Money, Bank Card (nothing preselected) | Checkout steps Delivery → Payment → Approve → Receipt; tracking page uses the same picker | App cart: inline network chips + modal | Checkout / order payment | **Shared (Parity Achieved)** | `momoDirectNetworks` setting (admin Settings → Payment, default MTN + AT) decides which networks get the direct phone prompt; other networks and cards use the hosted page. Exposed as `momoDirectNetworks` in `/api/app/config` and `/api/store/config`. On a listed network the buyer chooses Direct Debit or Paystack (web `momoRoute` direct/hosted, app sends `direct_debit` or `mobile_money`); off-list networks are Paystack only, enforced on the server. Fulfilment: Delivery (fixed fee shown, first/last name, address or digital address, region, city, note) or Pickup from `pickupLocations` (admin Settings → Payment; `pickupLocations` in `/api/app/config`, app sends `pickupLocationId`). Pickup orders are written with "<name> (Pickup)" as line1 and no delivery fee. |
 | MoMo PIN Direct USSD Push | `initiateMomoPinPushAction`, `checkOrConfirmMomoPinAction` | `QuickMomoPromptButton` | `OrderPromptModal` / `/api/app/orders/[id]/momo-push` | Owner action | **Shared (Parity Achieved)** | Pushes live MoMo PIN USSD prompt to customer handset, auto-detects telco, handles OTP, polls status |
 | Paystack callback and webhook URLs | `NEXT_PUBLIC_SITE_URL` | `/checkout/confirm`, `/api/webhooks/paystack` | Same backend endpoints | Admin Settings > Integrations | **Shared (Parity Achieved)** | Public HTTPS URLs shown in settings; webhook signature uses active Paystack secret |
 | Ghana delivery regions | `src/lib/constants.ts` | Checkout | `/api/store/config` consumed by mobile | Checkout address | **Shared (Parity Achieved)** | Mobile keeps a compile-time fallback only for offline startup |
@@ -136,7 +160,7 @@ Classification:
 | Dashboard KPI Metrics | `db.order`, `db.product` | Full admin analytics | Mobile Backend dashboard | Screen focus / refresh | **Shared (Parity Achieved)** | Revenue, active orders, stock alerts |
 | Order Management & Filtering | `db.order`, `/api/app/orders` | `/admin/orders` | `OrdersScreen` (All, Unpaid, Paid, Shipped, Delivered) | Filter switch / search | **Shared (Parity Achieved)** | Comprehensive order details, items, notes, status update |
 | Manual Order Creation | `createManualOrderAction` / `POST /api/app/orders` | `/admin/orders` (New order) | `ManualOrderModal` in OrdersScreen | Owner action | **Shared (Parity Achieved)** | Create phone/walk-in orders directly from catalog with delivery & payment options |
-| Delivery Zones & Rates Editor | `db.shippingZone`, `/api/app/shipping/zones` | `/admin/shipping` | `DeliverySettingsScreen` | Owner mutation | **Shared (Parity Achieved)** | Edit regional delivery rates, prices, and thresholds in-app |
+| Delivery Fee Editor | `deliveryFee`, `/api/app/shipping/zones` (`save_fee`) | `/admin/settings/delivery` | `DeliverySettingsScreen` | Owner mutation | **Shared (Parity Achieved)** | Edit the one delivery fee in-app or on the web |
 | Product Catalog CRUD | `db.product`, `db.variant` | `/admin/products` | ProductsList & CreateProduct | Mutation | **Shared (Parity Achieved)** | Create, edit price/stock, upload images |
 | Direct Camera Image Upload | Device Camera / R2 CDN | Web file picker | Native Camera + Expo ImagePicker | User action | **App-Only (Documented Exception)** | Mobile camera snap uploaded to R2 |
 | Order Status Transitions | `db.order`, `PATCH /api/app/orders/:id` | `/admin/orders` | `OrdersScreen` Status Modal | Mutation | **Shared (Parity Achieved)** | Update order status, fulfillment status, and tracking info |
@@ -178,7 +202,7 @@ Web and app share every change listed here through the services in `src/lib/`.
 | Area | Change | Web | App |
 | :--- | :--- | :--- | :--- |
 | Order management | `PATCH /api/app/orders/[id]` requires `orders:write`; status changes go through `updateOrderStatus` / `cancelOrder` / `markOrderPaid` (manual payments only from PENDING); refunds only via the refund flow. `GET` returns only the caller's own order unless staff have `orders:read`. | Admin actions use the same services | `OrdersScreen` (staff) |
-| Shipping zones | `/api/app/shipping/zones` (GET/POST/DELETE) requires `settings:manage`. Public quotes stay on `/api/app/shipping/rates`. | Admin settings | `DeliverySettingsScreen` (staff) |
+| Delivery fee | `/api/app/shipping/zones` (GET, POST `save_fee`) requires `settings:manage`; zone/rate edits return 410. Public quotes stay on `/api/app/shipping/rates`. | Admin settings | `DeliverySettingsScreen` (staff) |
 | Guest app checkout | An existing account is never signed in from checkout contact details; a session token is returned only for a newly created account. Phones are not marked verified at checkout. | n/a | `StorefrontCartScreen` |
 | Checkout rules | App checkout refuses inactive/draft products, checks free stock (on hand minus reserved), uses variant weights for quotes, refuses regions with no delivery rate (no silent free shipping), cancels the order if stock cannot be reserved (409), and uses a unique `Order.idempotencyKey` for retries. | `createOrderFromCart` | `POST /api/app/orders` |
 | Payment finalization | Every path (webhook, app verify, MoMo push, customer MoMo) finalizes through `markOrderPaid`, which also records deposit balances and completes a failed stock commit on retry. Late failures never overwrite a successful payment. No simulated or gateway-less settlement exists. | Same | Same |

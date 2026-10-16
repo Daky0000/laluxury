@@ -128,6 +128,9 @@ export const GET = withApiAuth(async (
     ok: true,
     paid: check.paid,
     status: check.paid ? "success" : "pending",
+    // Paystack's own charge state: "send_otp" means show the code field.
+    chargeStatus: check.paid ? "success" : (check.chargeStatus ?? null),
+    displayText: check.displayText ?? null,
     message: check.message,
   });
 });

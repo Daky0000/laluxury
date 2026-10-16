@@ -19,7 +19,7 @@ import {
   type CustomerMomoPushResult,
 } from "@/app/actions/order-pay";
 import { formatMoney } from "@/lib/money";
-import { MOMO_NETWORK_OPTIONS, type MomoNetworkId } from "@/lib/momo-networks";
+import { MOMO_NETWORK_OPTIONS, momoApprovalHelp, type MomoNetworkId } from "@/lib/momo-networks";
 import { cn } from "@/lib/utils";
 
 /**
@@ -84,7 +84,7 @@ export function OrderPaymentCard({
 
   // Poll while waiting for the customer to approve on their phone.
   useEffect(() => {
-    if (!pushState?.ok || !pushState.reference || confirmedPaid) return;
+    if (!pushState?.ok || !pushState.reference || confirmedPaid || pushState.status === "failed") return;
 
     let attempts = 0;
     const MAX_ATTEMPTS = 40;
@@ -108,8 +108,19 @@ export function OrderPaymentCard({
         setConfirmedPaid(true);
         setStatusMessage(check.message);
         router.refresh();
+        return;
       }
-    }, 4500);
+      // A charge that started "pending" can turn into a request for a code
+      // (Telecel's voucher); the code field has to appear when it does.
+      const nextStatus = check.chargeStatus;
+      if (nextStatus && nextStatus !== pushState.status && nextStatus !== "success") {
+        clearInterval(timer);
+        if (nextStatus === "failed") setStatusMessage(check.message);
+        setPushState((previous) =>
+          previous ? { ...previous, status: nextStatus, displayText: check.displayText ?? previous.displayText } : previous,
+        );
+      }
+    }, 6000);
 
     return () => clearInterval(timer);
   }, [pushState, confirmedPaid, orderId, router]);
@@ -387,11 +398,14 @@ export function OrderPaymentCard({
                   <p className="font-medium">
                     Approve the request on {pushState.phone} ({pushState.providerLabel})
                   </p>
-                  <p className="mt-1 text-[var(--text-secondary)]">{pushState.displayText}</p>
-                  <p role="status" className="mt-1.5 text-[var(--text-secondary)]">
-                    No pop-up? On MTN dial *170#, choose My Wallet, then My Approvals. Approve only
-                    one request.
-                  </p>
+                  <ul role="status" className="mt-1 space-y-1 text-[var(--text-secondary)]">
+                    {momoApprovalHelp(network?.id ?? "mtn", pushState.status ?? null, pushState.displayText).steps.map(
+                      (step) => (
+                        <li key={step}>{step}</li>
+                      ),
+                    )}
+                    <li>Approve only one request.</li>
+                  </ul>
                 </div>
               </div>
 
@@ -406,7 +420,7 @@ export function OrderPaymentCard({
                     autoComplete="one-time-code"
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value)}
-                    placeholder="Enter the code sent to your phone"
+                    placeholder={network?.id === "vod" ? "Voucher code from *110#" : "Code from your network"}
                     className="lx-field flex-1 py-2 text-sm"
                   />
                   <button

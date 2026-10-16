@@ -35,6 +35,8 @@ export async function getPublicStoreConfig() {
       addressLine: settings?.addressLine || "Accra, Ghana",
       instagramUrl: settings?.instagramUrl || "",
       freeShippingThreshold: settings?.freeShippingThreshold ?? null,
+      // The one delivery fee (minor units). Quotes still come from /api/app/shipping/rates.
+      deliveryFee: settings.deliveryFee,
       regions: GHANA_REGIONS,
       lowStockThreshold: settings?.lowStockThreshold ?? 5,
       announcementBar: settings?.announcementBar || "",

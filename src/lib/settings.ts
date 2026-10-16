@@ -35,6 +35,11 @@ export type StoreSettings = {
   addressLine: string;
   instagramUrl: string;
   freeShippingThreshold: number | null;
+  /**
+   * The one delivery fee, in minor units, charged on every delivery order
+   * wherever it goes (pickup is free). Edited at /admin/settings/delivery.
+   */
+  deliveryFee: number;
   lowStockThreshold: number;
   announcementBar: string;
   returnsPolicy: string;
@@ -119,6 +124,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   addressLine: "Accra, Ghana",
   instagramUrl: "",
   freeShippingThreshold: 1000000,
+  deliveryFee: 5000,
   lowStockThreshold: 5,
   announcementBar:
     "Free delivery to your station over \u20B510,000 \u00B7 Nationwide delivery \u00B7 New arrivals in stock",
@@ -214,6 +220,10 @@ async function fetchSettings(): Promise<StoreSettings> {
       : DEFAULT_SETTINGS.hiddenStorefrontNavItems,
     momoDirectNetworks: normaliseDirectNetworks(stored.momoDirectNetworks),
     pickupLocations: normalisePickupLocations(stored.pickupLocations),
+    deliveryFee:
+      Number.isSafeInteger(stored.deliveryFee) && (stored.deliveryFee as number) >= 0
+        ? (stored.deliveryFee as number)
+        : DEFAULT_SETTINGS.deliveryFee,
   };
 
   cachedSettings = { data: resolved, expiresAt: now + SETTINGS_CACHE_TTL_MS };
