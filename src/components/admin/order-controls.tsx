@@ -6,6 +6,7 @@ import {
   updateOrderStatusAction,
   addOrderNoteAction,
   refundOrderAction,
+  recordBalanceAction,
 } from "@/app/actions/admin/orders";
 import type { AdminState } from "@/app/actions/admin/products";
 import { Card, Field, Alert } from "@/components/ui";
@@ -39,22 +40,43 @@ const LABELS: Record<OrderStatus, string> = {
   REFUNDED: "Refunded",
 };
 
+export type RefundLine = {
+  id: string;
+  title: string;
+  /** Units that left the shelf and can still go back on it. */
+  restockable: number;
+};
+
 export function OrderControls({
   orderId,
   status,
+  isPaid,
   trackingNumber,
   trackingCompany,
   staffNote,
   outstanding,
   canRefund,
+  canRecordPayment,
+  paystackRefundable,
+  refundLines,
+  balanceDue,
 }: {
   orderId: string;
   status: OrderStatus;
+  /** Money has been received on this order. */
+  isPaid: boolean;
   trackingNumber: string | null;
   trackingCompany: string | null;
   staffNote: string | null;
+  /** Money received and not yet refunded. */
   outstanding: number;
   canRefund: boolean;
+  canRecordPayment: boolean;
+  /** Of `outstanding`, how much Paystack can send back (card/MoMo payments). */
+  paystackRefundable: number;
+  refundLines: RefundLine[];
+  /** Balance still owed on a deposit order. */
+  balanceDue: number;
 }) {
   const [statusState, statusAction, statusPending] = useActionState<AdminState | null, FormData>(
     updateOrderStatusAction.bind(null, orderId),
@@ -69,11 +91,20 @@ export function OrderControls({
     null,
   );
 
-  const options = NEXT_STATUSES[status];
+  const [balanceState, balanceAction, balancePending] = useActionState<AdminState | null, FormData>(
+    recordBalanceAction.bind(null, orderId),
+    null,
+  );
+
+  // Recording money taken outside Paystack is a manager's call.
+  const options = NEXT_STATUSES[status].filter((option) => canRecordPayment || option !== "PAID");
   const [picked, setPicked] = useState<OrderStatus | "">(options[0] ?? "");
   // After a change the order has new options; a stale pick falls back to the first.
   const chosen = picked && options.includes(picked) ? picked : (options[0] ?? "");
   const [showRefund, setShowRefund] = useState(false);
+  const [refundMethod, setRefundMethod] = useState<"provider" | "manual">(
+    paystackRefundable > 0 ? "provider" : "manual",
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -145,6 +176,17 @@ export function OrderControls({
               </Field>
             ) : null}
 
+            {chosen === "PAID" ? (
+              <Field
+                label="Proof"
+                htmlFor="paymentNote"
+                hint="Receipt number, MoMo transaction ID or who took the cash. Kept on the order."
+                required
+              >
+                <input id="paymentNote" name="paymentNote" required className="lx-field" />
+              </Field>
+            ) : null}
+
             {status === "CANCELLED" ? (
               <p className="text-sm text-[var(--text-secondary)]">
                 Reopening reserves the stock again. If a piece has since sold out, it will say so.
@@ -152,7 +194,15 @@ export function OrderControls({
             ) : null}
 
             {chosen === "CANCELLED" ? (
-              <Field label="Reason" htmlFor="reason" hint="Stock is returned automatically.">
+              <Field
+                label="Reason"
+                htmlFor="reason"
+                hint={
+                  isPaid
+                    ? "Stock is returned automatically. This order is paid: the money stays on file as owed back until you refund it below."
+                    : "Stock is returned automatically."
+                }
+              >
                 <input id="reason" name="reason" required className="lx-field" />
               </Field>
             ) : null}
@@ -203,12 +253,54 @@ export function OrderControls({
         ) : null}
       </Card>
 
+      {/* Balance collected by hand */}
+      {balanceDue > 0 && canRecordPayment && status !== "CANCELLED" && status !== "REFUNDED" ? (
+        <Card className="p-5">
+          <h2 className="lx-eyebrow mb-1">Balance due</h2>
+          <p className="mb-3 text-sm text-[var(--text-secondary)]">
+            {formatMoney(balanceDue)} is still owed. Record it here when it is paid in cash or by transfer; a MoMo prompt
+            from the card above records itself.
+          </p>
+          <form action={balanceAction} className="flex flex-col gap-3">
+            <Field label="Paid by" htmlFor="balanceMethod">
+              <select id="balanceMethod" name="paymentMethod" defaultValue="cash" className="lx-field">
+                {Object.entries(MANUAL_PAYMENT_METHODS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Proof" htmlFor="balanceNote" hint="Receipt number, transaction ID or who collected it." required>
+              <input id="balanceNote" name="paymentNote" required className="lx-field" />
+            </Field>
+            <button
+              type="submit"
+              disabled={balancePending}
+              className="flex items-center justify-center gap-2 rounded-(--radius-card) bg-[var(--accent)] px-4 py-2.5 text-sm text-[var(--accent-contrast)] disabled:opacity-50"
+            >
+              {balancePending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+              Record balance received
+            </button>
+          </form>
+          {balanceState?.message ? (
+            <div className="mt-3">
+              <Alert tone={balanceState.ok ? "success" : "danger"}>{balanceState.message}</Alert>
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+
       {/* Refund */}
-      {canRefund ? (
+      {canRefund && outstanding > 0 ? (
         <Card className="border-danger/30 p-5">
           <h2 className="lx-eyebrow mb-1">Refund</h2>
           <p className="mb-3 text-sm text-[var(--text-secondary)]">
-            Up to {formatMoney(outstanding)} can still be refunded.
+            Up to {formatMoney(outstanding)} can still be refunded
+            {paystackRefundable < outstanding
+              ? `; ${formatMoney(paystackRefundable)} of it through Paystack, the rest by hand`
+              : ""}
+            .
           </p>
 
           {!showRefund ? (
@@ -221,6 +313,33 @@ export function OrderControls({
             </button>
           ) : (
             <form action={refundAction} className="flex flex-col gap-3">
+              <fieldset className="flex flex-col gap-1.5 text-sm">
+                <legend className="mb-1 text-sm font-medium">How the money goes back</legend>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="method"
+                    value="provider"
+                    checked={refundMethod === "provider"}
+                    disabled={paystackRefundable <= 0}
+                    onChange={() => setRefundMethod("provider")}
+                    className="accent-[var(--accent)]"
+                  />
+                  Through Paystack, to the card or MoMo wallet that paid
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="method"
+                    value="manual"
+                    checked={refundMethod === "manual"}
+                    onChange={() => setRefundMethod("manual")}
+                    className="accent-[var(--accent)]"
+                  />
+                  Already returned by hand (cash, MoMo or transfer)
+                </label>
+              </fieldset>
+
               <Field label="Amount (GHS)" htmlFor="amount" required>
                 <input
                   id="amount"
@@ -228,8 +347,9 @@ export function OrderControls({
                   type="number"
                   step="0.01"
                   min="0.01"
-                  max={toMajorUnits(outstanding)}
-                  defaultValue={toMajorUnits(outstanding)}
+                  max={toMajorUnits(refundMethod === "provider" ? paystackRefundable : outstanding)}
+                  defaultValue={toMajorUnits(refundMethod === "provider" ? paystackRefundable : outstanding)}
+                  key={refundMethod}
                   required
                   className="lx-field"
                 />
@@ -239,15 +359,28 @@ export function OrderControls({
                 <input id="refundReason" name="reason" required className="lx-field" />
               </Field>
 
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  name="restock"
-                  defaultChecked
-                  className="accent-[var(--accent)]"
-                />
-                Put the items back into stock
-              </label>
+              {refundLines.some((line) => line.restockable > 0) ? (
+                <fieldset className="flex flex-col gap-2 text-sm">
+                  <legend className="mb-1 text-sm font-medium">Put back into stock</legend>
+                  {refundLines
+                    .filter((line) => line.restockable > 0)
+                    .map((line) => (
+                      <label key={line.id} className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 truncate">{line.title}</span>
+                        <input
+                          type="number"
+                          name={`restock:${line.id}`}
+                          min={0}
+                          max={line.restockable}
+                          defaultValue={0}
+                          aria-label={`Units of ${line.title} to restock`}
+                          className="lx-field w-20"
+                        />
+                      </label>
+                    ))}
+                  <span className="text-xs text-[var(--text-muted)]">Only the units that actually came back.</span>
+                </fieldset>
+              ) : null}
 
               <div className="flex gap-2">
                 <button

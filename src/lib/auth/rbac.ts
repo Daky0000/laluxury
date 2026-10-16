@@ -4,6 +4,13 @@ export const PERMISSIONS = [
   "dashboard:view",
   "orders:read",
   "orders:write",
+  // Recording money that did not come through Paystack (cash, transfer, POS),
+  // and accepting a payment held for review.
+  "payments:record",
+  // Sending money back.
+  "payments:refund",
+  // Revenue, cash and margin figures.
+  "finance:view",
   "products:read",
   "products:write",
   "inventory:read",
@@ -32,6 +39,9 @@ const STAFF: Permission[] = [
 
 const MANAGER: Permission[] = [
   ...STAFF,
+  "payments:record",
+  "payments:refund",
+  "finance:view",
   "products:write",
   "inventory:write",
   "discounts:read",

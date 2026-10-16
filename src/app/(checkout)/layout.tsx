@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ShieldCheck } from "lucide-react";
 import { SiteShell } from "@/components/shop/site-shell";
+import { TestModeBanner } from "@/components/shop/test-mode-banner";
 
 /**
  * Checkout keeps the store's header — the same one every other page carries —
@@ -12,6 +13,7 @@ import { SiteShell } from "@/components/shop/site-shell";
 export default function CheckoutLayout({ children }: LayoutProps<"/">) {
   return (
     <SiteShell>
+      <TestModeBanner audience="shopper" />
       <div className="border-b border-[var(--border-subtle)] bg-[var(--surface-sunken)]">
         <div className="lx-container flex items-center justify-between gap-3 py-2.5 text-sm tracking-[0.06em]">
           <Link

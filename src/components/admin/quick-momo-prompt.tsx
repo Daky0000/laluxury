@@ -254,7 +254,7 @@ export function QuickMomoPromptButton({
                         <option value="FULL">100% Full Order ({formatMoney(totalMinor)})</option>
                         {depositMinor ? (
                           <option value="DEPOSIT_50">
-                            50% Deposit ({formatMoney(depositVal)})
+                            Deposit ({formatMoney(depositVal)})
                           </option>
                         ) : null}
                       </select>

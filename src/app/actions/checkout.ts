@@ -3,21 +3,18 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { env } from "@/lib/env";
-import { getIntegrations, isReady } from "@/lib/integrations";
 import { getOrCreateCart } from "@/lib/cart";
 import { createOrderFromCart } from "@/lib/orders";
-import { settleEarlierCheckout } from "@/lib/checkout-payment";
-import { notifyOrder } from "@/lib/notify";
-import { getSession } from "@/lib/auth/session";
-import { recordDirectCharge } from "@/lib/momo-push";
 import {
-  chargeMobileMoney,
-  detectGhanaMomoProvider,
-  initializeTransaction,
-  normaliseGhanaMomoPhone,
-} from "@/lib/paystack";
+  checkoutUnavailableReason,
+  settleEarlierCheckout,
+  startCheckoutPayment,
+} from "@/lib/checkout-payment";
+import { getSession } from "@/lib/auth/session";
+import { orderAccessToken } from "@/lib/order-access";
+import { normaliseGhanaMomoPhone } from "@/lib/paystack";
 import { InsufficientStockError } from "@/lib/inventory";
+import { rateLimit, requestAddress, retryMessage } from "@/lib/rate-limit";
 import { GHANA_REGIONS } from "@/lib/constants";
 import { MOMO_NETWORKS, networkOf, normalisePhone } from "@/lib/phone";
 import { getCommerceSettings } from "@/lib/settings";
@@ -86,12 +83,8 @@ export async function placeOrderAction(
     return { ok: false, fieldErrors };
   }
 
-  const integrations = await getIntegrations();
-  const paystackConfigured = isReady(integrations, "paystack");
-
-  if (!paystackConfigured) {
-    return { ok: false, message: "Online payment is temporarily unavailable. Please try again shortly." };
-  }
+  const unavailable = await checkoutUnavailableReason();
+  if (unavailable) return { ok: false, message: unavailable };
 
   const data = parsed.data;
   const email = data.email.toLowerCase().trim();
@@ -136,7 +129,7 @@ export async function placeOrderAction(
   const isDirectDebit = paymentMethod === "direct_debit";
 
   // Direct Debit pushes the prompt to the wallet the shopper names, which is
-  // not always the delivery phone. Checked before any account is created.
+  // not always the delivery phone.
   const momoNumber = data.momoPhone || data.phone;
   const momoNetwork = networkOf(momoNumber);
   if (isDirectDebit && !(momoNetwork && MOMO_NETWORKS.includes(momoNetwork))) {
@@ -148,19 +141,34 @@ export async function placeOrderAction(
     };
   }
 
-  // No sign-in at checkout. A signed-in shopper's order goes on their account;
-  // a guest's goes on the account that already has this email or phone. A
-  // first-time buyer gets an account made from this order once it is paid
-  // (see `markOrderPaid`), and is texted that they can sign in.
-  const session = await getSession();
-  let userId = session?.userId ?? null;
-  if (!userId) {
-    const existing = await db.user.findFirst({
-      where: { OR: [{ phone }, { email }] },
-      select: { id: true },
-    });
-    userId = existing?.id ?? null;
+  // Checkout is a public form that sends payment prompts to phones and holds
+  // stock, so it is limited per address, per contact number and per wallet.
+  const address = await requestAddress();
+  for (const [key, limit] of [
+    [`checkout-ip:${address}`, 12],
+    [`checkout-phone:${phone}`, 6],
+    ...(isDirectDebit ? [[`checkout-momo:${normaliseGhanaMomoPhone(momoNumber)}`, 5]] : []),
+  ] as [string, number][]) {
+    const limited = rateLimit(key, { limit, windowMs: 15 * 60 * 1000 });
+    if (!limited.ok) return { ok: false, message: retryMessage(limited.retryAfterSeconds) };
   }
+
+  // No sign-in at checkout. A signed-in shopper's order goes on their account.
+  // A guest's order stays a guest order until it is paid: typing an email or
+  // phone proves nothing about who is typing it, so it never files an order
+  // (or a delivery address) under someone's account. `markOrderPaid` then
+  // links a paid order to the matching customer account, or makes one.
+  const session = await getSession();
+  const userId = session?.userId ?? null;
+  // Per-customer code limits still apply to a guest using a customer's details.
+  const discountUserId = userId
+    ? null
+    : ((
+        await db.user.findFirst({
+          where: { OR: [{ phone }, { email }], role: "CUSTOMER" },
+          select: { id: true },
+        })
+      )?.id ?? null);
 
   const cart = await getOrCreateCart();
   if (cart.items.length === 0) {
@@ -172,10 +180,15 @@ export async function placeOrderAction(
   // taken twice, and its stock hold does not block this order.
   if (cart.convertedOrderId) {
     const { paidReference } = await settleEarlierCheckout(cart.convertedOrderId);
-    if (paidReference) redirect(`/checkout/confirm?reference=${encodeURIComponent(paidReference)}`);
+    if (paidReference) {
+      const earlier = await db.order.findUnique({
+        where: { id: cart.convertedOrderId },
+        select: { orderNumber: true },
+      });
+      const t = earlier ? `&t=${orderAccessToken(earlier.orderNumber)}` : "";
+      redirect(`/checkout/confirm?reference=${encodeURIComponent(paidReference)}${t}`);
+    }
   }
-
-  const depositPercent = data.preorderDepositOption === "deposit_50" ? 50 : null;
 
   let redirectUrl = "";
 
@@ -185,6 +198,7 @@ export async function placeOrderAction(
       email,
       phone,
       userId,
+      discountUserId,
       shippingAddress: {
         firstName: data.firstName.trim() || "Customer",
         lastName: data.lastName?.trim() || data.firstName.trim() || "Customer",
@@ -195,96 +209,26 @@ export async function placeOrderAction(
       pickup: isPickup,
       customerNote: data.customerNote ?? null,
       paymentMethod,
-      depositPercent,
+      payDeposit: data.preorderDepositOption === "deposit_50",
+      source: "checkout",
     });
 
-    const chargeAmount = order.depositAmount ?? order.total;
-    const reference = `${order.orderNumber}-${Date.now().toString(36).toUpperCase()}`;
-
+    const token = orderAccessToken(order.orderNumber);
     try {
-      await db.payment.create({
-        data: {
-          orderId: order.id,
-          reference,
-          provider: "paystack",
-          channel: paymentMethod,
-          amount: chargeAmount,
-          currency: order.currency,
-          status: "PENDING",
-        },
+      const started = await startCheckoutPayment(order, {
+        method: paymentMethod,
+        momoPhone: isDirectDebit ? momoNumber : null,
+        network,
+        source: "web_storefront",
       });
-
-      if (isDirectDebit) {
-        const momoPhone = normaliseGhanaMomoPhone(momoNumber);
-        await db.payment.update({
-          where: { reference },
-          data: { channel: "mobile_money", mobileMoneyNumber: momoPhone },
-        });
-        const charge = await chargeMobileMoney({
-          email,
-          amount: chargeAmount,
-          phone: momoPhone,
-          // Ported numbers keep their old prefix, so the shopper's choice wins.
-          provider: network ?? detectGhanaMomoProvider(momoPhone),
-          reference,
-          metadata: {
-            orderId: order.id,
-            orderNumber: order.orderNumber,
-            source: "web_storefront",
-            channel: "direct_debit",
-          },
-        });
-        if (charge.status === "failed") {
-          throw new Error(
-            charge.display_text ||
-              charge.message ||
-              "That MoMo number could not be charged. Check the number and network, or choose another payment method.",
-          );
-        }
-        await recordDirectCharge(reference, network ?? detectGhanaMomoProvider(momoPhone), charge);
-        await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
-          console.error("[notify] web direct debit order.placed error:", err),
-        );
-        // The confirmation page reads the charge's state itself: a code to
-        // enter (Telecel's voucher), a prompt to approve, or still pending.
-        redirectUrl = `/checkout/confirm?reference=${encodeURIComponent(reference)}`;
-      } else {
-        const init = await initializeTransaction({
-              email,
-              amount: chargeAmount,
-              reference,
-              callbackUrl: `${env.siteUrl()}/checkout/confirm`,
-              channels: paymentMethod === "mobile_money" ? ["mobile_money"] : ["card"],
-              metadata: {
-                orderId: order.id,
-                orderNumber: order.orderNumber,
-                depositAmount: order.depositAmount,
-                custom_fields: [
-                  {
-                    display_name: "Order",
-                    variable_name: "order_number",
-                    value: order.orderNumber,
-                  },
-                ],
-              },
-            });
-
-        if (init?.authorization_url) {
-          redirectUrl = init.authorization_url;
-        } else {
-          throw new Error("Unable to obtain a payment authorization link.");
-        }
-      }
+      // Direct Debit and free orders land on the confirmation page, which reads
+      // the charge's state itself; the hosted page comes back there too.
+      redirectUrl =
+        started.kind === "hosted"
+          ? started.url
+          : `/checkout/confirm?reference=${encodeURIComponent(started.reference)}&t=${token}`;
     } catch (gatewayError) {
-      // Compensate: cancel order immediately to release reserved stock and restore discounts
-      await db.payment
-        .updateMany({ where: { reference, status: "PENDING" }, data: { status: "FAILED" } })
-        .catch(() => {});
-      const { cancelOrder } = await import("@/lib/orders");
-      await cancelOrder(order.id, "Payment gateway initialization failed.", null, { notify: false }).catch((err) =>
-        console.error("[checkout] failed to cancel order after gateway error:", err),
-      );
-      // Re-enable cart
+      // The order was cancelled; give the bag back for another try.
       await db.cart.update({ where: { id: cart.id }, data: { convertedOrderId: null } }).catch(() => {});
       throw gatewayError;
     }

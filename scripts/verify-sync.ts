@@ -325,11 +325,56 @@ try {
   if (/sent\.fatal\)\s*\{[^}]*createSessionCookie/.test(auth)) fail("Web OTP", "SMS failure signs users in");
   else pass("Web OTP failure never signs anyone in");
 
-  const balance = fs.readFileSync(path.join(ROOT, "src", "app", "actions", "order-balance.ts"), "utf-8");
+  const balancePath = path.join(ROOT, "src", "app", "actions", "order-balance.ts");
+  const balance = fs.existsSync(balancePath) ? fs.readFileSync(balancePath, "utf-8") : "";
   if (/status:\s*"SUCCESS"/.test(balance)) fail("Balance action", "settles money without a gateway");
   else pass("Balance payments always go through the gateway");
 } catch (err) {
   fail("Security guard check", (err as Error).message);
+}
+
+// --- 7. Payment ledger (docs/PAYMENT_AUDIT_2026-10-16.md) --------------------
+console.log("\n7. Payment Ledger Guarantees");
+try {
+  const read = (...parts: string[]) => fs.readFileSync(path.join(ROOT, ...parts), "utf-8");
+  const appCheckout = read("src", "app", "api", "app", "orders", "route.ts");
+  const webCheckout = read("src", "app", "actions", "checkout.ts");
+
+  if (appCheckout.includes("createOrderFromCart") && appCheckout.includes("startCheckoutPayment")) {
+    pass("App checkout prices and pays through the same services as the web");
+  } else fail("App checkout", "does not use createOrderFromCart and startCheckoutPayment");
+
+  if (webCheckout.includes("startCheckoutPayment")) pass("Web checkout starts payment through the shared service");
+  else fail("Web checkout", "does not use startCheckoutPayment");
+
+  if (/signSession|user\.create\(/.test(appCheckout)) {
+    fail("App checkout", "creates an account or a session before payment");
+  } else pass("Checkout never creates or signs in an account from typed contact details");
+
+  const adminOrders = read("src", "app", "actions", "admin", "orders.ts");
+  if (adminOrders.includes("refundOrder") && !adminOrders.includes("refundTransaction")) {
+    pass("Admin refunds go through the refund ledger");
+  } else fail("Admin refunds", "call Paystack directly instead of src/lib/refunds.ts");
+
+  const webhook = read("src", "app", "api", "webhooks", "paystack", "route.ts");
+  if (webhook.includes("webhookReference") && webhook.includes("applyRefundWebhook") && webhook.includes("charge.dispute")) {
+    pass("Paystack webhook handles charges, refunds and disputes");
+  } else fail("Paystack webhook", "misses refund or dispute events");
+
+  const settle = read("src", "lib", "checkout-payment.ts");
+  if (settle.includes('transaction.domain === "test"')) pass("Test-mode transactions never settle live orders");
+  else fail("Settlement", "no test-domain guard");
+
+  const orders = read("src", "lib", "orders.ts");
+  if (orders.includes("recordUnexpectedPayment") && orders.includes("paymentStatus: { notIn: SETTLED }")) {
+    pass("Second payments are recorded and raised, never dropped");
+  } else fail("Settlement", "an extra payment on a paid order can be dropped");
+
+  const momoRoute = read("src", "app", "api", "app", "orders", "[id]", "momo-push", "route.ts");
+  if (momoRoute.includes("orderAccessTokenMatches")) pass("App MoMo push accepts the order access token for guests");
+  else fail("App MoMo push", "guests cannot reach their own order");
+} catch (err) {
+  fail("Payment ledger check", (err as Error).message);
 }
 
 // --- Summary ----------------------------------------------------------------

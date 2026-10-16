@@ -1,4 +1,4 @@
-import { orderPath } from "@/lib/order-access";
+import { canViewOrder, orderAccessToken, orderPath } from "@/lib/order-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Clock, XCircle } from "lucide-react";
@@ -35,6 +35,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
   const params = await searchParams;
   const raw = params.reference ?? params.trxref;
   const reference = Array.isArray(raw) ? raw[0] : raw;
+  const rawToken = Array.isArray(params.t) ? params.t[0] : params.t;
 
   const settings = await getSettings();
 
@@ -66,7 +67,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
   const order = payment.order;
   // A callback is not proof of payment. Verify every unsettled provider payment.
   let outcome: PaymentOutcome | null = null;
-  if (payment.provider === "paystack" && payment.status !== "SUCCESS") {
+  if (payment.provider === "paystack" && payment.status !== "SUCCESS" && !payment.heldAt) {
     try {
       outcome = await reconcilePaystackPayment({
         orderId: order.id,
@@ -74,11 +75,20 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
         reference,
         amount: payment.amount,
         currency: payment.currency,
+        domain: payment.domain,
       });
     } catch (error) {
       console.error("[checkout confirm] verify failed", error);
     }
   }
+
+  // A reference alone is not enough to see someone's name, address and
+  // phone: the checkout links carry the order token, and the owner's session
+  // or staff work too. Anyone else gets the status only.
+  const token = typeof rawToken === "string" ? rawToken : "";
+  const trusted = await canViewOrder(order, { token });
+  const accessToken = trusted ? orderAccessToken(order.orderNumber) : "";
+  const withToken = (path: string) => (accessToken ? `${path}${path.includes("?") ? "&" : "?"}t=${accessToken}` : path);
 
   // Re-read so the page reflects whatever just happened.
   const fresh = await db.order.findUnique({
@@ -92,8 +102,35 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
   });
   if (!fresh) return null;
 
-  const latestPayment = fresh.payments[0];
-  const isConfirmedOrder = fresh.paymentStatus === "SUCCESS";
+  const latestPayment = fresh.payments.find((p) => p.status === "SUCCESS") ?? fresh.payments[0];
+  const isConfirmedOrder = ["SUCCESS", "PARTIALLY_REFUNDED", "REFUNDED"].includes(fresh.paymentStatus);
+
+  if (!trusted) {
+    const held = fresh.payments.find((p) => p.reference === reference)?.heldAt;
+    return (
+      <Shell
+        icon={
+          isConfirmedOrder ? (
+            <svg viewBox="0 0 24 24" className="h-10 w-10" fill="none" aria-hidden>
+              <path d="M5 12.5l4.5 4.5L19 7.5" stroke="var(--color-sage-600)" strokeWidth={2} strokeLinecap="round" />
+            </svg>
+          ) : (
+            <Clock className="h-10 w-10 text-warning" aria-hidden />
+          )
+        }
+        title={isConfirmedOrder ? "Payment received" : held ? "Payment under review" : "Payment not confirmed yet"}
+        body={
+          isConfirmedOrder
+            ? `Order ${fresh.orderNumber} is paid. Open the tracking link in your SMS or email for the full receipt.`
+            : held
+              ? `Our team is checking the payment for ${fresh.orderNumber} and will be in touch.`
+              : `We have not confirmed payment for ${fresh.orderNumber} yet. Open the tracking link in your SMS or email to follow it.`
+        }
+      >
+        {isConfirmedOrder || held ? null : <PaymentStatusRefresher intervalMs={8000} maxChecks={15} />}
+      </Shell>
+    );
+  }
 
   if (isConfirmedOrder) {
     // Four more pieces for the room, none of them already in the order.
@@ -150,7 +187,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
           </h1>
           <p className="mx-auto mt-3.5 max-w-[500px] text-base font-light leading-relaxed text-[var(--text-secondary)]">
             Your order <strong className="font-medium text-[var(--text-primary)]">{fresh.orderNumber}</strong> is
-            confirmed. An official receipt has been dispatched via SMS to {formatPhone(fresh.phone ?? fresh.shippingAddress?.phone ?? "")} and emailed to {fresh.email}. Our concierge team will reach you to finalize dispatch.
+            confirmed. Your receipt is on its way by SMS to {formatPhone(fresh.phone ?? fresh.shippingAddress?.phone ?? "")} and by email to {fresh.email}. Our concierge team will reach you to finalize dispatch.
           </p>
 
           <dl className="mt-7 inline-flex flex-wrap justify-center gap-x-9 gap-y-4 border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-8 py-4.5 text-left">
@@ -171,22 +208,6 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
             ))}
           </dl>
         </section>
-
-        {/* Direct Payment / Pre-Order Instructions Banner */}
-        {fresh.paymentStatus !== "SUCCESS" ? (
-          <section className="lx-container max-w-[760px] pb-6">
-            <div className="border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
-                Next Steps · Settlement &amp; Dispatch
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
-                {fresh.paymentMethod === "pay_on_delivery"
-                  ? "Your order is reserved for Pay on Delivery / Concierge Verification. Our Accra dispatch team will call you to confirm your delivery window."
-                  : `To complete your ${fresh.depositAmount ? "50% pre-order deposit" : "payment"} of ${formatPrice(fresh.depositAmount ?? fresh.total)} immediately via Mobile Money or Bank Transfer, use your Order Reference (${fresh.orderNumber}) or contact our concierge desk at ${formatPhone(settings.supportPhone)}.`}
-              </p>
-            </div>
-          </section>
-        ) : null}
 
         {/* Order detail */}
         <section className="lx-container max-w-[760px] pb-7">
@@ -252,7 +273,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
               {fresh.depositAmount ? (
                 <div className="mt-3 border-t border-[var(--border-subtle)] pt-3 text-sm">
                   <div className="flex justify-between font-medium text-[var(--accent)]">
-                    <dt>50% Pre-Order Deposit</dt>
+                    <dt>Pre-Order Deposit</dt>
                     <dd className="tabular-nums">{formatPrice(fresh.depositAmount)}</dd>
                   </div>
                   <div className="mt-1 flex justify-between text-[var(--text-secondary)]">
@@ -333,6 +354,18 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
 
         <Footer />
       </>
+    );
+  }
+
+  const thisPayment = fresh.payments.find((p) => p.reference === reference);
+  if (thisPayment?.heldAt && thisPayment.status !== "SUCCESS") {
+    return (
+      <Shell
+        step={2}
+        icon={<Clock className="h-10 w-10 text-warning" aria-hidden />}
+        title="We are checking your payment"
+        body={`Your payment for ${fresh.orderNumber} needs a quick check by our team. There is nothing more to do; we will contact you shortly.`}
+      />
     );
   }
 
@@ -419,12 +452,13 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
             {!chargeOver && directCharge.status === "PENDING" ? (
               <MomoOtpForm
                 orderId={fresh.id}
+                token={accessToken}
                 reference={reference}
                 required={Boolean(help?.needsCode)}
                 network={charge?.provider ?? null}
               />
             ) : null}
-            {orderOpen && !help?.needsCode ? <MomoResendButton reference={reference} /> : null}
+            {orderOpen && !help?.needsCode ? <MomoResendButton reference={reference} token={accessToken} /> : null}
             <p className="mt-4 text-[var(--text-secondary)]">
               Your bag is saved, so you can go back and choose another payment method at any time.
             </p>
@@ -433,7 +467,7 @@ export default async function ConfirmPage({ searchParams }: PageProps<"/checkout
       }
       action={
         <>
-          <LinkButton href={`/checkout/confirm?reference=${encodeURIComponent(reference)}`}>
+          <LinkButton href={withToken(`/checkout/confirm?reference=${encodeURIComponent(reference)}`)}>
             Refresh
           </LinkButton>
           <Link href="/checkout" className="self-center text-sm underline-offset-4 hover:underline">

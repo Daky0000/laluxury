@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { isPaymentSettled } from "@/lib/orders";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { canViewOrder, orderAccessToken } from "@/lib/order-access";
@@ -42,7 +43,7 @@ export default async function OrderInvoicePage({
   }
   const accessToken = orderAccessToken(order.orderNumber);
 
-  const isPaid = order.paymentStatus === "SUCCESS" || Boolean(order.balancePaidAt);
+  const isPaid = isPaymentSettled(order.paymentStatus) || Boolean(order.balancePaidAt);
   const balanceRemaining =
     order.depositAmount && !order.balancePaidAt
       ? Math.max(0, order.total - order.depositAmount)

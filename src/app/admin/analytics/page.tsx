@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { outstandingBalance } from "@/lib/orders";
 import { appFunnel } from "@/lib/analytics";
 import Link from "next/link";
 import { TrendingUp, Wallet, ArrowUpRight, Sparkles } from "lucide-react";
@@ -13,13 +14,20 @@ export const metadata: Metadata = { title: "Financial & Margin Analytics" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminFinancialAnalyticsPage() {
-  await requirePermission("dashboard:view");
+  await requirePermission("finance:view");
 
   const [funnel, orders, variants, tradeApps] = await Promise.all([
     appFunnel(30).catch(() => []),
+    // Sales are orders that took money, test-mode orders aside. Unpaid
+    // checkouts are not revenue, and orders cancelled after payment still count
+    // until their money is refunded.
     db.order.findMany({
-      where: { status: { not: "CANCELLED" } },
+      where: {
+        isTest: false,
+        paymentStatus: { in: ["SUCCESS", "PARTIALLY_REFUNDED", "REFUNDED"] },
+      },
       include: {
+        payments: { where: { status: "SUCCESS" }, select: { amount: true } },
         items: {
           include: {
             variant: { select: { costPrice: true } },
@@ -56,33 +64,40 @@ export default async function AdminFinancialAnalyticsPage() {
   const receivableOrders: typeof orders = [];
 
   for (const o of orders) {
-    grossContractRevenue += o.total;
+    // What the customer keeps paying for: the order total less refunds.
+    const netTotal = Math.max(0, o.total - o.refundedTotal);
+    // Money actually received and not sent back.
+    const received = o.payments.reduce((sum, p) => sum + p.amount, 0);
+    const kept = Math.max(0, received - o.refundedTotal);
+    cashCollectedToDate += kept;
+
+    const fullyRefunded = o.paymentStatus === "REFUNDED";
+    if (fullyRefunded) continue;
+    grossContractRevenue += netTotal;
 
     const isTrade =
       tradeEmails.has(o.email.toLowerCase()) ||
       o.redemptions.some((r) => r.discount.code.startsWith("TRADE-"));
 
     if (isTrade) {
-      tradeChannelRevenue += o.total;
+      tradeChannelRevenue += netTotal;
     }
     if (o.hasPreorderItems) {
-      preorderRevenue += o.total;
+      preorderRevenue += netTotal;
     } else {
-      inStockRevenue += o.total;
+      inStockRevenue += netTotal;
     }
 
-    const isSplitUnpaid = o.depositAmount && o.depositAmount < o.total && !o.balancePaidAt;
-    if (isSplitUnpaid && o.depositAmount) {
-      cashCollectedToDate += o.depositAmount;
-      balanceReceivableTotal += o.total - o.depositAmount;
+    const balance = outstandingBalance(o);
+    if (balance > 0 && o.status !== "CANCELLED") {
+      balanceReceivableTotal += balance;
       receivableOrders.push(o);
-    } else if (o.paymentStatus === "SUCCESS") {
-      cashCollectedToDate += o.total;
     }
 
+    // Units still sold (not returned to the shelf).
     for (const item of o.items) {
       const unitCost = item.variant?.costPrice ?? Math.round(item.unitPrice * 0.58);
-      estimatedCogsTotal += unitCost * item.quantity;
+      estimatedCogsTotal += unitCost * Math.max(0, item.quantity - item.quantityRestocked);
     }
   }
 
@@ -121,14 +136,14 @@ export default async function AdminFinancialAnalyticsPage() {
         <Stat
           label="Total Sales"
           value={formatMoney(grossContractRevenue)}
-          tooltip="Gross contract revenue from all active customer orders."
-          hint={`${orders.length} active orders`}
+          tooltip="Paid orders (live mode only), less anything refunded. Unpaid checkouts are not counted."
+          hint={`${orders.length} paid orders`}
         />
         <Stat
           label="Cash Collected"
           value={formatMoney(cashCollectedToDate)}
           tooltip="Actual money received into your bank or Mobile Money account to date."
-          hint="Full orders + 50% deposits"
+          hint="Payments received, less refunds"
         />
         <Stat
           label="Balances Receivable"
@@ -214,7 +229,7 @@ export default async function AdminFinancialAnalyticsPage() {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] px-6 py-4">
           <div>
             <h2 className="text-base font-medium">
-              50% Pre-Order Balances Receivable ({receivableOrders.length} Orders)
+              Pre-Order Balances Receivable ({receivableOrders.length} Orders)
             </h2>
             <p className="text-xs text-[var(--text-secondary)]">
               Orders where the 50% deposit has been paid and the remaining 50% balance is due upon arrival in Accra.
@@ -224,7 +239,7 @@ export default async function AdminFinancialAnalyticsPage() {
 
         {receivableOrders.length === 0 ? (
           <div className="p-8 text-center text-sm text-[var(--text-muted)]">
-            All Pre-Order 50% balances are currently settled. New 50% deposit orders will appear here automatically.
+            All pre-order balances are currently settled. New deposit orders will appear here automatically.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -281,7 +296,7 @@ export default async function AdminFinancialAnalyticsPage() {
                           {cleanPhone ? (
                             <a
                               href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(
-                                `Hello ${clientName}, your Noble Enclave commission (${o.orderNumber}) is ready for white-glove delivery. Your remaining 50% balance of ${formatMoney(balance)} can be completed at /orders/track.`,
+                                `Hello ${clientName}, your Noble Enclave commission (${o.orderNumber}) is ready for white-glove delivery. Your remaining balance of ${formatMoney(balance)} can be completed at /orders/track.`,
                               )}`}
                               target="_blank"
                               rel="noreferrer"

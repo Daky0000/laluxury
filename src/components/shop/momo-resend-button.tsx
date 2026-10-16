@@ -9,7 +9,7 @@ import { resendCheckoutPromptAction } from "@/app/actions/order-pay";
  * a minute and is easy to miss; this repeats it to the same wallet and moves
  * the page onto the new attempt.
  */
-export function MomoResendButton({ reference }: { reference: string }) {
+export function MomoResendButton({ reference, token }: { reference: string; token: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -17,12 +17,12 @@ export function MomoResendButton({ reference }: { reference: string }) {
   function resend() {
     setError(null);
     startTransition(async () => {
-      const res = await resendCheckoutPromptAction(reference);
+      const res = await resendCheckoutPromptAction(reference, token);
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      router.replace(`/checkout/confirm?reference=${encodeURIComponent(res.reference)}`);
+      router.replace(`/checkout/confirm?reference=${encodeURIComponent(res.reference)}&t=${encodeURIComponent(token)}`);
     });
   }
 

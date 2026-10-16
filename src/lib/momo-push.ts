@@ -3,11 +3,12 @@ import { db } from "@/lib/db";
 import {
   chargeMobileMoney,
   checkPendingCharge,
+  currentPaystackMode,
   submitMobileMoneyOtp,
-  verifyTransaction,
   detectGhanaMomoProvider,
   normaliseGhanaMomoPhone,
   MOMO_PROVIDER_LABELS,
+  PaystackError,
   type MomoProvider,
   type PaystackChargeResult,
   type PaystackChargeStatus,
@@ -16,8 +17,22 @@ import { isMomoNetworkId } from "@/lib/momo-networks";
 import { getIntegrations, activePaystack } from "@/lib/integrations";
 import { formatMoney } from "@/lib/money";
 import { logAudit } from "@/lib/audit";
-import { markOrderPaid } from "@/lib/orders";
+import { isPaymentSettled, outstandingBalance, type PaymentPurpose } from "@/lib/orders";
+import { reconcilePaystackPayment } from "@/lib/checkout-payment";
+import { newPaymentReference } from "@/lib/payment-reference";
+import { DEFAULT_DEPOSIT_PERCENT, depositAmountFor } from "@/lib/deposits";
 import { rateLimit } from "@/lib/rate-limit";
+
+function modeOf(domain: string | null | undefined): "live" | "test" | null {
+  return domain === "live" || domain === "test" ? domain : null;
+}
+
+/**
+ * How long a prompt is left alone before it may be sent again. MTN prompts
+ * lapse after about a minute, but the request stays in the wallet's approvals
+ * menu; sending a second one too soon is how people end up approving both.
+ */
+const RESEND_AFTER_MS = 60 * 1000;
 
 export type MomoActor = {
   id: string;
@@ -84,14 +99,14 @@ export async function recordDirectCharge(
 export async function refreshDirectCharge(reference: string): Promise<DirectChargeState> {
   const payment = await db.payment.findUnique({
     where: { reference },
-    select: { rawResponse: true, mobileMoneyNumber: true, status: true },
+    select: { rawResponse: true, mobileMoneyNumber: true, status: true, domain: true },
   });
   const stored = readDirectCharge(payment?.rawResponse);
   const provider = stored.provider ?? detectGhanaMomoProvider(payment?.mobileMoneyNumber ?? "");
   if (!payment || payment.status !== "PENDING") return { ...stored, provider };
 
   try {
-    const charge = await checkPendingCharge(reference);
+    const charge = await checkPendingCharge(reference, modeOf(payment.domain));
     if (!CHARGE_STATUSES.includes(charge.status)) return { ...stored, provider };
     // Paystack leaves out the text on a repeat check; keep the earlier one.
     const displayText = charge.display_text ?? (charge.status === stored.status ? stored.displayText : null);
@@ -122,7 +137,7 @@ export async function resendDirectDebitPrompt(
     return { ok: false, error: "This payment cannot be sent to a phone again." };
   }
   const order = payment.order;
-  if (order.paymentStatus === "SUCCESS" || payment.status === "SUCCESS") {
+  if (payment.status === "SUCCESS" || (isPaymentSettled(order.paymentStatus) && outstandingBalance(order) === 0)) {
     return { ok: false, error: "This order is already paid." };
   }
   if (order.status === "CANCELLED" || order.status === "REFUNDED") {
@@ -135,20 +150,41 @@ export async function resendDirectDebitPrompt(
 
   // Money that already landed on the earlier prompt must not be asked for twice.
   try {
-    const verified = await verifyTransaction(reference);
-    if (verified.status === "success") {
+    const outcome = await reconcilePaystackPayment(
+      {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        reference,
+        amount: payment.amount,
+        currency: payment.currency,
+        domain: payment.domain,
+      },
+      { recordFailure: false },
+    );
+    if (outcome === "paid" || outcome === "held") {
       return { ok: false, error: "Your earlier approval just came through. Refresh this page." };
     }
   } catch {
     // Unknown to Paystack (never started) or unreachable: the new charge decides.
   }
 
+  // A prompt still out there is left to run its course first.
   const stored = readDirectCharge(payment.rawResponse);
-  const provider = stored.provider ?? detectGhanaMomoProvider(payment.mobileMoneyNumber);
-  const nextReference = `${order.orderNumber}-${Date.now().toString(36).toUpperCase()}`;
+  const live = payment.status === "PENDING" && stored.status !== "failed";
+  if (live && Date.now() - payment.createdAt.getTime() < RESEND_AFTER_MS) {
+    return {
+      ok: false,
+      error: "The first prompt may still be on its way. Check your approvals menu, and send it again after a minute if nothing came.",
+    };
+  }
 
+  const provider = stored.provider ?? detectGhanaMomoProvider(payment.mobileMoneyNumber);
+  const nextReference = newPaymentReference(order.orderNumber);
+  const mode = await currentPaystackMode();
+
+  // The earlier attempt stays on file as it is: if it is approved after all,
+  // it is still recorded (and, as a second payment, raised for a refund).
   await db.$transaction([
-    db.payment.updateMany({ where: { reference, status: "PENDING" }, data: { status: "FAILED" } }),
     db.payment.create({
       data: {
         orderId: order.id,
@@ -159,13 +195,15 @@ export async function resendDirectDebitPrompt(
         currency: payment.currency,
         status: "PENDING",
         mobileMoneyNumber: payment.mobileMoneyNumber,
+        purpose: payment.purpose,
+        domain: mode,
       },
     }),
     db.orderEvent.create({
       data: {
         orderId: order.id,
         type: "momo.push_sent",
-        message: `Customer asked for the ${MOMO_PROVIDER_LABELS[provider]} prompt again (${formatMoney(payment.amount)}) on ${payment.mobileMoneyNumber} (Ref: ${nextReference}).`,
+        message: `Customer asked for the ${MOMO_PROVIDER_LABELS[provider]} prompt again (${formatMoney(payment.amount, payment.currency)}) on ${payment.mobileMoneyNumber} (Ref: ${nextReference}).`,
       },
     }),
   ]);
@@ -183,17 +221,10 @@ export async function resendDirectDebitPrompt(
       throw new Error(charge.display_text || charge.message || "That MoMo number could not be charged.");
     }
     await recordDirectCharge(nextReference, provider, charge);
-    if (charge.status === "success") {
-      await markOrderPaid({
-        orderId: order.id,
-        reference: nextReference,
-        amount: payment.amount,
-        channel: "mobile_money",
-        mobileMoneyNumber: payment.mobileMoneyNumber,
-      });
-    }
     return { ok: true, reference: nextReference };
   } catch (error) {
+    // No answer: the prompt may have gone out, so the attempt stays pending.
+    if (error instanceof PaystackError && error.timedOut) return { ok: true, reference: nextReference };
     await db.payment.update({ where: { reference: nextReference }, data: { status: "FAILED" } }).catch(() => {});
     const message = error instanceof Error ? error.message.replace(/Paystack/gi, "payment provider") : "";
     return { ok: false, error: message || "We could not send the prompt again. Try again shortly." };
@@ -237,11 +268,16 @@ export async function initiateMomoPinPush(args: {
   if (order.status === "CANCELLED" || order.status === "REFUNDED") {
     return { ok: false, error: "This order has been cancelled or refunded." };
   }
-  if (order.paidAt && (!order.depositAmount || order.balancePaidAt || order.depositAmount >= order.total)) {
+  const settled = isPaymentSettled(order.paymentStatus);
+  if (settled && outstandingBalance(order) === 0) {
     return { ok: false, error: "This order is already paid. Refresh the order status." };
   }
-  if (order.paidAt && args.chargeScope !== "REMAINING_BALANCE") {
+  if (settled && args.chargeScope !== "REMAINING_BALANCE") {
     return { ok: false, error: "The deposit is already paid. Select the remaining balance." };
+  }
+  // The balance comes after the deposit, never instead of it.
+  if (!settled && args.chargeScope === "REMAINING_BALANCE") {
+    return { ok: false, error: "The deposit has not been paid yet. Collect the deposit first." };
   }
 
   const cleanPhone = normaliseGhanaMomoPhone(args.phone || order.phone || "");
@@ -264,17 +300,19 @@ export async function initiateMomoPinPush(args: {
     return { ok: false, error: "This order is not a deposit order." };
   }
   if (args.chargeScope === "DEPOSIT_50") {
-    amountToCharge = order.depositAmount ?? Math.round(order.total * 0.5);
+    amountToCharge = order.depositAmount ?? depositAmountFor(order.total, DEFAULT_DEPOSIT_PERCENT) ?? order.total;
   } else if (args.chargeScope === "REMAINING_BALANCE") {
-    const dep = order.depositAmount ?? Math.round(order.total * 0.5);
-    amountToCharge = Math.max(0, order.total - dep);
+    amountToCharge = outstandingBalance(order);
   }
 
   if (amountToCharge <= 0) {
     return { ok: false, error: "No remaining balance to charge on this order." };
   }
 
-  const reference = `MOMO-${order.orderNumber}-${Date.now().toString().slice(-6)}`;
+  const reference = newPaymentReference(order.orderNumber, "MOMO");
+  const purpose: PaymentPurpose =
+    args.chargeScope === "REMAINING_BALANCE" ? "BALANCE" : args.chargeScope === "DEPOSIT_50" ? "DEPOSIT" : "FULL";
+  const mode = await currentPaystackMode();
 
   // Save the phone on the order if not already set, and create a PENDING Payment row
   await db.$transaction([
@@ -290,8 +328,8 @@ export async function initiateMomoPinPush(args: {
         events: {
           create: {
             type: "momo.push_sent",
-            message: `Direct ${providerLabel} PIN prompt (${formatMoney(amountToCharge)}) pushed to ${cleanPhone} (Ref: ${reference}). Waiting for client to enter MoMo PIN.`,
-            actorId: staff.id,
+            message: `Direct ${providerLabel} PIN prompt (${formatMoney(amountToCharge, order.currency)}) pushed to ${cleanPhone} (Ref: ${reference}). Waiting for client to enter MoMo PIN.`,
+            actorId: staff.id || null,
           },
         },
       },
@@ -302,10 +340,12 @@ export async function initiateMomoPinPush(args: {
         provider: "paystack",
         reference,
         amount: amountToCharge,
-        currency: "GHS",
+        currency: order.currency,
         status: "PENDING",
         channel: "mobile_money",
         mobileMoneyNumber: cleanPhone,
+        purpose,
+        domain: mode,
       },
     }),
   ]);
@@ -336,15 +376,7 @@ export async function initiateMomoPinPush(args: {
       await recordDirectCharge(reference, provider, charge);
 
       if (charge.status === "success") {
-        await finalizeMomoOrderPayment({
-          orderId: order.id,
-          reference,
-          amountToCharge,
-          cleanPhone,
-          providerLabel,
-          chargeScope: args.chargeScope,
-          actorId: staff.id,
-        });
+        await checkMomoPin({ orderId: order.id, reference, chargeScope: args.chargeScope, actor: staff });
       }
 
       try {
@@ -358,13 +390,26 @@ export async function initiateMomoPinPush(args: {
         status: charge.status,
         providerLabel,
         phone: cleanPhone,
-        amountFormatted: formatMoney(amountToCharge),
+        amountFormatted: formatMoney(amountToCharge, order.currency),
         displayText:
           charge.display_text ??
           `Live ${providerLabel} PIN prompt sent to ${cleanPhone}. Ask the client to check their phone screen (or dial *170# > My Wallet > My Approvals for MTN) and enter their 4-digit MoMo PIN.`,
         simulated: false,
       };
     } catch (err) {
+      if (err instanceof PaystackError && err.timedOut) {
+        // No answer: the prompt may have gone out. Keep watching it.
+        return {
+          ok: true,
+          reference,
+          status: "pending",
+          providerLabel,
+          phone: cleanPhone,
+          amountFormatted: formatMoney(amountToCharge, order.currency),
+          displayText: "The network is slow to answer. If a prompt arrives, approve it; this page will pick it up.",
+          simulated: false,
+        };
+      }
       // No prompt went out, so this attempt is over; it must not linger as pending.
       await db.payment.update({ where: { reference }, data: { status: "FAILED" } }).catch(() => {});
       return {
@@ -389,10 +434,13 @@ export async function submitMomoPushOtp(args: {
 }): Promise<MomoPushResult> {
   const payment = await db.payment.findUnique({
     where: { reference: args.reference },
-    select: { orderId: true, rawResponse: true, mobileMoneyNumber: true },
+    select: { orderId: true, rawResponse: true, mobileMoneyNumber: true, status: true, domain: true },
   });
   if (!payment || payment.orderId !== args.orderId) {
     return { ok: false, error: "Payment reference not found." };
+  }
+  if (payment.status !== "PENDING") {
+    return { ok: false, error: "This payment is no longer awaiting a code." };
   }
   const provider =
     readDirectCharge(payment.rawResponse).provider ?? detectGhanaMomoProvider(payment.mobileMoneyNumber ?? "");
@@ -401,6 +449,7 @@ export async function submitMomoPushOtp(args: {
     const res = await submitMobileMoneyOtp({
       reference: args.reference,
       otp: args.otp,
+      mode: modeOf(payment.domain),
     });
     if (res.status === "failed") {
       return { ok: false, error: res.display_text || res.message || "That code was not accepted." };
@@ -423,14 +472,21 @@ export async function submitMomoPushOtp(args: {
   }
 }
 
-export async function checkMomoPin(args: {
-  orderId: string;
-  reference: string;
-  chargeScope?: "FULL" | "DEPOSIT_50" | "REMAINING_BALANCE";
-  actor: MomoActor;
-}): Promise<{ ok: boolean; paid: boolean; message: string; chargeStatus?: PaystackChargeStatus | null; displayText?: string | null }> {
-  const staff = args.actor;
+export type MomoCheckResult = {
+  ok: boolean;
+  paid: boolean;
+  message: string;
+  chargeStatus?: PaystackChargeStatus | null;
+  displayText?: string | null;
+};
 
+/**
+ * Where a direct MoMo charge stands, for whoever is watching it (staff on the
+ * order page, the customer on the tracking page or in the app). Settlement
+ * goes through the same checks as every other path; a mismatch is held for
+ * review rather than reported as paid.
+ */
+export async function checkDirectCharge(args: { orderId: string; reference: string }): Promise<MomoCheckResult> {
   const payment = await db.payment.findUnique({
     where: { reference: args.reference },
     include: { order: true },
@@ -439,115 +495,95 @@ export async function checkMomoPin(args: {
   if (!payment || payment.orderId !== args.orderId) {
     return { ok: false, paid: false, message: "Payment reference not found." };
   }
-
   if (payment.status === "SUCCESS") {
-    return { ok: true, paid: true, message: "MoMo PIN confirmed! Order is already marked as PAID." };
+    return { ok: true, paid: true, message: `Payment of ${formatMoney(payment.amount, payment.currency)} confirmed.` };
+  }
+  if (payment.heldAt) {
+    return { ok: false, paid: false, message: "This payment is being checked by our team. We will be in touch." };
   }
 
   const paystackConfig = activePaystack(await getIntegrations());
-
-  if (paystackConfig.secretKey) {
-    try {
-      const verified = await verifyTransaction(args.reference);
-      if (verified.status === "success") {
-        if (
-          verified.amount !== payment.amount ||
-          verified.currency.toUpperCase() !== payment.currency.toUpperCase()
-        ) {
-          return { ok: false, paid: false, message: "Payment details did not match this order." };
-        }
-        const provider = detectGhanaMomoProvider(payment.mobileMoneyNumber ?? "");
-        await finalizeMomoOrderPayment({
-          orderId: payment.orderId,
-          reference: args.reference,
-          amountToCharge: payment.amount,
-          cleanPhone: payment.mobileMoneyNumber ?? "",
-          providerLabel: MOMO_PROVIDER_LABELS[provider],
-          chargeScope: args.chargeScope,
-          actorId: staff.id,
-        });
-        return {
-          ok: true,
-          paid: true,
-          message: `MoMo PIN verified via Paystack! ${formatMoney(payment.amount)} received and Order ${payment.order.orderNumber} is now PAID.`,
-        };
-      }
-      // Not settled. Paystack also calls a prompt not yet approved
-      // "abandoned", so the charge itself says whether it is over or wants a code.
-      const charge = await refreshDirectCharge(args.reference);
-      if (verified.status === "failed" || charge.status === "failed") {
-        return {
-          ok: true,
-          paid: false,
-          chargeStatus: "failed",
-          message: `Customer cancelled or PIN prompt timed out (${verified.gateway_response ?? "not approved"}). You can re-send the prompt anytime.`,
-        };
-      }
-      return {
-        ok: true,
-        paid: false,
-        chargeStatus: charge.status,
-        displayText: charge.displayText,
-        message:
-          charge.status === "send_otp"
-            ? charge.displayText ?? "The network needs a code before it sends the prompt. Enter it to continue."
-            : "Still waiting for customer to enter their 4-digit MoMo PIN on their handset...",
-      };
-    } catch {
-      return {
-        ok: true,
-        paid: false,
-        message: "Waiting for customer to complete MoMo PIN prompt...",
-      };
-    }
+  if (!paystackConfig.secretKey) {
+    return { ok: true, paid: false, message: "Waiting for the MoMo PIN to be entered on the phone..." };
   }
-
-  return {
-    ok: true,
-    paid: false,
-    message: "Waiting for customer to enter their MoMo PIN on their handset...",
-  };
-}
-
-async function finalizeMomoOrderPayment(args: {
-  orderId: string;
-  reference: string;
-  amountToCharge: number;
-  cleanPhone: string;
-  providerLabel: string;
-  chargeScope?: "FULL" | "DEPOSIT_50" | "REMAINING_BALANCE";
-  actorId: string;
-}) {
-  // One finalizer for every payment path: stock, discounts, carts, alerts
-  // and customer notices all happen in markOrderPaid, exactly once.
-  await markOrderPaid({
-    orderId: args.orderId,
-    reference: args.reference,
-    amount: args.amountToCharge,
-    channel: "mobile_money",
-    mobileMoneyNumber: args.cleanPhone || null,
-  });
-
-  await logAudit({
-    actorId: args.actorId,
-    action: "order.momo_push_paid",
-    entity: "Order",
-    entityId: args.orderId,
-    after: {
-      reference: args.reference,
-      amount: args.amountToCharge,
-      phone: args.cleanPhone,
-      providerLabel: args.providerLabel,
-    },
-  });
 
   try {
-    revalidatePath(`/admin/orders/${args.orderId}`);
-    revalidatePath("/admin/orders");
-    revalidatePath("/admin/preorders");
-    revalidatePath("/admin/analytics");
-    revalidatePath("/orders/track");
+    const outcome = await reconcilePaystackPayment(
+      {
+        orderId: payment.orderId,
+        orderNumber: payment.order.orderNumber,
+        reference: args.reference,
+        amount: payment.amount,
+        currency: payment.currency,
+        domain: payment.domain,
+      },
+      { recordFailure: false },
+    );
+    if (outcome === "paid") {
+      try {
+        revalidatePath(`/admin/orders/${payment.orderId}`);
+        revalidatePath("/admin/orders");
+        revalidatePath("/orders/track");
+      } catch {
+        // Outside a request (e.g. API route background), nothing to revalidate.
+      }
+      return {
+        ok: true,
+        paid: true,
+        message: `Payment of ${formatMoney(payment.amount, payment.currency)} confirmed via Mobile Money.`,
+      };
+    }
+    if (outcome === "held") {
+      return { ok: false, paid: false, message: "Payment details did not match this order. Our team has been told." };
+    }
+
+    // Not settled. Paystack also calls a prompt not yet approved
+    // "abandoned", so the charge itself says whether it is over or wants a code.
+    const charge = await refreshDirectCharge(args.reference);
+    if (charge.status === "failed") {
+      return {
+        ok: true,
+        paid: false,
+        chargeStatus: "failed",
+        message: "The prompt timed out or was declined. It can be sent again.",
+      };
+    }
+    return {
+      ok: true,
+      paid: false,
+      chargeStatus: charge.status,
+      displayText: charge.displayText,
+      message:
+        charge.status === "send_otp"
+          ? (charge.displayText ?? "The network needs a code before it sends the prompt. Enter it to continue.")
+          : "Still waiting for the 4-digit MoMo PIN to be entered on the phone...",
+    };
   } catch {
-    // Outside a request (e.g. API route background), nothing to revalidate.
+    return {
+      ok: false,
+      paid: false,
+      message: "Could not confirm the payment status just now. Check again in a moment before resending.",
+    };
   }
+}
+
+/** Staff check on a prompt they pushed; recorded in the audit log when it lands. */
+export async function checkMomoPin(args: {
+  orderId: string;
+  reference: string;
+  chargeScope?: "FULL" | "DEPOSIT_50" | "REMAINING_BALANCE";
+  actor: MomoActor;
+}): Promise<MomoCheckResult> {
+  const before = await db.payment.findUnique({ where: { reference: args.reference }, select: { status: true } });
+  const result = await checkDirectCharge(args);
+  if (result.paid && before && before.status !== "SUCCESS") {
+    await logAudit({
+      actorId: args.actor.id,
+      action: "order.momo_push_paid",
+      entity: "Order",
+      entityId: args.orderId,
+      after: { reference: args.reference },
+    });
+  }
+  return result;
 }

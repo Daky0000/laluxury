@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import { uniqueOrderNumber, logOrderEvent } from "@/lib/orders";
 import { toMinorUnits, formatMoney } from "@/lib/money";
+import { DEFAULT_DEPOSIT_PERCENT, depositAmountFor } from "@/lib/deposits";
 import type { PreorderRequestStatus } from "@/generated/prisma";
 
 export async function updatePreorderRequestAction(formData: FormData): Promise<void> {
@@ -85,7 +86,7 @@ export async function convertPreorderRequestToQuoteOrderAction(
 
   const unitPrice = req.targetBudget ?? toMinorUnits(4500);
   const subtotal = unitPrice * req.quantity;
-  const depositAmount = Math.round(subtotal * 0.5);
+  const depositAmount = depositAmountFor(subtotal, DEFAULT_DEPOSIT_PERCENT) ?? subtotal;
   const orderNumber = await uniqueOrderNumber();
 
   const nameParts = req.name.trim().split(/\s+/);
@@ -99,6 +100,8 @@ export async function convertPreorderRequestToQuoteOrderAction(
       phone: req.phone,
       status: "PENDING",
       paymentStatus: "PENDING",
+      // A quote waits on its client for days; it never expires like a checkout.
+      source: "quote",
       hasPreorderItems: true,
       paymentMethod: "direct_momo",
       depositAmount,
@@ -146,8 +149,9 @@ export async function convertPreorderRequestToQuoteOrderAction(
       provider: "direct",
       channel: "bespoke_quote",
       amount: depositAmount,
-      currency: "GHS",
+      currency: order.currency,
       status: "PENDING",
+      purpose: "DEPOSIT",
     },
   });
 

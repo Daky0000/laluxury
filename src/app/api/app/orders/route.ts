@@ -1,30 +1,27 @@
-import { minimumOrderProblem } from "@/lib/minimum-order";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { FulfillmentStatus, OrderStatus, PaymentStatus, type Prisma } from "@/generated/prisma";
 import { getOptionalBearerUser, apiOptionsResponse, withApiAuth } from "@/lib/auth/bearer";
 import { can, isStaff } from "@/lib/auth/rbac";
-import { orderPath } from "@/lib/order-access";
-import { availableOf, InsufficientStockError, reserveStock } from "@/lib/inventory";
-import { cancelOrder, logOrderEvent, sweepStalePendingOrdersSoon, uniqueOrderNumber } from "@/lib/orders";
+import { orderAccessToken, orderPath } from "@/lib/order-access";
+import { InsufficientStockError } from "@/lib/inventory";
+import { createOrderFromCart, logOrderEvent } from "@/lib/orders";
 import { normalisePhone } from "@/lib/phone";
-import { quoteShipping, shippingRateIdForOrder } from "@/lib/shipping";
-import { recordRedemption, validateDiscount, type DiscountLine } from "@/lib/discounts";
+import { quoteShipping } from "@/lib/shipping";
+import { validateDiscount, type DiscountLine } from "@/lib/discounts";
 import { getCommerceSettings } from "@/lib/settings";
 import { pickupAddressLines } from "@/lib/pickup-locations";
-import { getIntegrations, activePaystack } from "@/lib/integrations";
-import { notifyOrder } from "@/lib/notify";
-import { reconcilePendingPaymentsSoon } from "@/lib/checkout-payment";
+import { activePaystack, getIntegrations } from "@/lib/integrations";
+import { createCheckoutCart, toDiscountLines } from "@/lib/cart";
 import {
-  chargeMobileMoney,
-  detectGhanaMomoProvider,
-  normaliseGhanaMomoPhone,
-  MOMO_PROVIDER_LABELS,
-  type MomoProvider,
-} from "@/lib/paystack";
-import { recordDirectCharge } from "@/lib/momo-push";
+  checkoutUnavailableReason,
+  reconcilePendingPaymentsSoon,
+  startCheckoutPayment,
+} from "@/lib/checkout-payment";
+import { detectGhanaMomoProvider, normaliseGhanaMomoPhone } from "@/lib/paystack";
 import { formatMoney } from "@/lib/money";
+import { rateLimitResponse, requestAddress } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,6 +57,7 @@ const checkoutSchema = z.object({
   }),
   deliveryType: z.enum(["delivery", "pickup"]).optional().default("delivery"),
   isPickup: z.boolean().optional(),
+  pickupLocationId: z.string().optional().nullable(),
   shippingRateId: z.string().optional().nullable(),
   discountCode: z.string().trim().optional().nullable(),
   preorderDepositOption: z.enum(["full", "deposit_50"]).optional().nullable(),
@@ -195,12 +193,16 @@ export const GET = withApiAuth(async (request: Request) => {
 
 // ---------------------------------------------------------------------------
 // POST /api/app/orders - Mobile Checkout & Order Creation
+//
+// The app sends its lines; everything else (prices, stock, delivery, codes,
+// deposits, payment) runs through the same services as the web checkout:
+// `createOrderFromCart` and `startCheckoutPayment`. Nothing is priced here.
 // ---------------------------------------------------------------------------
 export const POST = withApiAuth(async (request: Request) => {
   const user = await getOptionalBearerUser();
   let json = await request.json().catch(() => null);
 
-  // Auto-harmonize customer and shipping address names so partial names don't fail checkout
+  // Fill names from the account or the other block, so partial names don't fail checkout.
   if (json && typeof json === "object") {
     const raw = json as Record<string, unknown>;
     const cust = raw.customer && typeof raw.customer === "object"
@@ -221,27 +223,11 @@ export const POST = withApiAuth(async (request: Request) => {
       if (!cust.lastName || !cust.lastName.toString().trim()) cust.lastName = resolvedLast;
       if (!ship.lastName || !ship.lastName.toString().trim()) ship.lastName = resolvedLast;
     }
-    const isPickup =
-      raw.deliveryType === "pickup" ||
-      raw.isPickup === true ||
-      (ship.line1 && ship.line1.toString().toLowerCase().includes("pickup")) ||
-      (ship.line1 && ship.line1.toString().toLowerCase().includes("showroom"));
-
-    if (isPickup) {
-      // The location the app picked, else the store's first pickup point.
-      const locations = (await getCommerceSettings()).pickupLocations;
-      const chosen =
-        locations.find((l) => l.id === raw.pickupLocationId) ?? locations[0] ?? null;
-      if (chosen && (raw.pickupLocationId || !ship.line1 || !ship.line1.toString().trim())) {
-        const lines = pickupAddressLines(chosen);
-        ship.line1 = lines.line1;
-        ship.line2 = lines.line2;
-        ship.city = chosen.city;
-        ship.region = chosen.region;
-      }
+    // Pickup only when the app says so. The words in an address line never
+    // decide it (a "Showroom Road" address is still a delivery).
+    if (raw.deliveryType === "pickup" || raw.isPickup === true) {
       if (!ship.line1 || !ship.line1.toString().trim()) ship.line1 = "Pickup";
       if (!ship.city || !ship.city.toString().trim()) ship.city = "Accra";
-      if (!ship.region || !ship.region.toString().trim()) ship.region = "Greater Accra";
     }
 
     raw.customer = cust;
@@ -259,68 +245,65 @@ export const POST = withApiAuth(async (request: Request) => {
   }
 
   const data = parsed.data;
-  sweepStalePendingOrdersSoon();
-  const cleanPhone = normalisePhone(data.customer.phone) || data.customer.phone;
-
-  // Determine user id if authenticated or matching customer email/phone
-  let userId = user?.id ?? null;
-  let newAuthToken: string | null = null;
-  let newAuthUser: {
-    id: string;
-    email: string | null;
-    phone: string | null;
-    firstName: string | null;
-    lastName: string | null;
-    role: "CUSTOMER" | "STAFF" | "MANAGER" | "ADMIN" | "OWNER";
-    permissions: string[];
-  } | null = null;
-
-  if (!userId) {
-    const existing = await db.user.findFirst({
-      where: {
-        OR: [
-          { email: { equals: data.customer.email.toLowerCase().trim(), mode: "insensitive" } },
-          ...(cleanPhone ? [{ phone: cleanPhone }] : []),
-        ],
-      },
-      select: { id: true, role: true },
-    });
-
-    if (existing) {
-      // Contact details typed at checkout prove nothing about who is typing
-      // them, so an existing account is never signed in from here. The order
-      // is filed under a matching customer account, but never a staff one.
-      if (existing.role === "CUSTOMER") userId = existing.id;
-    } else {
-      // A brand-new account belongs to whoever just created it, so it is
-      // safe to sign them straight in. The phone stays unverified.
-      const customerUser = await db.user.create({
-        data: {
-          email: data.customer.email.toLowerCase().trim(),
-          phone: cleanPhone,
-          firstName: data.customer.firstName.trim() || "Customer",
-          lastName: data.customer.lastName.trim() || data.customer.firstName.trim() || "Customer",
-          role: "CUSTOMER",
-        },
-      });
-      userId = customerUser.id;
-
-      const { signSession } = await import("@/lib/auth/session");
-      newAuthToken = await signSession({
-        userId: customerUser.id,
-        role: customerUser.role,
-      });
-      newAuthUser = {
-        id: customerUser.id,
-        email: customerUser.email,
-        phone: customerUser.phone,
-        firstName: customerUser.firstName,
-        lastName: customerUser.lastName,
-        role: customerUser.role,
-        permissions: [],
-      };
-    }
+  const email = data.customer.email.toLowerCase().trim();
+  const cleanPhone = normalisePhone(data.customer.phone);
+  if (!cleanPhone) {
+    return NextResponse.json(
+      { error: "Enter a Ghanaian number like 024 000 0000, or one from elsewhere with its country code." },
+      { status: 400 },
+    );
   }
+
+  const unavailable = await checkoutUnavailableReason();
+  if (unavailable) return NextResponse.json({ error: unavailable }, { status: 503 });
+
+  // Only networks on the store's direct list get a phone prompt. A network
+  // taken off it (or an older app build asking anyway) finishes on Paystack's
+  // page, which the app already opens when no prompt comes back.
+  const settings = await getCommerceSettings();
+  const momoNumber = data.momoPhone || cleanPhone;
+  const requestedNetwork = data.momoProvider ?? detectGhanaMomoProvider(momoNumber);
+  const paymentMethod =
+    data.paymentMethod === "direct_debit" && !settings.momoDirectNetworks.includes(requestedNetwork)
+      ? "mobile_money"
+      : data.paymentMethod;
+  const isDirectDebit = paymentMethod === "direct_debit";
+  if (isDirectDebit && normaliseGhanaMomoPhone(momoNumber).length < 10) {
+    return NextResponse.json(
+      { error: "Enter the MTN, Telecel or AirtelTigo MoMo number that will pay, like 024 000 0000." },
+      { status: 400 },
+    );
+  }
+
+  // Staff raising an order for a customer from the app (the "New order"
+  // screen) are not the buyer: the order is the customer's, and it waits for
+  // its payment instead of expiring like a shopper's checkout.
+  const raisedByStaff = Boolean(user && isStaff(user.role) && can(user.role, "orders:write"));
+
+  // Checkout sends payment prompts to phones and holds stock: limited per
+  // address, per contact number and per paying wallet.
+  const limited = raisedByStaff ? null : rateLimitResponse([
+    { key: `checkout-ip:${await requestAddress()}`, limit: 12, windowMs: 15 * 60 * 1000 },
+    { key: `checkout-phone:${cleanPhone}`, limit: 6, windowMs: 15 * 60 * 1000 },
+    ...(isDirectDebit
+      ? [{ key: `checkout-momo:${normaliseGhanaMomoPhone(momoNumber)}`, limit: 5, windowMs: 15 * 60 * 1000 }]
+      : []),
+  ]);
+  if (limited) return limited;
+
+  // The signed-in buyer owns the order. Contact details typed at checkout
+  // prove nothing about who is typing them, so they never pick an account,
+  // and no account or session is created here: a guest's paid order makes
+  // their account afterwards (`markOrderPaid`), with a sign-in SMS.
+  const userId = raisedByStaff ? null : (user?.id ?? null);
+  const discountUserId = userId
+    ? null
+    : ((
+        await db.user.findFirst({
+          where: { OR: [{ phone: cleanPhone }, { email }], role: "CUSTOMER" },
+          select: { id: true },
+        })
+      )?.id ?? null);
 
   // Idempotency protection: prevent duplicate orders if client retries
   const idempotencyKey =
@@ -330,7 +313,7 @@ export const POST = withApiAuth(async (request: Request) => {
 
   // Scoped to the buyer so one shopper's key can never replay another's order.
   const scopedIdempotencyKey = idempotencyKey
-    ? `app:${data.customer.email.toLowerCase().trim()}:${idempotencyKey}`.slice(0, 200)
+    ? `app:${email}:${idempotencyKey}`.slice(0, 200)
     : null;
 
   const replayOrder = async () => {
@@ -346,11 +329,13 @@ export const POST = withApiAuth(async (request: Request) => {
         id: existing.id,
         orderNumber: existing.orderNumber,
         total: existing.total,
+        depositAmount: existing.depositAmount,
         currency: existing.currency,
         status: existing.status,
         placedAt: existing.createdAt.toISOString(),
-        reference: existing.payments[0]?.reference || `${existing.orderNumber}-REF`,
+        reference: existing.payments[0]?.reference ?? null,
       },
+      accessToken: orderAccessToken(existing.orderNumber),
       message: "Order already placed (idempotent replay).",
     });
   };
@@ -358,362 +343,146 @@ export const POST = withApiAuth(async (request: Request) => {
   const replay = await replayOrder();
   if (replay) return replay;
 
-  // Resolve variants from database (handling deduplicated IDs and product-level fallbacks)
-  const uniqueVariantIds = Array.from(new Set(data.items.map((i) => i.variantId)));
-  const variants = await db.variant.findMany({
-    where: { id: { in: uniqueVariantIds } },
-    include: {
-      product: {
-        include: {
-          images: { take: 1, orderBy: { position: "asc" } },
-          categories: { select: { categoryId: true } },
-        },
-      },
-      inventory: true,
-    },
+  // Resolve the app's ids to live variants: a variant id, or a product id
+  // (optionally with "-default") for single-variant products.
+  const requestedIds = Array.from(new Set(data.items.map((i) => i.variantId)));
+  const direct = await db.variant.findMany({
+    where: { id: { in: requestedIds } },
+    select: { id: true, isActive: true, product: { select: { status: true } } },
   });
-
-  const variantMap = new Map(variants.map((v) => [v.id, v]));
-
-  // For any items whose variant wasn't found directly by ID, check if variantId is productId or productId-default
-  const missingVariantIds = uniqueVariantIds.filter((id) => !variantMap.has(id));
-  if (missingVariantIds.length > 0) {
-    const candidateProductIds = missingVariantIds.map((id) => id.replace(/-default$/, ""));
-    const fallbackVariants = await db.variant.findMany({
-      where: {
-        productId: { in: candidateProductIds },
-        isActive: true,
-      },
-      include: {
-        product: {
-          include: {
-            images: { take: 1, orderBy: { position: "asc" } },
-            categories: { select: { categoryId: true } },
-          },
-        },
-        inventory: true,
-      },
+  const resolved = new Map(direct.map((v) => [v.id, v]));
+  const missing = requestedIds.filter((id) => !resolved.has(id));
+  if (missing.length > 0) {
+    const fallback = await db.variant.findMany({
+      where: { productId: { in: missing.map((id) => id.replace(/-default$/, "")) }, isActive: true },
+      select: { id: true, productId: true, isActive: true, product: { select: { status: true } } },
       orderBy: { createdAt: "asc" },
     });
-
-    for (const fv of fallbackVariants) {
-      if (!variantMap.has(fv.id)) {
-        variantMap.set(fv.id, fv);
-      }
-      for (const missingId of missingVariantIds) {
-        if (
-          missingId === fv.productId ||
-          missingId === `${fv.productId}-default` ||
-          missingId.startsWith(fv.productId)
-        ) {
-          variantMap.set(missingId, fv);
-        }
-      }
+    for (const id of missing) {
+      const productId = id.replace(/-default$/, "");
+      const match = fallback.find((v) => v.productId === productId);
+      if (match) resolved.set(id, match);
     }
   }
 
-  // Identify any remaining missing items
-  const stillMissingItems = data.items.filter((item) => !variantMap.has(item.variantId));
-  if (stillMissingItems.length > 0) {
-    const unavailableVariantIds = Array.from(new Set(stillMissingItems.map((i) => i.variantId)));
-    return NextResponse.json(
-      {
-        error: "One or more products in your bag are no longer available.",
-        unavailableVariantIds,
-      },
-      { status: 400 },
-    );
-  }
-
-  // Only live products can be bought, exactly as on the web storefront.
-  const unsellable = data.items.filter((item) => {
-    const v = variantMap.get(item.variantId)!;
-    return !v.isActive || v.product.status !== "ACTIVE";
+  const unavailableVariantIds = requestedIds.filter((id) => {
+    const v = resolved.get(id);
+    return !v || !v.isActive || v.product.status !== "ACTIVE";
   });
-  if (unsellable.length > 0) {
+  if (unavailableVariantIds.length > 0) {
     return NextResponse.json(
-      {
-        error: "One or more products in your bag are no longer available.",
-        unavailableVariantIds: Array.from(new Set(unsellable.map((i) => i.variantId))),
-      },
+      { error: "One or more products in your bag are no longer available.", unavailableVariantIds },
       { status: 400 },
     );
   }
 
-  // Check inventory stock against what is free to sell (on hand minus held).
-  for (const item of data.items) {
-    const v = variantMap.get(item.variantId);
-    if (!v) continue;
-    const minimumProblem = minimumOrderProblem(v.product.title, item.quantity, v.product.minimumOrderQuantity);
-    if (minimumProblem) return NextResponse.json({ error: minimumProblem }, { status: 400 });
-    const inv = v.inventory;
-    const tracked = Boolean(inv && inv.trackInventory && !inv.allowBackorder && !v.product.isPreorder);
-    const available = inv ? Math.max(0, availableOf(inv)) : 0;
-    if (tracked && available < item.quantity) {
-      return NextResponse.json(
-        { error: `Insufficient stock for "${v.product.title}". Only ${available} available.` },
-        { status: 400 },
-      );
-    }
-  }
+  const lines = data.items.map((item) => ({ variantId: resolved.get(item.variantId)!.id, quantity: item.quantity }));
+  const cart = await createCheckoutCart({ lines, email, discountCode: data.discountCode });
+  const dropCart = () => db.cart.delete({ where: { id: cart.id } }).catch(() => {});
 
-  // Calculate Subtotal
-  let subtotal = 0;
-  for (const item of data.items) {
-    const v = variantMap.get(item.variantId)!;
-    subtotal += v.price * item.quantity;
-  }
-
-  // Authoritative shipping calculation via unified shipping engine
-  const region = data.shippingAddress.region || "Greater Accra";
-  const [shippingQuotes, settings, integrations] = await Promise.all([
-    quoteShipping({
-      region,
-      subtotal,
-      totalWeightGrams: data.items.reduce(
-        (sum, item) => sum + (variantMap.get(item.variantId)!.weightGrams ?? 0) * item.quantity,
-        0,
-      ),
-    }),
-    getCommerceSettings(),
-    getIntegrations().catch(() => null),
-  ]);
-
-  const activeMode = integrations?.paystack?.mode || settings?.paymentMode || "live";
-  const paystackConfig = integrations ? activePaystack(integrations) : null;
-  const hasValidKey = Boolean(
-    paystackConfig?.secretKey?.trim().startsWith(activeMode === "test" ? "sk_test_" : "sk_live_"),
-  );
-  if (!hasValidKey) {
-    return NextResponse.json(
-      { error: "Online payment is temporarily unavailable. Please try again shortly." },
-      { status: 503 },
-    );
-  }
-
-  // Only networks on the store's direct list get a phone prompt. A network
-  // taken off it (or an older app build asking anyway) finishes on Paystack's
-  // page, which the app already opens when no prompt comes back.
-  const requestedNetwork =
-    data.momoProvider ?? (data.momoPhone ? detectGhanaMomoProvider(data.momoPhone) : null);
-  const paymentMethod =
-    data.paymentMethod === "direct_debit" &&
-    requestedNetwork &&
-    !settings.momoDirectNetworks.includes(requestedNetwork)
-      ? "mobile_money"
-      : data.paymentMethod;
-
-  const storeFreeThreshold = settings?.freeShippingThreshold;
-  const storeFreeApplies =
-    storeFreeThreshold !== null &&
-    storeFreeThreshold !== undefined &&
-    subtotal >= storeFreeThreshold;
-
-  const isPickupOrder =
-    Boolean(data.isPickup) ||
-    data.deliveryType === "pickup" ||
-    data.shippingAddress.line1.toLowerCase().includes("pickup") ||
-    data.shippingAddress.line1.toLowerCase().includes("showroom");
-
-  let shippingTotal = 0;
-  let appliedShippingRateId: string | null = null;
-
-  if (isPickupOrder || storeFreeApplies) {
-    shippingTotal = 0;
-    appliedShippingRateId = null;
-  } else if (data.shippingRateId) {
-    const matched = shippingQuotes.find((q) => q.id === data.shippingRateId);
-    if (matched) {
-      shippingTotal = matched.price;
-      appliedShippingRateId = matched.id;
-    } else {
-      return NextResponse.json(
-        { error: "That delivery option is not available for this address." },
-        { status: 400 },
-      );
-    }
-  } else if (shippingQuotes.length > 0) {
-    shippingTotal = shippingQuotes[0].price;
-    appliedShippingRateId = shippingQuotes[0].id;
-  } else {
-    // No configured rate covers this address: refuse rather than ship free.
-    return NextResponse.json(
-      { error: "We don't deliver to that region yet. Choose showroom pickup or another address." },
-      { status: 400 },
-    );
-  }
-
-  // Calculate discount if promo code was provided
-  let discountTotal = 0;
-  let allocation: number[] = data.items.map(() => 0);
-  let discountRecordId: string | null = null;
-
+  // A code the shopper typed is checked up front so they hear why it did not
+  // apply, instead of being charged full price without a word.
   if (data.discountCode) {
-    const discountLines: DiscountLine[] = data.items.map((item) => {
-      const v = variantMap.get(item.variantId)!;
-      return {
-        variantId: v.id,
-        productId: v.productId,
-        categoryIds: v.product.categories.map((c) => c.categoryId),
-        quantity: item.quantity,
-        unitPrice: v.price,
-      };
+    const quote = await quoteShipping({
+      region: data.shippingAddress.region,
+      subtotal: cart.items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0),
     });
-
-    const val = await validateDiscount(data.discountCode, {
-      lines: discountLines,
-      subtotal,
-      shippingTotal,
-      userId,
-      email: data.customer.email.toLowerCase().trim(),
+    const lineDiscounts: DiscountLine[] = toDiscountLines(cart);
+    const check = await validateDiscount(data.discountCode, {
+      lines: lineDiscounts,
+      subtotal: cart.items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0),
+      shippingTotal: quote[0]?.price ?? 0,
+      userId: userId ?? discountUserId,
+      email,
     });
-
-    if (!val.ok) {
-      return NextResponse.json({ error: val.reason }, { status: 400 });
+    if (!check.ok) {
+      await dropCart();
+      return NextResponse.json({ error: check.reason }, { status: 400 });
     }
-
-    discountTotal = val.result.amount;
-    allocation = val.result.allocation;
-    if (val.result.freeShipping) {
-      shippingTotal = 0;
-    }
-    discountRecordId = val.result.discount.id;
   }
 
-  // Prepare line items
-  const lineItemsData = data.items.map((item, idx) => {
-    const v = variantMap.get(item.variantId)!;
-    const lineTotal = v.price * item.quantity;
-    const allocated = allocation[idx] || 0;
-    return {
-      variantId: v.id,
-      productId: v.productId,
-      productTitle: v.product.title,
-      variantTitle: v.title,
-      sku: v.sku,
-      imageUrl: v.product.images[0]?.url ?? null,
-      isPreorder: Boolean(v.product.isPreorder),
-      preorderLeadTime: v.product.preorderLeadTime ?? null,
-      quantity: item.quantity,
-      unitPrice: v.price,
-      discountAllocated: allocated,
-      total: lineTotal - allocated,
-    };
-  });
-
-  const grandTotal = Math.max(0, subtotal - discountTotal) + shippingTotal;
-  const hasPreorderItems = Array.from(variantMap.values()).some((v) => Boolean(v.product.isPreorder));
-  const is50PercentDeposit = hasPreorderItems && data.preorderDepositOption === "deposit_50";
-  const depositAmount = is50PercentDeposit ? Math.round(grandTotal * 0.5) : null;
-  const chargeAmount = depositAmount ?? grandTotal;
-
-  const orderNumber = await uniqueOrderNumber();
-  const combinedCustomerNote = data.customerNote?.trim() || null;
+  const isPickup = data.isPickup === true || data.deliveryType === "pickup";
+  const pickupLocation = isPickup
+    ? (settings.pickupLocations.find((l) => l.id === data.pickupLocationId) ?? settings.pickupLocations[0] ?? null)
+    : null;
+  const shippingAddress = {
+    firstName: data.shippingAddress.firstName?.trim() || data.customer.firstName.trim() || "Customer",
+    lastName:
+      data.shippingAddress.lastName?.trim() || data.customer.lastName.trim() || data.customer.firstName.trim() || "Customer",
+    phone: normalisePhone(data.shippingAddress.phone ?? "") || cleanPhone,
+    ...(pickupLocation
+      ? { ...pickupAddressLines(pickupLocation), city: pickupLocation.city, region: pickupLocation.region }
+      : {
+          line1: data.shippingAddress.line1,
+          line2: data.shippingAddress.line2 ?? null,
+          city: data.shippingAddress.city,
+          region: data.shippingAddress.region || "Greater Accra",
+        }),
+    postalCode: data.shippingAddress.postalCode ?? null,
+    country: "GH",
+  };
 
   let order;
   try {
-  order = await db.$transaction(async (tx) => {
-    const shipping = await tx.address.create({
-      data: {
-        userId,
-        firstName: data.shippingAddress.firstName?.trim() || data.customer.firstName.trim() || "Customer",
-        lastName: data.shippingAddress.lastName?.trim() || data.customer.lastName.trim() || data.customer.firstName.trim() || "Customer",
-        phone: data.shippingAddress.phone || cleanPhone,
-        line1: data.shippingAddress.line1,
-        line2: data.shippingAddress.line2 ?? null,
-        city: data.shippingAddress.city,
-        region: data.shippingAddress.region || "Greater Accra",
-        postalCode: data.shippingAddress.postalCode ?? null,
-        country: data.shippingAddress.country || "GH",
-      },
+    order = await createOrderFromCart({
+      cart,
+      email,
+      phone: cleanPhone,
+      userId,
+      discountUserId,
+      shippingAddress,
+      shippingRateId: isPickup ? null : (data.shippingRateId ?? null),
+      pickup: isPickup,
+      customerNote: data.customerNote?.trim() || null,
+      paymentMethod,
+      payDeposit: data.preorderDepositOption === "deposit_50",
+      source: raisedByStaff ? "console" : "app",
+      idempotencyKey: scopedIdempotencyKey,
     });
-
-    const createdOrder = await tx.order.create({
-      data: {
-        orderNumber,
-        idempotencyKey: scopedIdempotencyKey,
-        userId,
-        email: data.customer.email.toLowerCase().trim(),
-        phone: cleanPhone,
-        status: "PENDING",
-        paymentStatus: "PENDING",
-        hasPreorderItems,
-        paymentMethod: paymentMethod,
-        depositAmount,
-        subtotal,
-        discountTotal,
-        shippingTotal,
-        taxTotal: 0,
-        total: grandTotal,
-        shippingAddressId: shipping.id,
-        billingAddressId: shipping.id,
-        shippingRateId: shippingRateIdForOrder(appliedShippingRateId),
-        customerNote: combinedCustomerNote,
-        items: {
-          create: lineItemsData,
-        },
-      },
-      include: {
-        items: true,
-        shippingAddress: true,
-      },
-    });
-
-    return createdOrder;
-  });
   } catch (error) {
+    await dropCart();
     // A concurrent retry with the same key won the insert; answer with its order.
     if ((error as { code?: string }).code === "P2002") {
       const winner = await replayOrder();
       if (winner) return winner;
     }
-    throw error;
-  }
-
-  // Reserve stock for the items
-  // Hold the goods for this attempt. If they cannot be held the order cannot
-  // be honoured, so it is cancelled before anyone is asked to pay for it.
-  try {
-    await reserveStock(
-      data.items.map((i) => ({ variantId: variantMap.get(i.variantId)!.id, quantity: i.quantity })),
-      order.orderNumber,
-      userId,
-    );
-  } catch (stockErr: unknown) {
-    await db.order.update({
-      where: { id: order.id },
-      data: { status: "CANCELLED", cancelledAt: new Date() },
-    });
-    await logOrderEvent({
-      orderId: order.id,
-      type: "order.cancelled",
-      message: "Stock could not be reserved at checkout.",
-    }).catch(() => {});
+    if (error instanceof InsufficientStockError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     return NextResponse.json(
-      {
-        error:
-          stockErr instanceof InsufficientStockError
-            ? stockErr.message
-            : "Some items just sold out. Please review your bag and try again.",
-      },
-      { status: 409 },
+      { error: error instanceof Error ? error.message : "We could not place that order." },
+      { status: 400 },
     );
   }
 
-  // Convert and clear active cart so items are not left behind in customer's bag
+  let started;
+  try {
+    started = await startCheckoutPayment(order, {
+      method: paymentMethod,
+      momoPhone: isDirectDebit ? momoNumber : null,
+      network: isDirectDebit ? requestedNetwork : null,
+      source: "mobile_app",
+    });
+  } catch (error) {
+    const rawErr = error instanceof Error ? error.message : "Unable to initialize payment.";
+    const friendlyErr = rawErr.toLowerCase().includes("invalid key")
+      ? "Online payment is temporarily unavailable. Please try again shortly."
+      : rawErr.replace(/Paystack/gi, "payment provider");
+    return NextResponse.json({ error: friendlyErr }, { status: 400 });
+  }
+
+  // Payment is under way: the app's synced bag for this account has become this order.
   if (userId) {
     try {
       // A bag still waiting on payment from an earlier web checkout counts as
       // active too: it is emptied, but keeps its tie to that earlier order.
       const activeCarts = await db.cart.findMany({
         where: { userId, OR: [{ convertedOrderId: null }, { items: { some: {} } }] },
-        select: { id: true, convertedOrderId: true },
+        select: { id: true },
       });
       if (activeCarts.length > 0) {
         const cartIds = activeCarts.map((c) => c.id);
-        await db.cartItem.deleteMany({
-          where: { cartId: { in: cartIds } },
-        });
+        await db.cartItem.deleteMany({ where: { cartId: { in: cartIds } } });
         await db.cart.updateMany({
           where: { id: { in: cartIds }, convertedOrderId: null },
           data: { convertedOrderId: order.id },
@@ -724,184 +493,13 @@ export const POST = withApiAuth(async (request: Request) => {
     }
   }
 
-  // Same idempotent, transactional redemption the web uses. An order that
-  // expires unpaid gives the use back (see cancelOrder).
-  if (discountRecordId) {
-    await recordRedemption({
-      discountId: discountRecordId,
-      orderId: order.id,
-      userId,
-      amount: discountTotal,
-    }).catch((error) => console.error("[app.checkout] redemption", error));
-  }
+  const isTestOrder = activePaystack(await getIntegrations()).mode === "test";
 
-  const reference = `${order.orderNumber}-${Date.now().toString(36).toUpperCase()}`;
-
-  // Check Paystack integration & Payment Mode
-  let paymentUrl: string | null = null;
-  let isTestOrder = false;
-  let momoPushData: {
-    status: string;
-    reference: string;
-    phone: string;
-    provider: string;
-    providerLabel: string;
-    amountFormatted: string;
-    displayText: string;
-  } | null = null;
-
-  const isDirectDebit = paymentMethod === "direct_debit";
-
-  if (activeMode === "test") {
-    isTestOrder = true;
-  }
-
-  if (isDirectDebit) {
-    const rawMomoPhone = data.momoPhone || cleanPhone || "";
-    const momoPhone = normaliseGhanaMomoPhone(rawMomoPhone);
-    const provider: MomoProvider =
-      data.momoProvider || detectGhanaMomoProvider(momoPhone);
-    const providerLabel = MOMO_PROVIDER_LABELS[provider] || "Mobile Money";
-
-    try {
-        // The row goes in before the charge, so a webhook or OTP for this
-        // reference always finds it. It stays PENDING until the webhook or
-        // verification endpoint sees the money.
-        await db.payment.create({
-            data: {
-              orderId: order.id,
-              reference,
-              provider: "paystack",
-              channel: "mobile_money",
-              mobileMoneyNumber: momoPhone,
-              amount: chargeAmount,
-              currency: order.currency,
-              status: "PENDING",
-            },
-          });
-
-        const chargeRes = await chargeMobileMoney({
-          email: data.customer.email.toLowerCase().trim(),
-          amount: chargeAmount,
-          phone: momoPhone,
-          provider,
-          reference,
-          metadata: {
-            orderId: order.id,
-            orderNumber: order.orderNumber,
-            source: "mobile_app",
-            channel: "direct_debit",
-            chargeScope: depositAmount ? "DEPOSIT_50" : "FULL",
-          },
-        });
-        if (chargeRes.status === "failed") {
-          throw new Error(
-            chargeRes.display_text ||
-              chargeRes.message ||
-              "That MoMo number could not be charged. Check the number and network, or choose another payment method.",
-          );
-        }
-        await recordDirectCharge(reference, provider, chargeRes);
-
-        await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
-          console.error("[notify] order.placed SMS error:", err),
-        );
-
-        momoPushData = {
-            status: chargeRes.status,
-            reference,
-            phone: momoPhone,
-            provider,
-            providerLabel,
-            amountFormatted: formatMoney(chargeAmount, order.currency),
-            displayText:
-              chargeRes.display_text ||
-              `A prompt has been sent to ${momoPhone}. Please check your approvals and enter your 4-digit MoMo PIN to authorize.`,
-        };
-    } catch (chargeErr) {
-        await db.payment
-          .updateMany({ where: { reference, status: "PENDING" }, data: { status: "FAILED" } })
-          .catch(() => {});
-        await cancelOrder(order.id, "Payment gateway initialization failed.", null, { notify: false }).catch((err) =>
-          console.error("[app.checkout] cancelOrder after charge error:", err),
-        );
-        const rawErr =
-          chargeErr instanceof Error
-            ? chargeErr.message
-            : "Unable to initiate Mobile Money prompt. Please check your phone number or select another payment option.";
-        const friendlyErr = rawErr.toLowerCase().includes("invalid key")
-          ? "Online payment is temporarily unavailable. Please try again shortly."
-          : rawErr.replace(/Paystack/gi, "payment provider");
-        return NextResponse.json(
-          {
-            error: friendlyErr,
-          },
-          { status: 400 },
-        );
-    }
-  } else {
-    // Hosted Paystack card/momo checkout
-    try {
-      const { initializeTransaction } = await import("@/lib/paystack");
-      const { env } = await import("@/lib/env");
-      const init = await initializeTransaction({
-        email: data.customer.email.toLowerCase().trim(),
-        amount: chargeAmount,
-        reference,
-        callbackUrl: `${env.siteUrl()}/checkout/confirm?reference=${encodeURIComponent(reference)}`,
-        currency: order.currency,
-        channels: paymentMethod === "mobile_money" ? ["mobile_money"] : ["card"],
-        metadata: {
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          source: "mobile_app",
-          isTest: isTestOrder,
-        },
-      });
-      paymentUrl = init.authorization_url;
-
-      await db.payment.create({
-        data: {
-          orderId: order.id,
-          reference,
-          provider: "paystack",
-          channel: paymentMethod,
-          amount: chargeAmount,
-          currency: order.currency,
-          status: "PENDING",
-        },
-      });
-
-      // Send order placed notification via SMS and Email
-      await notifyOrder(order.id, { kind: "order.placed" }).catch((err) =>
-        console.error("[notify] order.placed hosted error:", err),
-      );
-    } catch (paystackErr) {
-      await cancelOrder(order.id, "Payment gateway initialization failed.", null, { notify: false }).catch((err) =>
-        console.error("[app.checkout] cancelOrder after paystack error:", err),
-      );
-      const rawErr =
-        paystackErr instanceof Error
-          ? paystackErr.message
-          : "Unable to initialize payment.";
-      const friendlyErr = rawErr.toLowerCase().includes("invalid key")
-        ? "Online payment is temporarily unavailable. Please try again shortly."
-        : rawErr.replace(/Paystack/gi, "payment provider");
-      return NextResponse.json(
-        {
-          error: friendlyErr,
-        },
-        { status: 400 },
-      );
-    }
-  }
-
-  // Log order placed event
   await logOrderEvent({
     orderId: order.id,
     type: "order.placed",
-    message: `Mobile order ${order.orderNumber} placed via ${paymentMethod}${isTestOrder ? " [TEST MODE]" : ""}. Total: ${grandTotal}${depositAmount ? ` (50% deposit: ${depositAmount})` : ""}.${paymentUrl ? " Paystack transaction initialized." : ""}`,
-    actorId: userId,
+    message: `${raisedByStaff ? "Order raised by staff in the app" : "Mobile order"} ${order.orderNumber} placed via ${paymentMethod}${isTestOrder ? " [TEST MODE]" : ""}. Total: ${formatMoney(order.total, order.currency)}${order.depositAmount ? ` (deposit: ${formatMoney(order.depositAmount, order.currency)})` : ""}.`,
+    actorId: raisedByStaff ? (user?.id ?? null) : userId,
   });
 
   return NextResponse.json({
@@ -915,15 +513,32 @@ export const POST = withApiAuth(async (request: Request) => {
       total: order.total,
       depositAmount: order.depositAmount,
       currency: order.currency,
-      status: order.status,
+      status: started.kind === "free" ? "PAID" : order.status,
       placedAt: order.placedAt.toISOString(),
-      itemCount: lineItemsData.length,
-      reference,
+      itemCount: order.items.length,
+      reference: started.reference,
     },
+    // Opens this order (tracking, MoMo resend) without an account.
+    accessToken: orderAccessToken(order.orderNumber),
     isTestOrder,
-    paymentUrl,
-    momoPush: momoPushData,
-    token: newAuthToken,
-    user: newAuthUser,
+    paid: started.kind === "free",
+    paymentUrl: started.kind === "hosted" ? started.url : null,
+    momoPush:
+      started.kind === "prompt"
+        ? {
+            status: started.status,
+            reference: started.reference,
+            phone: started.phone,
+            provider: started.provider,
+            providerLabel: started.providerLabel,
+            amountFormatted: formatMoney(started.amount, order.currency),
+            displayText:
+              started.displayText ||
+              `A prompt has been sent to ${started.phone}. Please check your approvals and enter your 4-digit MoMo PIN to authorize.`,
+          }
+        : null,
+    // Checkout no longer signs anyone in; kept for older app builds.
+    token: null,
+    user: null,
   });
 });

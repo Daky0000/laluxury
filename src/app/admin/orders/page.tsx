@@ -5,6 +5,7 @@ import { ExportLink } from "@/components/admin/export-link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { reconcilePendingPaymentsSoon } from "@/lib/checkout-payment";
+import { isPaymentSettled } from "@/lib/orders";
 import { formatMoney } from "@/lib/money";
 import { formatDate, buildQuery } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
@@ -278,7 +279,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
                     </td>
                     <td className="px-4 py-3 text-right">
                       {canWrite &&
-                      order.paymentStatus !== "SUCCESS" &&
+                      !isPaymentSettled(order.paymentStatus) &&
                       order.status !== "CANCELLED" &&
                       order.status !== "REFUNDED" ? (
                         <QuickMomoPromptButton

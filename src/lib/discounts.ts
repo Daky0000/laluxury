@@ -25,7 +25,12 @@ export type DiscountContext = {
   shippingTotal: number;
   userId?: string | null;
   email?: string | null;
+  /** An order being re-priced is not counted against its own code. */
+  excludeOrderId?: string | null;
 };
+
+/** How long an unpaid checkout holds a code use; matches the 6 h checkout expiry. */
+const IN_FLIGHT_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 export type DiscountResult = {
   discount: Discount;
@@ -71,8 +76,21 @@ export async function validateDiscount(
   if (discount.endsAt && discount.endsAt < now) {
     return { ok: false, reason: "That code has expired." };
   }
-  if (discount.usageLimit !== null && discount.timesUsed >= discount.usageLimit) {
-    return { ok: false, reason: "That code has been fully redeemed." };
+  if (discount.usageLimit !== null) {
+    // Uses are counted on payment, so checkouts still waiting on payment hold
+    // a use too; otherwise a 10-use code could be in 50 open checkouts at once.
+    const inFlight = await db.order.count({
+      where: {
+        discountId: discount.id,
+        status: "PENDING",
+        paymentStatus: { in: ["PENDING", "FAILED", "ABANDONED"] },
+        placedAt: { gte: new Date(Date.now() - IN_FLIGHT_WINDOW_MS) },
+        ...(context.excludeOrderId ? { id: { not: context.excludeOrderId } } : {}),
+      },
+    });
+    if (discount.timesUsed + inFlight >= discount.usageLimit) {
+      return { ok: false, reason: "That code has been fully redeemed." };
+    }
   }
 
   // Per-customer cap.
@@ -160,21 +178,23 @@ export async function applyDiscount(
 }
 
 /**
- * Records a redemption and bumps the counter. Called once, inside the same
- * transaction that marks the order paid, so the count cannot drift.
+ * Records a redemption and bumps the counter, once per order. Called when the
+ * order is paid. The money has already been taken by then, so a code that has
+ * gone over its limit is still recorded, and `overLimit` tells the caller to
+ * raise it with the team.
  */
 export async function recordRedemption(args: {
   discountId: string;
   orderId: string;
   userId?: string | null;
   amount: number;
-}): Promise<void> {
-  await db.$transaction(async (tx) => {
+}): Promise<{ recorded: boolean; overLimit: boolean }> {
+  return db.$transaction(async (tx) => {
     const existing = await tx.discountRedemption.findUnique({
       where: { orderId_discountId: { orderId: args.orderId, discountId: args.discountId } },
     });
     // Webhooks retry; a second delivery must not double-count.
-    if (existing) return;
+    if (existing) return { recorded: false, overLimit: false };
 
     await tx.discountRedemption.create({
       data: {
@@ -184,10 +204,16 @@ export async function recordRedemption(args: {
         amount: args.amount,
       },
     });
+    // One conditional increment: it only counts while the code is under its limit.
+    const counted = await tx.$executeRaw`
+      UPDATE "Discount" SET "timesUsed" = "timesUsed" + 1
+      WHERE id = ${args.discountId} AND ("usageLimit" IS NULL OR "timesUsed" < "usageLimit")`;
+    if (counted === 1) return { recorded: true, overLimit: false };
     await tx.discount.update({
       where: { id: args.discountId },
       data: { timesUsed: { increment: 1 } },
     });
+    return { recorded: true, overLimit: true };
   });
 }
 

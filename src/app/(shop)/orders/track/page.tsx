@@ -4,6 +4,7 @@ import { CheckCircle2, Clock, FileText, Package, Search, Truck } from "lucide-re
 import { db } from "@/lib/db";
 import { canViewOrder, orderAccessToken } from "@/lib/order-access";
 import { reconcilePendingPayments } from "@/lib/checkout-payment";
+import { isPaymentSettled, outstandingBalance } from "@/lib/orders";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
@@ -49,7 +50,7 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
 
   // Paid after leaving the confirmation page, with the webhook missed: ask the
   // provider before telling the customer their order still awaits payment.
-  if (order && order.paymentStatus !== "SUCCESS") {
+  if (order && !isPaymentSettled(order.paymentStatus)) {
     const { paid } = await reconcilePendingPayments({ orderId: order.id }).catch(() => ({ paid: 0 }));
     if (paid > 0) {
       order =
@@ -71,17 +72,13 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
       )
     : 0;
 
-  const balanceRemaining =
-    order && order.depositAmount && !order.balancePaidAt
-      ? Math.max(0, order.total - order.depositAmount)
-      : 0;
+  const isOpen = Boolean(order && order.status !== "CANCELLED" && order.status !== "REFUNDED");
+  const isPaid = Boolean(order && isPaymentSettled(order.paymentStatus));
 
-  const isPendingInitialPayment = Boolean(
-    order &&
-      order.paymentStatus !== "SUCCESS" &&
-      order.status !== "CANCELLED" &&
-      order.status !== "REFUNDED",
-  );
+  // A balance is only collected on a live order whose deposit is in.
+  const balanceRemaining = order && isOpen && isPaid ? outstandingBalance(order) : 0;
+
+  const isPendingInitialPayment = isOpen && !isPaid;
 
   const isPreorderDepositDue = Boolean(
     isPendingInitialPayment && order?.hasPreorderItems && order?.depositAmount && !order?.paidAt,
@@ -262,7 +259,7 @@ export default async function TrackOrderPage({ searchParams }: PageProps<"/order
             />
           ) : null}
 
-          {/* 50% Remaining Balance Payment Card */}
+          {/* Remaining Balance Payment Card */}
           {!isPendingInitialPayment && balanceRemaining > 0 ? (
             <OrderPaymentCard
               orderId={order.id}

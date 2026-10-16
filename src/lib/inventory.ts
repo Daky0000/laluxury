@@ -208,15 +208,20 @@ export async function releaseStock(
 }
 
 /**
- * Converts a reservation into a sale: onHand down, reserved down.
- * Called once payment succeeds.
+ * Records a sale: onHand down, and reserved down when the order held a
+ * reservation. Called once payment succeeds.
+ *
+ * Staff orders (showroom, console) never reserve, so their sale must not
+ * touch `reserved`: lowering it would free units other shoppers are holding.
  */
 export async function commitStock(
   lines: StockLine[],
   reference: string,
   actorId?: string | null,
+  options: { fromReservation?: boolean } = {},
 ): Promise<void> {
   if (lines.length === 0) return;
+  const fromReservation = options.fromReservation ?? true;
 
   await db.$transaction(async (tx) => {
     const ordered = [...lines].sort((a, b) => a.variantId.localeCompare(b.variantId));
@@ -230,7 +235,7 @@ export async function commitStock(
       if (!item || !item.trackInventory) continue;
 
       const onHandAfter = item.onHand - line.quantity;
-      const newReserved = Math.max(0, item.reserved - line.quantity);
+      const newReserved = fromReservation ? Math.max(0, item.reserved - line.quantity) : item.reserved;
       await tx.inventoryItem.update({
         where: { id: item.id },
         data: {
@@ -261,14 +266,20 @@ export async function restockUnits(
   if (lines.length === 0) return;
 
   await db.$transaction(async (tx) => {
-    for (const line of lines) {
-      const item = await tx.inventoryItem.findUnique({ where: { variantId: line.variantId } });
+    // Locked and incremented like every other movement, so a sale landing at
+    // the same moment is never overwritten by a stale absolute count.
+    const ordered = [...lines].sort((a, b) => a.variantId.localeCompare(b.variantId));
+    for (const line of ordered) {
+      if (line.quantity <= 0) continue;
+      const locked = await tx.$queryRaw<{ id: string; onHand: number }[]>`
+        SELECT id, "onHand" FROM "InventoryItem" WHERE "variantId" = ${line.variantId} FOR UPDATE`;
+      const item = locked[0];
       if (!item) continue;
 
       const onHandAfter = item.onHand + line.quantity;
       await tx.inventoryItem.update({
         where: { id: item.id },
-        data: { onHand: onHandAfter },
+        data: { onHand: { increment: line.quantity } },
       });
 
       await recordMovement(tx, {

@@ -12,6 +12,49 @@ Severity:
 
 ---
 
+## Implementation status (same day)
+
+Every finding below has been fixed in code, except where noted under "Left for the owner".
+
+| Finding | Fix | Where |
+| --- | --- | --- |
+| P0-1 second payments dropped | Recorded as SUCCESS, held and alerted; payment `purpose`; balance only when the amount matches; resend keeps the earlier prompt watched and waits a minute | `src/lib/orders.ts` (`markOrderPaid`, `recordUnexpectedPayment`), `src/lib/momo-push.ts` |
+| P0-2 refunds recorded when refused | `Refund` ledger; claim first, then Paystack per payment with that payment's mode key; refused = not recorded, not announced; "returned by hand" explicit; `payments:refund` | `src/lib/refunds.ts`, `src/app/actions/admin/orders.ts` |
+| P0-3 refund/dispute webhooks | Reference read from `transaction_reference` too; `refund.*` settle or roll back; dashboard refunds recorded; disputes block fulfilment | `src/app/api/webhooks/paystack/route.ts` |
+| P0-4 test money on live orders | `Order.isTest`; test-domain or test-signed success on a live order is held; both keys verify webhooks; banners; mode changes owner-only and alerted | `src/lib/checkout-payment.ts`, `src/components/shop/test-mode-banner.tsx`, `src/app/actions/admin/{integrations,system}.ts` |
+| P0-5 goods without money | `payments:record` for mark-paid, POS paid-now, console paid orders; proof note; every settlement writes a payment row (provider `manual`/`pos`); POS discounts need `discounts:write`; daily Slack list of hand-recorded money | `src/lib/orders.ts`, `src/app/actions/admin/{pos,manual-orders}.ts`, `src/lib/payment-jobs.ts` |
+| P0-6 cancel/pay race | Cancel and pay are both conditional on the status they read; the loser re-reads (tested with concurrent calls) | `src/lib/orders.ts` (`cancelOrder`, `settleOnce`) |
+| P0-7 paid cancel keeps money | Refund owed logged, alerted and bannered; refund form works on cancelled orders | `src/lib/orders.ts`, `src/app/admin/orders/[id]/page.tsx` |
+| P1-1 staff-order stock | `Order.source` and `Order.stockReservedAt`; staff orders never expire; sales without a reservation never touch `reserved` | `src/lib/orders.ts`, `src/lib/inventory.ts` |
+| P1-2 double restock | Cancel clears the sale flag; per-line restock quantities (`quantityRestocked`); locked increments | `src/lib/orders.ts`, `src/lib/refunds.ts`, `src/lib/inventory.ts` |
+| P1-3 lost post-payment work | Each step recorded on the order and retried by the sweep under a lease | `runPaidEffects`, `retryUnfinishedPaidWork` |
+| P1-4 discount limits | `Order.discountId`; counted on payment (free-delivery codes too); open checkouts hold a use; over-limit alerted | `src/lib/discounts.ts` |
+| P1-5 duplicate mobile checkout | App checkout uses `createOrderFromCart` + `startCheckoutPayment`; no keyword pickup; no account or session before payment | `src/app/api/app/orders/route.ts` |
+| P1-6 guest attach | Orders attach to the signed-in buyer only; paid guest orders link to customer (never staff) accounts | `src/app/actions/checkout.ts`, `ensureCustomerAccount` |
+| P2-1 to P2-5 | Checkout and prompt rate limits; right-most `X-Forwarded-For` (`TRUSTED_PROXY_HOPS`); order token on OTP/check/resend and the full receipt; random references and order numbers; secrets sealed at rest; card auth codes dropped; 15 s Paystack timeout | `src/lib/rate-limit.ts`, `src/app/actions/order-pay.ts`, `src/lib/integrations.ts`, `src/lib/paystack.ts` |
+| P3-1 deposits | Per-product deposit %; "Balance due" recording; Delivered blocked while a balance is due; balance never before the deposit; tracking page fixed; dead balance action removed | `src/lib/deposits.ts`, `recordBalancePayment` |
+| P3-2 to P3-6 | One verify path with holds and a resolve action; revenue from the ledger (`finance:view`); in-server 5-minute jobs + cron script; localhost guard; zero-total orders; honest receipt copy; POS fixes | `src/lib/payment-jobs.ts`, `src/instrumentation.ts`, `src/app/admin/analytics/page.tsx` |
+
+**Verified:** `npx tsc --noEmit` (web and mobile), `npm run lint`, `npm run verify:sync`
+(33 checks, 8 new), the existing notification, egress and minimum-order suites, a production
+`next build`, `scripts/test-payment-ledger.ts` (12 tests on a disposable Postgres, including
+concurrent webhook/confirm/cancel races), and an HTTP smoke run of the built server (signed
+webhooks, refunds, disputes, the confirmation page, the app endpoints and the cron).
+
+**Left for the owner:**
+- The deposit is still a percentage of the whole order (in-stock pieces and delivery included).
+  Charging in-stock pieces in full is a pricing decision.
+- Guests on older app builds cannot resend a MoMo prompt from the app (checkout no longer signs
+  them in). They can still approve from their phone, and a new app build sends the order token.
+- STAFF accounts can no longer mark orders paid, record showroom payments or refund. Give those
+  people the MANAGER role if they need to.
+- Set `INTEGRATIONS_KEY` before deploying, if you want stored keys independent of `AUTH_SECRET`.
+  Keys already saved in the console are encrypted the first time they are read.
+- Check that `TRUSTED_PROXY_HOPS` matches the proxies in front of the app (1 on Railway alone).
+- Make a test refund and dispute in Paystack test mode once to confirm the webhook payloads.
+
+---
+
 ## Do now: the short list
 
 1. **Record and alert on second payments** (P0-1). A double-approved MoMo prompt today takes the money twice, and nobody is told.

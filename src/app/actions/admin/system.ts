@@ -1,5 +1,6 @@
 "use server";
 
+import { postAlert } from "@/lib/agent/slack";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { displayName, requirePermission } from "@/lib/auth";
@@ -61,7 +62,6 @@ export async function updateSettingsAction(
     agentRequiresApproval: formData.get("agentRequiresApproval") === "on",
     hideStorefrontNav: formData.get("hideStorefrontNav") === "on",
     hideAdminNav: formData.get("hideAdminNav") === "on",
-    paymentMode: formData.get("paymentMode") === "test" ? "test" : "live",
 
     // Home page content
     heroEyebrow: text("heroEyebrow"),
@@ -97,15 +97,31 @@ export async function updateSettingsAction(
     );
   }
 
+  // Live or test decides whether real money is taken: only the owner switches
+  // it, only when it actually changes, and the team is told.
+  let modeNote = "";
+  const { activePaystack, getIntegrations, updateIntegrations } = await import("@/lib/integrations");
+  const requestedMode = formData.has("paymentMode")
+    ? formData.get("paymentMode") === "test"
+      ? "test"
+      : "live"
+    : null;
+  const currentMode = activePaystack(await getIntegrations()).mode;
+  if (requestedMode && requestedMode !== currentMode) {
+    if (actor.role !== "OWNER") {
+      modeNote = " Payment mode was not changed: only the store owner can switch between live and test.";
+    } else {
+      patch.paymentMode = requestedMode;
+    }
+  }
+
   await updateSettings(patch);
 
   if (patch.paymentMode) {
-    try {
-      const { updateIntegrations } = await import("@/lib/integrations");
-      await updateIntegrations({ paystack: { mode: patch.paymentMode } });
-    } catch {
-      // Ignore if integrations table cannot be patched
-    }
+    await updateIntegrations({ paystack: { mode: patch.paymentMode } });
+    await postAlert(
+      `:lock: Payments switched to ${patch.paymentMode.toUpperCase()} mode by ${actor.email ?? actor.id}.${patch.paymentMode === "test" ? " No real money will be taken until it is switched back." : ""}`,
+    );
   }
   await recordAudit({
     actorId: actor.id,
@@ -117,7 +133,7 @@ export async function updateSettingsAction(
 
   revalidatePath("/admin/settings");
   revalidatePath("/", "layout");
-  return { ok: true, message: "Settings saved." };
+  return { ok: true, message: `Settings saved.${modeNote}` };
 }
 
 /**

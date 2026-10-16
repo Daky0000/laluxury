@@ -10,6 +10,7 @@ import {
   type CartWithItems,
 } from "./cart";
 import { applyDiscount, recordRedemption } from "./discounts";
+import { depositAmountFor, depositPercentFor } from "./deposits";
 import {
   commitStock,
   lowStockAfterSale,
@@ -28,8 +29,10 @@ import { getSettings } from "./settings";
 import { sendSms } from "./sms";
 import { postAlert } from "./agent/slack";
 import { MANUAL_PAYMENT_METHODS, type ManualPaymentMethod } from "./constants";
+import { activePaystack, getIntegrations } from "./integrations";
+import { newPaymentReference } from "./payment-reference";
 import type { OrderNotice } from "./notify";
-import type { OrderStatus, Prisma } from "@/generated/prisma";
+import type { Order, OrderStatus, PaymentStatus, Prisma } from "@/generated/prisma";
 
 export const orderInclude = {
   items: true,
@@ -38,6 +41,7 @@ export const orderInclude = {
   billingAddress: true,
   shippingRate: { include: { zone: true } },
   redemptions: { include: { discount: true } },
+  refunds: { orderBy: { createdAt: "desc" } },
   events: { orderBy: { createdAt: "desc" } },
   user: { select: { id: true, email: true, firstName: true, lastName: true } },
 } satisfies Prisma.OrderInclude;
@@ -74,27 +78,67 @@ export async function logOrderEvent(args: {
   });
 }
 
+// --- Payment state helpers ---------------------------------------------------
+
+/** Payment states that mean money was received, whatever has been refunded since. */
+const SETTLED: PaymentStatus[] = ["SUCCESS", "PARTIALLY_REFUNDED", "REFUNDED"];
+
+export function isPaymentSettled(status: PaymentStatus): boolean {
+  return SETTLED.includes(status);
+}
+
+/** What the money in one payment is for. */
+export type PaymentPurpose = "FULL" | "DEPOSIT" | "BALANCE";
+
+/** The balance still owed on a deposit order, or 0. */
+export function outstandingBalance(order: {
+  total: number;
+  depositAmount: number | null;
+  balancePaidAt: Date | null;
+}): number {
+  if (!order.depositAmount || order.balancePaidAt || order.depositAmount >= order.total) return 0;
+  return order.total - order.depositAmount;
+}
+
+/** Money received on an order and not yet sent back (minor units). */
+export async function netPaidOn(orderId: string): Promise<{ received: number; refundable: number }> {
+  const [order, sum] = await Promise.all([
+    db.order.findUnique({ where: { id: orderId }, select: { refundedTotal: true } }),
+    db.payment.aggregate({ where: { orderId, status: "SUCCESS" }, _sum: { amount: true } }),
+  ]);
+  const received = sum._sum.amount ?? 0;
+  return { received, refundable: Math.max(0, received - (order?.refundedTotal ?? 0)) };
+}
+
 /**
  * Turns a cart into a PENDING order and reserves its stock.
  *
  * Totals are recomputed here from the database rather than taken from the
  * request, so a tampered client cannot set its own price. Stock is reserved
  * before the payment attempt so a shopper who reaches Paystack is guaranteed
- * the goods for the life of that attempt.
+ * the goods for the life of that attempt. Web checkout and the app both come
+ * through here, so the two can never price an order differently.
  */
 export async function createOrderFromCart(args: {
   cart: CartWithItems;
   email: string;
   phone?: string | null;
+  /** The signed-in buyer. Contact details typed at checkout never pick an account. */
   userId?: string | null;
+  /** Account whose per-customer code limits apply (an existing customer with this email or phone). */
+  discountUserId?: string | null;
   shippingAddress: AddressInput;
   billingAddress?: AddressInput | null;
   shippingRateId?: string | null;
   customerNote?: string | null;
   paymentMethod?: string | null;
-  depositPercent?: number | null;
+  /** The shopper chose to pay a pre-order deposit now and the balance later. */
+  payDeposit?: boolean;
   /** Collected from a pickup location: no delivery rate and no delivery fee. */
   pickup?: boolean;
+  /** "console" for an order staff raise for a customer from the app; it never expires. */
+  source?: "checkout" | "app" | "console";
+  idempotencyKey?: string | null;
 }): Promise<FullOrder> {
   const { cart } = args;
   if (cart.items.length === 0) throw new Error("Your bag is empty.");
@@ -130,29 +174,29 @@ export async function createOrderFromCart(args: {
     throw new Error("We do not deliver to that region yet. Choose pickup or another address.");
   }
 
-  // A FREE_SHIPPING code zeroes the line but keeps the carrier selection.
-  if (totals.freeShipping) shippingTotal = 0;
-
   // --- Discount re-check ----------------------------------------------------
   const discount = cart.discountCode
     ? await applyDiscount(cart.discountCode, {
         lines: toDiscountLines(cart),
         subtotal: totals.subtotal,
         shippingTotal,
-        userId: args.userId,
+        userId: args.userId ?? args.discountUserId ?? null,
         email: args.email,
+        excludeOrderId: cart.convertedOrderId,
       })
     : null;
+
+  // A FREE_SHIPPING code zeroes the line but keeps the carrier selection.
+  if (discount?.freeShipping) shippingTotal = 0;
 
   const discountTotal = discount?.amount ?? 0;
   const total = Math.max(0, totals.subtotal - discountTotal + shippingTotal);
 
   const hasPreorderItems = cart.items.some((item) => Boolean(item.variant.product.isPreorder));
-  const depositPercent =
-    hasPreorderItems && args.depositPercent && args.depositPercent > 0 && args.depositPercent < 100
-      ? args.depositPercent
-      : null;
-  const depositAmount = depositPercent ? Math.round((total * depositPercent) / 100) : null;
+  const depositPercent = args.payDeposit
+    ? depositPercentFor(cart.items.map((item) => item.variant.product))
+    : null;
+  const depositAmount = depositAmountFor(total, depositPercent);
 
   // Spread the discount across lines so per-item refunds stay accurate.
   const allocation =
@@ -161,6 +205,8 @@ export async function createOrderFromCart(args: {
       0,
       cart.items.map((i) => i.unitPrice * i.quantity),
     );
+
+  const isTest = activePaystack(await getIntegrations()).mode === "test";
 
   // --- Persist --------------------------------------------------------------
   const orderNumber = await uniqueOrderNumber();
@@ -207,11 +253,15 @@ export async function createOrderFromCart(args: {
         phone: args.phone ?? args.shippingAddress.phone,
         status: "PENDING",
         paymentStatus: "PENDING",
+        source: args.source ?? "checkout",
+        idempotencyKey: args.idempotencyKey ?? null,
+        isTest,
         hasPreorderItems,
         paymentMethod: args.paymentMethod ?? "paystack",
         depositAmount,
         subtotal: totals.subtotal,
         discountTotal,
+        discountId: discount?.discount.id ?? null,
         shippingTotal,
         taxTotal: 0,
         total,
@@ -259,6 +309,7 @@ export async function createOrderFromCart(args: {
     });
     throw error;
   }
+  await db.order.update({ where: { id: order.id }, data: { stockReservedAt: new Date() } });
 
   await logOrderEvent({
     orderId: order.id,
@@ -289,66 +340,56 @@ export async function uniqueOrderNumber(): Promise<string> {
 }
 
 /**
- * Moves a paid order's reservations into sales, exactly once. Retries call
- * this again, so a commit that failed part-way is completed by the next
- * webhook or confirmation instead of being lost behind "already paid".
+ * Takes a paid order's goods off the shelf, exactly once. An order that held a
+ * reservation turns it into the sale; a staff order that never reserved takes
+ * the units straight from `onHand`. A failure gives both flags back, so the
+ * next webhook, confirmation or background sweep finishes the job.
  */
 async function applySoldStock(order: { id: string; orderNumber: string }): Promise<void> {
-  // Turn reservations into sales exactly once: claim the flag, then move the
-  // stock, and give the flag back if the move fails so a retry can try again.
   const stockClaim = await db.order.updateMany({
     where: { id: order.id, inventoryAppliedAt: null },
     data: { inventoryAppliedAt: new Date() },
   });
-  if (stockClaim.count === 1) {
-    try {
-      const lines = await stockLinesForOrder(order.id);
-      await commitStock(lines, order.orderNumber);
-      // Storefront stock counts change with every sale.
-      revalidateProductCatalog();
+  if (stockClaim.count !== 1) return;
 
-      // The sale that empties a shelf is the moment to say so.
-      const low = await lowStockAfterSale(lines);
-      if (low.length > 0) {
-        await postAlert(
-          `:package: Low stock after ${order.orderNumber}:\n` +
-            low
-              .map(
-                (item) =>
-                  `- ${item.label} (${item.sku}): ${item.available} left` +
-                  (item.reorderQuantity ? `, reorder ${item.reorderQuantity}` : ""),
-              )
-              .join("\n"),
-        );
-      }
-    } catch (error) {
-      await db.order.update({
-        where: { id: order.id },
-        data: { inventoryAppliedAt: null },
-      });
-      throw error;
+  const held = await db.order.updateMany({
+    where: { id: order.id, stockReservedAt: { not: null } },
+    data: { stockReservedAt: null },
+  });
+
+  try {
+    const lines = await stockLinesForOrder(order.id);
+    await commitStock(lines, order.orderNumber, null, { fromReservation: held.count === 1 });
+    // Storefront stock counts change with every sale.
+    revalidateProductCatalog();
+
+    // The sale that empties a shelf is the moment to say so.
+    const low = await lowStockAfterSale(lines);
+    if (low.length > 0) {
+      await postAlert(
+        `:package: Low stock after ${order.orderNumber}:\n` +
+          low
+            .map(
+              (item) =>
+                `- ${item.label} (${item.sku}): ${item.available} left` +
+                (item.reorderQuantity ? `, reorder ${item.reorderQuantity}` : ""),
+            )
+            .join("\n"),
+      );
     }
+  } catch (error) {
+    await db.order.update({
+      where: { id: order.id },
+      data: {
+        inventoryAppliedAt: null,
+        ...(held.count === 1 ? { stockReservedAt: new Date() } : {}),
+      },
+    });
+    throw error;
   }
-
 }
 
-/**
- * Marks an order paid. Safe to call repeatedly, and safe to call twice at once.
- *
- * Paystack retries webhooks, and the confirmation page verifies too, so this
- * runs more than once for every real payment — and the webhook and the page
- * regularly arrive within the same second. The flip from unpaid to paid is
- * therefore one conditional update rather than a read followed by a write:
- * exactly one caller sees the row change, and that caller does the work that
- * must only happen once. Stock is claimed the same way, so two callers cannot
- * both take the goods off the shelf.
- *
- * Money arriving for an order that has since been cancelled is recorded and
- * flagged rather than reversed. The stock was released when it was cancelled,
- * so it is not taken again, the order stays cancelled, and the team is told —
- * that is a refund for a person to make, not a state machine to guess at.
- */
-export async function markOrderPaid(args: {
+export type SettlementInput = {
   orderId: string;
   reference: string;
   amount: number;
@@ -356,85 +397,110 @@ export async function markOrderPaid(args: {
   providerTransactionId?: string | null;
   cardLast4?: string | null;
   cardBrand?: string | null;
-  authCode?: string | null;
   mobileMoneyNumber?: string | null;
   raw?: Prisma.InputJsonValue;
-}): Promise<{ alreadyPaid: boolean }> {
-  const order = await db.order.findUnique({
-    where: { id: args.orderId },
-    include: { redemptions: true },
-  });
+  /** Who took the money: "paystack" (default), "manual" or "pos". */
+  provider?: string;
+  /** What the money is for, when this reference has no payment row yet. */
+  purpose?: PaymentPurpose | null;
+  /** "live" or "test", as Paystack reported the transaction. */
+  domain?: string | null;
+};
+
+/**
+ * Marks money received against an order. Safe to call repeatedly, and safe to
+ * call twice at once.
+ *
+ * Paystack retries webhooks, and the confirmation page verifies too, so this
+ * runs more than once for every real payment, often within the same second.
+ * The flip from unpaid to paid is one conditional update: exactly one caller
+ * sees the row change, and that caller does the work that must happen once.
+ *
+ * A successful reference that arrives once the order is already paid is
+ * never dropped. It is the balance when it matches the balance due on a
+ * deposit order; otherwise it is a second payment, recorded, held for review
+ * and raised with the team so it can be refunded.
+ *
+ * Money arriving for an order that has since been cancelled is recorded and
+ * flagged rather than reversed: the stock went back when it was cancelled, the
+ * order stays cancelled, and the team is told it needs a refund or reopening.
+ */
+export async function markOrderPaid(
+  args: SettlementInput,
+): Promise<{ alreadyPaid: boolean; duplicate?: boolean }> {
+  // A concurrent change (a cancel, another payment) between reading and
+  // claiming the order is re-read and settled against the new state.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const outcome = await settleOnce(args);
+    if (outcome !== "retry") return outcome;
+  }
+  throw new Error(`Order changed repeatedly while recording payment ${args.reference}; retry later.`);
+}
+
+async function settleOnce(
+  args: SettlementInput,
+): Promise<{ alreadyPaid: boolean; duplicate?: boolean } | "retry"> {
+  const order = await db.order.findUnique({ where: { id: args.orderId } });
   if (!order) throw new Error("Order not found.");
 
-  const now = new Date();
-
-  const existingPayment = await db.payment.findUnique({
+  const existing = await db.payment.findUnique({
     where: { reference: args.reference },
-    select: { status: true },
+    select: { orderId: true, status: true, purpose: true },
   });
-  if (existingPayment?.status === "SUCCESS") {
-    if (order.status !== "CANCELLED" && !order.inventoryAppliedAt) await applySoldStock(order);
-    return { alreadyPaid: true };
+  if (existing && existing.orderId !== order.id) {
+    throw new Error(`Payment ${args.reference} belongs to another order.`);
   }
+  const purpose = (existing?.purpose ?? args.purpose ?? null) as PaymentPurpose | null;
 
-  if (order.paymentStatus === "SUCCESS") {
-    // A new successful reference on a paid deposit order is the balance.
-    if (order.depositAmount && !order.balancePaidAt) {
-      await settleOrderBalance(order, args, now);
+  if (isPaymentSettled(order.paymentStatus)) {
+    if (existing?.status === "SUCCESS") {
+      // Already on file. Finish whatever an earlier, interrupted run left.
+      await finishPaidWork(order);
+      return { alreadyPaid: true };
+    }
+
+    const balanceDue = outstandingBalance(order);
+    if (balanceDue > 0 && args.amount === balanceDue && purpose !== "FULL" && purpose !== "DEPOSIT") {
+      await settleOrderBalance(order, args, purpose);
       return { alreadyPaid: false };
     }
-    if (order.status !== "CANCELLED" && !order.inventoryAppliedAt) await applySoldStock(order);
-    return { alreadyPaid: true };
+
+    await recordUnexpectedPayment(
+      order,
+      args,
+      purpose,
+      balanceDue > 0
+        ? `It does not match the balance due (${formatMoney(balanceDue, order.currency)}).`
+        : "The order was already paid.",
+    );
+    return { alreadyPaid: true, duplicate: true };
   }
 
   // The payment row first, so the money is on file whatever happens below.
-  await db.payment.upsert({
-    where: { reference: args.reference },
-    create: {
-      orderId: order.id,
-      reference: args.reference,
-      amount: args.amount,
-      currency: order.currency,
-      status: "SUCCESS",
-      channel: args.channel ?? null,
-      providerTransactionId: args.providerTransactionId ?? null,
-      cardLast4: args.cardLast4 ?? null,
-      cardBrand: args.cardBrand ?? null,
-      authCode: args.authCode ?? null,
-      mobileMoneyNumber: args.mobileMoneyNumber ?? null,
-      rawResponse: args.raw,
-      paidAt: now,
-    },
-    update: {
-      status: "SUCCESS",
-      channel: args.channel ?? null,
-      providerTransactionId: args.providerTransactionId ?? null,
-      rawResponse: args.raw,
-      paidAt: now,
-    },
-  });
+  await claimPaymentSuccess(order, args, purpose);
 
+  const now = new Date();
   const wasCancelled = order.status === "CANCELLED";
+  // Paying the whole total on a deposit order settles the balance too.
+  const coversBalance = Boolean(order.depositAmount && args.amount >= order.total);
 
-  // The one write that decides who is first. A caller that finds the row
-  // already flipped is the second arrival and has nothing left to do.
+  // The one write that decides who is first. It also checks the status, so a
+  // cancellation that lands in between is seen and handled on the next pass.
   const claimed = await db.order.updateMany({
-    where: { id: order.id, paymentStatus: { not: "SUCCESS" } },
+    where: { id: order.id, status: order.status, paymentStatus: { notIn: SETTLED } },
     data: {
       paymentStatus: "SUCCESS",
       paidAt: now,
       ...(wasCancelled ? {} : { status: "PAID" }),
+      ...(coversBalance ? { balancePaidAt: now } : {}),
     },
   });
-  if (claimed.count === 0) {
-    if (!wasCancelled) await applySoldStock(order);
-    return { alreadyPaid: true };
-  }
+  if (claimed.count === 0) return "retry";
 
   if (wasCancelled) {
     const message =
       `Payment of ${formatMoney(args.amount, order.currency)} arrived after this order was cancelled. ` +
-      "The stock was not taken again. Refund the customer, or reinstate the order by hand.";
+      "The stock was not taken again. Refund the customer, or reopen the order as paid.";
     await logOrderEvent({
       orderId: order.id,
       type: "payment.after_cancel",
@@ -442,100 +508,327 @@ export async function markOrderPaid(args: {
       meta: { reference: args.reference, amount: args.amount },
     });
     await postAlert(
-      `:rotating_light: ${order.orderNumber} was paid (${formatMoney(args.amount, order.currency)}) *after* being cancelled. It needs a refund or reinstating.`,
+      `:rotating_light: ${order.orderNumber} was paid (${formatMoney(args.amount, order.currency)}) *after* being cancelled. It needs a refund or reopening.`,
     );
     return { alreadyPaid: false };
   }
 
-  await applySoldStock(order);
-
-  // A first-time buyer's order becomes their account.
-  if (!order.userId) {
-    order.userId = await ensureCustomerAccount(order.id).catch((error) => {
-      console.error("[orders] could not create the buyer's account", order.orderNumber, error);
-      return null;
-    });
+  try {
+    await applySoldStock(order);
+  } catch (error) {
+    // The sale stands; the background sweep retries the stock.
+    console.error("[orders] stock commit failed after payment", order.orderNumber, error);
+    await logOrderEvent({
+      orderId: order.id,
+      type: "stock.commit_failed",
+      message: "Paid, but the stock could not be taken off the shelf yet. It will be retried.",
+    }).catch(() => {});
   }
+  await runPaidEffects(order.id);
+  return { alreadyPaid: false };
+}
 
-  // Count the discount only on a real sale.
-  if (order.discountTotal > 0 && order.redemptions.length === 0) {
-    const cart = await db.cart.findFirst({
-      where: { convertedOrderId: order.id },
-      select: { discountCode: true },
-    });
-    if (cart?.discountCode) {
-      const discount = await db.discount.findUnique({ where: { code: cart.discountCode } });
-      if (discount) {
-        await recordRedemption({
-          discountId: discount.id,
-          orderId: order.id,
-          userId: order.userId,
-          amount: order.discountTotal,
-        });
-      }
-    }
-  }
+/**
+ * Moves one payment row to SUCCESS. Returns true when this call made the
+ * change, false when the row was already settled by someone else.
+ */
+async function claimPaymentSuccess(
+  order: { id: string; currency: string },
+  args: SettlementInput,
+  purpose: PaymentPurpose | null,
+  hold?: { reason: string },
+): Promise<boolean> {
+  const now = new Date();
+  const fields = {
+    status: "SUCCESS" as const,
+    channel: args.channel ?? null,
+    providerTransactionId: args.providerTransactionId ?? null,
+    rawResponse: args.raw,
+    paidAt: now,
+    ...(args.cardLast4 ? { cardLast4: args.cardLast4 } : {}),
+    ...(args.cardBrand ? { cardBrand: args.cardBrand } : {}),
+    ...(args.mobileMoneyNumber ? { mobileMoneyNumber: args.mobileMoneyNumber } : {}),
+    ...(args.domain ? { domain: args.domain } : {}),
+    ...(hold ? { heldAt: now, heldReason: hold.reason } : {}),
+  };
 
-  const cartToClear = await db.cart.findFirst({
-    where: { convertedOrderId: order.id },
-    select: { id: true },
+  const updated = await db.payment.updateMany({
+    where: { reference: args.reference, status: { not: "SUCCESS" } },
+    data: fields,
   });
-  if (cartToClear) await clearCart(cartToClear.id);
+  if (updated.count === 1) return true;
+
+  const exists = await db.payment.findUnique({ where: { reference: args.reference }, select: { id: true } });
+  if (exists) return false;
+
+  try {
+    await db.payment.create({
+      data: {
+        orderId: order.id,
+        reference: args.reference,
+        amount: args.amount,
+        currency: order.currency,
+        provider: args.provider ?? "paystack",
+        purpose,
+        ...fields,
+      },
+    });
+    return true;
+  } catch (error) {
+    // Two callers created the same reference at once; the other one won.
+    if ((error as { code?: string }).code === "P2002") return false;
+    throw error;
+  }
+}
+
+/**
+ * A successful payment the order did not need: a second approval of the same
+ * MoMo request, two checkouts paid for one bag, or a balance for the wrong
+ * amount. It is recorded (so it can be refunded), held, and raised once.
+ */
+async function recordUnexpectedPayment(
+  order: Order,
+  args: SettlementInput,
+  purpose: PaymentPurpose | null,
+  why: string,
+): Promise<void> {
+  const reason = `Extra payment of ${formatMoney(args.amount, order.currency)} on an order that did not need it. ${why}`;
+  const flipped = await claimPaymentSuccess(order, args, purpose, { reason });
+  if (!flipped) return;
 
   await logOrderEvent({
     orderId: order.id,
-    type: "payment.success",
-    message: `Payment received via ${describeChannel(args.channel ?? null)}.`,
+    type: "payment.duplicate",
+    message: `${reason} Refund it from the order page, or keep it against the order if the customer agrees.`,
     meta: { reference: args.reference, amount: args.amount },
   });
+  await postAlert(
+    `:rotating_light: ${order.orderNumber} received an extra ${formatMoney(args.amount, order.currency)} (ref ${args.reference}). ${why} Refund it from the order page.`,
+  );
+}
 
-  // Log the purchase on the customer timeline for CRM.
-  if (order.userId) {
-    await db.customerInteraction.create({
-      data: {
-        userId: order.userId,
-        type: "ORDER_PLACED",
-        subject: `Order ${order.orderNumber}`,
-        body: `Paid ${formatMoney(order.total, order.currency)}.`,
-        meta: { orderId: order.id, orderNumber: order.orderNumber },
-      },
+/** Records the remaining balance on a deposit order, exactly once. */
+async function settleOrderBalance(
+  order: Order,
+  args: SettlementInput,
+  purpose: PaymentPurpose | null,
+): Promise<void> {
+  await claimPaymentSuccess(order, args, purpose ?? "BALANCE");
+
+  const now = new Date();
+  const claimed = await db.order.updateMany({
+    where: { id: order.id, balancePaidAt: null },
+    data: { balancePaidAt: now },
+  });
+  if (claimed.count === 0) {
+    // Another payment settled the balance first; this one is extra.
+    const reason = `Balance paid twice: ${formatMoney(args.amount, order.currency)} arrived after the balance was already settled.`;
+    const held = await db.payment.updateMany({
+      where: { reference: args.reference, heldAt: null },
+      data: { heldAt: now, heldReason: reason },
     });
+    if (held.count === 1) {
+      await logOrderEvent({ orderId: order.id, type: "payment.duplicate", message: `${reason} Refund it.`, meta: { reference: args.reference } });
+      await postAlert(`:rotating_light: ${order.orderNumber}: ${reason} Refund it from the order page.`);
+    }
+    return;
   }
 
-  // The team hears about it from here rather than from the webhook, so the
-  // alert goes out whichever path — webhook or confirmation page — got here
-  // first, and never twice.
-  await postAlert(
-    `:tada: New order ${order.orderNumber} - ${formatMoney(args.amount, order.currency)} via ${describeChannel(args.channel ?? null)}.`,
-  );
-  // The purchase step of the funnel, recorded where it is certain (here),
-  // whichever app or website path the payment came through.
-  await db.analyticsEvent
-    .create({
-      data: {
-        name: "purchase",
-        userId: order.userId,
-        platform: "server",
-        props: { orderNumber: order.orderNumber, amount: args.amount, currency: order.currency },
-      },
-    })
-    .catch(() => {});
-
-  await pushToStaff("orders:read", {
-    title: `New order ${order.orderNumber}`,
-    body: `${formatMoney(args.amount, order.currency)} via ${describeChannel(args.channel ?? null)}.`,
-    data: { type: "staff_order", orderId: order.id, orderNumber: order.orderNumber },
-  }).catch(() => 0);
-
-  // Told last, so nothing about the sale depends on a gateway answering.
-  await notifyOrder(order.id, {
-    kind: "payment.received",
-    reference: args.reference,
-    channel: describeChannel(args.channel ?? null),
+  await logOrderEvent({
+    orderId: order.id,
+    type: "order.balance_paid",
+    message: `Remaining balance (${formatMoney(args.amount, order.currency)}) received via ${describeChannel(args.channel ?? null)}.`,
+    meta: { reference: args.reference, amount: args.amount },
   });
-  await notifyOwnerOfPaidOrder(order.id, args.reference);
+  await postAlert(
+    `:moneybag: Balance paid on ${order.orderNumber} - ${formatMoney(args.amount, order.currency)}.`,
+  );
+}
 
-  return { alreadyPaid: false };
+/** Finishes anything a paid order still lacks: its stock movement and its post-payment steps. */
+async function finishPaidWork(order: Order): Promise<void> {
+  if (order.status === "CANCELLED" || order.status === "REFUNDED") return;
+  if (!order.inventoryAppliedAt) {
+    await applySoldStock(order).catch((error) =>
+      console.error("[orders] stock commit retry failed", order.orderNumber, error),
+    );
+  }
+  if (!order.paidEffectsDoneAt) await runPaidEffects(order.id);
+}
+
+/**
+ * The steps that follow a sale, in order. Each one is recorded on the order
+ * when it succeeds, so a step that fails (a gateway down, a database blip) is
+ * retried later without repeating the steps that already went out.
+ */
+const PAID_EFFECTS = [
+  "account",
+  "discount",
+  "cart",
+  "event",
+  "crm",
+  "alert",
+  "analytics",
+  "push",
+  "notify",
+  "owner",
+] as const;
+
+const EFFECTS_LEASE_MS = 2 * 60 * 1000;
+
+/**
+ * Runs the post-payment steps still outstanding for a paid order. Only one
+ * caller at a time holds the lease, so the webhook and the confirmation page
+ * arriving together cannot text the customer twice.
+ */
+export async function runPaidEffects(orderId: string): Promise<void> {
+  const now = new Date();
+  const lease = await db.order.updateMany({
+    where: {
+      id: orderId,
+      paidAt: { not: null },
+      paidEffectsDoneAt: null,
+      status: { notIn: ["CANCELLED", "REFUNDED"] },
+      OR: [{ paidEffectsLockedUntil: null }, { paidEffectsLockedUntil: { lt: now } }],
+    },
+    data: { paidEffectsLockedUntil: new Date(now.getTime() + EFFECTS_LEASE_MS) },
+  });
+  if (lease.count !== 1) return;
+
+  let failed = false;
+  try {
+    const order = await db.order.findUniqueOrThrow({
+      where: { id: orderId },
+      include: {
+        redemptions: true,
+        payments: { where: { status: "SUCCESS", heldAt: null }, orderBy: { paidAt: "asc" }, take: 1 },
+      },
+    });
+    const payment = order.payments[0];
+    const reference = payment?.reference ?? order.orderNumber;
+    const amount = payment?.amount ?? order.depositAmount ?? order.total;
+    const channel = describeChannel(payment?.channel ?? null);
+    const done = new Set(order.paidEffects);
+    let userId = order.userId;
+
+    const steps: Record<(typeof PAID_EFFECTS)[number], () => Promise<unknown>> = {
+      // A first-time buyer's order becomes their account.
+      account: async () => {
+        if (!userId) userId = await ensureCustomerAccount(order.id);
+      },
+      // Count the code only on a real sale, free-delivery codes included.
+      discount: async () => {
+        if (order.redemptions.length > 0) return;
+        let discountId = order.discountId;
+        if (!discountId) {
+          const cart = await db.cart.findFirst({
+            where: { convertedOrderId: order.id },
+            select: { discountCode: true },
+          });
+          if (cart?.discountCode) {
+            discountId = (await db.discount.findUnique({ where: { code: cart.discountCode }, select: { id: true } }))?.id ?? null;
+          }
+        }
+        if (!discountId) return;
+        const { overLimit } = await recordRedemption({
+          discountId,
+          orderId: order.id,
+          userId,
+          amount: order.discountTotal,
+        });
+        if (overLimit) {
+          await postAlert(`:warning: A discount code on ${order.orderNumber} went over its usage limit. Check the code's limit.`);
+        }
+      },
+      cart: async () => {
+        const carts = await db.cart.findMany({ where: { convertedOrderId: order.id }, select: { id: true } });
+        for (const cart of carts) await clearCart(cart.id);
+      },
+      event: () =>
+        logOrderEvent({
+          orderId: order.id,
+          type: "payment.success",
+          message: `Payment received via ${channel}.`,
+          meta: { reference, amount },
+        }),
+      // The purchase on the customer timeline for CRM.
+      crm: async () => {
+        if (!userId) return;
+        await db.customerInteraction.create({
+          data: {
+            userId,
+            type: "ORDER_PLACED",
+            subject: `Order ${order.orderNumber}`,
+            body: `Paid ${formatMoney(order.total, order.currency)}.`,
+            meta: { orderId: order.id, orderNumber: order.orderNumber },
+          },
+        });
+      },
+      alert: () =>
+        postAlert(
+          `:tada: New order ${order.orderNumber} - ${formatMoney(amount, order.currency)} via ${channel}.`,
+        ),
+      // The purchase step of the funnel, recorded where it is certain.
+      analytics: () =>
+        db.analyticsEvent.create({
+          data: {
+            name: "purchase",
+            userId,
+            platform: "server",
+            props: { orderNumber: order.orderNumber, amount, currency: order.currency },
+          },
+        }),
+      push: () =>
+        pushToStaff("orders:read", {
+          title: `New order ${order.orderNumber}`,
+          body: `${formatMoney(amount, order.currency)} via ${channel}.`,
+          data: { type: "staff_order", orderId: order.id, orderNumber: order.orderNumber },
+        }),
+      // Told last, so nothing about the sale depends on a gateway answering.
+      notify: () => notifyOrder(order.id, { kind: "payment.received", reference, channel }),
+      owner: () => notifyOwnerOfPaidOrder(order.id, reference),
+    };
+
+    for (const name of PAID_EFFECTS) {
+      if (done.has(name)) continue;
+      try {
+        await steps[name]();
+        await db.order.update({ where: { id: order.id }, data: { paidEffects: { push: name } } });
+      } catch (error) {
+        failed = true;
+        console.error(`[orders] post-payment step "${name}" failed for ${order.orderNumber}`, error);
+      }
+    }
+  } finally {
+    await db.order.update({
+      where: { id: orderId },
+      data: { paidEffectsLockedUntil: null, ...(failed ? {} : { paidEffectsDoneAt: new Date() }) },
+    });
+  }
+}
+
+/**
+ * Finishes paid orders whose stock or post-payment steps did not complete:
+ * a crash, a gateway outage, a database blip mid-way. Runs with the payment
+ * sweep; safe to run anywhere and often.
+ */
+export async function retryUnfinishedPaidWork(limit = 20): Promise<number> {
+  const now = Date.now();
+  const orders = await db.order.findMany({
+    where: {
+      paidAt: { gte: new Date(now - 3 * 24 * 60 * 60 * 1000), lt: new Date(now - 2 * 60 * 1000) },
+      status: { notIn: ["CANCELLED", "REFUNDED"] },
+      OR: [{ paidEffectsDoneAt: null }, { inventoryAppliedAt: null }],
+    },
+    orderBy: { paidAt: "asc" },
+    take: limit,
+  });
+  for (const order of orders) {
+    await finishPaidWork(order).catch((error) =>
+      console.error("[orders] could not finish paid work", order.orderNumber, error),
+    );
+  }
+  return orders.length;
 }
 
 /**
@@ -543,8 +836,9 @@ export async function markOrderPaid(args: {
  * account from the order itself, the name on the delivery and the phone
  * number, and texts them that they can now sign in with that number (sign-in
  * is by a code texted to the phone, so no password is needed). An existing
- * account with the same phone or email gets the order instead, without a
- * text. Returns the account the order now belongs to.
+ * customer account with the same phone or email gets the order instead,
+ * without a text. Staff accounts are never given a customer's order. Returns
+ * the account the order now belongs to.
  */
 export async function ensureCustomerAccount(orderId: string): Promise<string | null> {
   const order = await db.order.findUnique({
@@ -579,11 +873,16 @@ export async function ensureCustomerAccount(orderId: string): Promise<string | n
     }
   };
 
-  const existing = await db.user.findFirst({
-    where: { OR: [{ phone }, ...(email ? [{ email }] : [])] },
-    select: { id: true },
-  });
+  const findMatch = () =>
+    db.user.findFirst({
+      where: { OR: [{ phone }, ...(email ? [{ email }] : [])] },
+      select: { id: true, role: true },
+    });
+
+  const existing = await findMatch();
   if (existing) {
+    // A staff login is not a customer account; the order stays a guest order.
+    if (existing.role !== "CUSTOMER") return null;
     await link(existing.id);
     return existing.id;
   }
@@ -602,11 +901,9 @@ export async function ensureCustomerAccount(orderId: string): Promise<string | n
     userId = created.id;
   } catch (error) {
     // Two payment paths for the same order raced here; the other one won.
-    const winner = await db.user.findFirst({
-      where: { OR: [{ phone }, ...(email ? [{ email }] : [])] },
-      select: { id: true },
-    });
+    const winner = await findMatch();
     if (!winner) throw error;
+    if (winner.role !== "CUSTOMER") return null;
     await link(winner.id);
     return winner.id;
   }
@@ -628,51 +925,8 @@ export async function ensureCustomerAccount(orderId: string): Promise<string | n
   return userId;
 }
 
-/** Records the remaining balance on a deposit order, exactly once. */
-async function settleOrderBalance(
-  order: { id: string; orderNumber: string; currency: string },
-  args: Parameters<typeof markOrderPaid>[0],
-  now: Date,
-): Promise<void> {
-  await db.payment.upsert({
-    where: { reference: args.reference },
-    create: {
-      orderId: order.id,
-      reference: args.reference,
-      amount: args.amount,
-      currency: order.currency,
-      status: "SUCCESS",
-      channel: args.channel ?? null,
-      providerTransactionId: args.providerTransactionId ?? null,
-      mobileMoneyNumber: args.mobileMoneyNumber ?? null,
-      rawResponse: args.raw,
-      paidAt: now,
-    },
-    update: {
-      status: "SUCCESS",
-      channel: args.channel ?? null,
-      providerTransactionId: args.providerTransactionId ?? null,
-      rawResponse: args.raw,
-      paidAt: now,
-    },
-  });
-
-  const claimed = await db.order.updateMany({
-    where: { id: order.id, balancePaidAt: null },
-    data: { balancePaidAt: now },
-  });
-  if (claimed.count === 0) return;
-
-  await logOrderEvent({
-    orderId: order.id,
-    type: "order.balance_paid",
-    message: `Remaining balance (${formatMoney(args.amount, order.currency)}) received via ${describeChannel(args.channel ?? null)}.`,
-    meta: { reference: args.reference, amount: args.amount },
-  });
-  await postAlert(
-    `:moneybag: Balance paid on ${order.orderNumber} - ${formatMoney(args.amount, order.currency)}.`,
-  );
-}
+/** How long a newer attempt (a prompt sent again) keeps an order from reading as failed. */
+const LIVE_ATTEMPT_MS = 15 * 60 * 1000;
 
 /**
  * Records a failed payment attempt. Like `markOrderPaid`, this runs more than
@@ -696,11 +950,23 @@ export async function markPaymentFailed(args: {
   });
   if (claimed.count === 0) return;
 
+  // Another attempt for the same order may still be open (a prompt sent
+  // again); the order only reads as failed when none is.
+  const stillOpen = await db.payment.count({
+    where: {
+      orderId: args.orderId,
+      status: "PENDING",
+      heldAt: null,
+      createdAt: { gte: new Date(Date.now() - LIVE_ATTEMPT_MS) },
+    },
+  });
+  if (stillOpen > 0) return;
+
   const changed = await db.order.updateMany({
     where: {
       id: args.orderId,
       status: { notIn: ["CANCELLED", "REFUNDED"] },
-      paymentStatus: { notIn: ["SUCCESS", "REFUNDED", "PARTIALLY_REFUNDED"] },
+      paymentStatus: { notIn: SETTLED },
     },
     data: { paymentStatus: "FAILED" },
   });
@@ -715,30 +981,78 @@ export async function markPaymentFailed(args: {
   await notifyOrder(args.orderId, { kind: "payment.failed", reason: args.reason ?? null, reference: args.reference });
 }
 
-/** Cancels an unpaid order and gives its reserved stock back. */
+/**
+ * Gives a cancelled order's goods back, at most once: sold units go back on
+ * the shelf (less anything a refund already restocked), a held reservation is
+ * released, and an order that never held stock moves nothing.
+ */
+async function returnStockOnCancel(
+  order: { id: string; orderNumber: string },
+  actorId?: string | null,
+): Promise<void> {
+  const sold = await db.order.updateMany({
+    where: { id: order.id, inventoryAppliedAt: { not: null } },
+    data: { inventoryAppliedAt: null },
+  });
+  if (sold.count === 1) {
+    const items = await db.orderItem.findMany({
+      where: { orderId: order.id, variantId: { not: null } },
+      select: { id: true, variantId: true, quantity: true, quantityRestocked: true },
+    });
+    const lines = items
+      .map((item) => ({ variantId: item.variantId!, quantity: item.quantity - item.quantityRestocked }))
+      .filter((line) => line.quantity > 0);
+    await restockUnits(lines, order.orderNumber, "RETURN", actorId);
+    await db.$executeRaw`UPDATE "OrderItem" SET "quantityRestocked" = "quantity" WHERE "orderId" = ${order.id}`;
+    return;
+  }
+
+  const held = await db.order.updateMany({
+    where: { id: order.id, stockReservedAt: { not: null } },
+    data: { stockReservedAt: null },
+  });
+  if (held.count === 1) {
+    await releaseStock(await stockLinesForOrder(order.id), order.orderNumber, actorId);
+  }
+}
+
+/**
+ * Cancels an order and gives its stock back.
+ *
+ * The cancellation is one conditional write against the status that was read,
+ * so a payment landing at the same moment is never overwritten: whichever
+ * write lands first wins, and the other sees the change. `expectUnpaid` is for
+ * the automatic paths (expiry, a replaced checkout): they never cancel an
+ * order that has been paid. A paid order cancelled by staff keeps its money
+ * on file and is flagged as owing a refund.
+ */
 export async function cancelOrder(
   orderId: string,
   reason: string,
   actorId?: string | null,
-  options: { notify?: boolean } = {},
-): Promise<void> {
+  options: { notify?: boolean; expectUnpaid?: boolean } = {},
+): Promise<{ refundOwed: number }> {
   const order = await db.order.findUnique({ where: { id: orderId } });
   if (!order) throw new Error("Order not found.");
-  if (order.status === "CANCELLED") return;
+  if (order.status === "CANCELLED") return { refundOwed: 0 };
+  if (order.status === "REFUNDED") throw new Error("A refunded order cannot be cancelled.");
 
-  const lines = await stockLinesForOrder(orderId);
-
-  if (order.inventoryAppliedAt) {
-    // Already sold - put the goods back on the shelf.
-    await restockUnits(lines, order.orderNumber, "RETURN", actorId);
-  } else {
-    await releaseStock(lines, order.orderNumber, actorId);
+  const paid = isPaymentSettled(order.paymentStatus);
+  if (options.expectUnpaid && paid) {
+    throw new Error(`${order.orderNumber} has been paid, so it was not cancelled.`);
   }
 
-  await db.order.update({
-    where: { id: orderId },
+  const claimed = await db.order.updateMany({
+    where: { id: orderId, status: order.status, paymentStatus: order.paymentStatus },
     data: { status: "CANCELLED", cancelledAt: new Date() },
   });
+  if (claimed.count === 0) {
+    const now = await db.order.findUnique({ where: { id: orderId }, select: { status: true } });
+    if (now?.status === "CANCELLED") return { refundOwed: 0 };
+    throw new Error("This order changed while it was being cancelled (a payment may have just arrived). Refresh and check it.");
+  }
+
+  await returnStockOnCancel(order, actorId);
 
   // A code used on an order that was never paid is given back.
   if (!order.paidAt) {
@@ -761,9 +1075,27 @@ export async function cancelOrder(
     actorId,
   });
 
+  let refundOwed = 0;
+  if (paid) {
+    refundOwed = (await netPaidOn(orderId)).refundable;
+    if (refundOwed > 0) {
+      await logOrderEvent({
+        orderId,
+        type: "refund.due",
+        message: `Cancelled after payment: ${formatMoney(refundOwed, order.currency)} is owed back to the customer. Refund it from this page.`,
+        actorId,
+        meta: { amount: refundOwed },
+      });
+      await postAlert(
+        `:money_with_wings: ${order.orderNumber} was cancelled after payment. ${formatMoney(refundOwed, order.currency)} needs refunding.`,
+      );
+    }
+  }
+
   if (options.notify !== false) {
     await notifyOrder(orderId, { kind: "order.cancelled", reason });
   }
+  return { refundOwed };
 }
 
 /** How long an unpaid checkout holds its stock before it is released. */
@@ -771,18 +1103,21 @@ export const PENDING_ORDER_TTL_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Cancels checkouts that were never paid and gives their reserved stock back.
- * Safe to run often and from several places: each order is re-checked by
- * `cancelOrder`, and money arriving later is still caught by `markOrderPaid`,
- * which flags it for a refund or reinstatement.
+ * Only shopper checkouts (web and app) expire: showroom, console and quote
+ * orders wait for their payment until staff cancel them. Safe to run often
+ * and from several places: each order is claimed by `cancelOrder`, and money
+ * arriving later is still caught by `markOrderPaid`, which flags it.
  */
 export async function expireStalePendingOrders(limit = 50): Promise<number> {
   const cutoff = new Date(Date.now() - PENDING_ORDER_TTL_MS);
   const stale = await db.order.findMany({
     where: {
       status: "PENDING",
+      source: { in: ["checkout", "app"] },
       paymentStatus: { in: ["PENDING", "FAILED", "ABANDONED"] },
       placedAt: { lt: cutoff },
-      payments: { none: { status: "SUCCESS" } },
+      // Money on file, or money held for review, keeps the order open.
+      payments: { none: { OR: [{ status: "SUCCESS" }, { heldAt: { not: null } }] } },
     },
     select: { id: true },
     orderBy: { placedAt: "asc" },
@@ -799,7 +1134,10 @@ export async function expireStalePendingOrders(limit = 50): Promise<number> {
       // Ask the provider before giving the stock back.
       const { paid } = await reconcilePendingPayments({ orderId: order.id });
       if (paid > 0) continue;
-      await cancelOrder(order.id, "Checkout expired without payment.", null, { notify: false });
+      await cancelOrder(order.id, "Checkout expired without payment.", null, {
+        notify: false,
+        expectUnpaid: true,
+      });
       expired += 1;
     } catch (error) {
       console.error("[orders.expire] could not expire", order.id, error);
@@ -841,6 +1179,21 @@ const STATUS_NOTICES: Partial<Record<OrderStatus, OrderNotice>> = {
   DELIVERED: { kind: "order.delivered" },
 };
 
+/** Why an order may not move on to `status` yet, or null. */
+function fulfilmentBlock(
+  order: Pick<Order, "disputeStatus" | "total" | "depositAmount" | "balancePaidAt" | "currency">,
+  status: OrderStatus,
+): string | null {
+  if (order.disputeStatus === "open" && ["FULFILLED", "SHIPPED", "DELIVERED"].includes(status)) {
+    return "The customer's card issuer has disputed this payment. Hold the order until the dispute is resolved.";
+  }
+  const balance = outstandingBalance(order);
+  if (status === "DELIVERED" && balance > 0) {
+    return `The balance of ${formatMoney(balance, order.currency)} is still due. Record it (or collect it by MoMo prompt) before marking the order delivered.`;
+  }
+  return null;
+}
+
 export async function updateOrderStatus(args: {
   orderId: string;
   status: OrderStatus;
@@ -860,6 +1213,9 @@ export async function updateOrderStatus(args: {
     await cancelOrder(args.orderId, "Cancelled by staff.", args.actorId);
     return;
   }
+
+  const blocked = fulfilmentBlock(order, args.status);
+  if (blocked) throw new Error(blocked);
 
   const data: Prisma.OrderUpdateInput = { status: args.status };
   if (args.status === "SHIPPED") {
@@ -890,13 +1246,15 @@ export async function updateOrderStatus(args: {
  * Staff recording money that arrived outside the checkout: cash, a MoMo sent
  * straight to the shop, a bank transfer. It goes through `markOrderPaid`, so
  * stock, the receipt text and the owner alert behave exactly as for an online
- * payment. Paystack is asked first, so a payment it already holds is not
- * recorded twice.
+ * payment, and the payment is on file as a manual one that can be refunded by
+ * hand. Paystack is asked first, so a payment it already holds is not
+ * recorded twice. Callers check `payments:record`.
  */
 async function recordManualPayment(
   orderId: string,
   actorId: string,
   method: ManualPaymentMethod,
+  note?: string | null,
 ): Promise<string> {
   // Imported here, not at the top: checkout-payment builds on this module.
   const { reconcilePendingPayments } = await import("./checkout-payment");
@@ -909,20 +1267,65 @@ async function recordManualPayment(
     throw new Error(`Cannot move an order from ${order.status} to PAID.`);
   }
 
+  const proof = note?.trim() || null;
   await markOrderPaid({
     orderId,
-    reference: `MANUAL-${order.orderNumber}-${Date.now().toString(36).toUpperCase()}`,
+    reference: newPaymentReference(order.orderNumber, "MANUAL"),
     amount: order.depositAmount ?? order.total,
     channel: method,
-    raw: { recordedBy: actorId, method },
+    provider: "manual",
+    purpose: order.depositAmount ? "DEPOSIT" : "FULL",
+    raw: { recordedBy: actorId, method, note: proof },
   });
   await logOrderEvent({
     orderId,
     type: "payment.manual",
-    message: `Payment recorded by staff (${MANUAL_PAYMENT_METHODS[method]}).`,
+    message: `Payment recorded by staff (${MANUAL_PAYMENT_METHODS[method]})${proof ? `: ${proof}` : ""}.`,
     actorId,
   });
   return `Order marked paid (${MANUAL_PAYMENT_METHODS[method]}).`;
+}
+
+/**
+ * Staff recording the balance of a deposit order collected outside Paystack,
+ * usually cash on delivery. Paystack is asked first in case a balance payment
+ * already landed. Callers check `payments:record`.
+ */
+export async function recordBalancePayment(args: {
+  orderId: string;
+  actorId: string;
+  method: ManualPaymentMethod;
+  note?: string | null;
+}): Promise<string> {
+  const { reconcilePendingPayments } = await import("./checkout-payment");
+  await reconcilePendingPayments({ orderId: args.orderId });
+
+  const order = await db.order.findUnique({ where: { id: args.orderId } });
+  if (!order) throw new Error("Order not found.");
+  if (!isPaymentSettled(order.paymentStatus)) throw new Error("The deposit has not been paid yet.");
+  if (order.status === "CANCELLED" || order.status === "REFUNDED") {
+    throw new Error("This order is cancelled or refunded; there is no balance to collect.");
+  }
+  const balance = outstandingBalance(order);
+  if (balance <= 0) return "The balance is already settled.";
+
+  const proof = args.note?.trim() || null;
+  await markOrderPaid({
+    orderId: order.id,
+    reference: newPaymentReference(order.orderNumber, "BAL"),
+    amount: balance,
+    channel: args.method,
+    provider: "manual",
+    purpose: "BALANCE",
+    raw: { recordedBy: args.actorId, method: args.method, note: proof },
+  });
+  await logOrderEvent({
+    orderId: order.id,
+    type: "payment.manual",
+    message: `Balance recorded by staff (${MANUAL_PAYMENT_METHODS[args.method]})${proof ? `: ${proof}` : ""}.`,
+    actorId: args.actorId,
+  });
+  return `Balance of ${formatMoney(balance, order.currency)} recorded.`;
 }
 
 /**
@@ -933,27 +1336,32 @@ async function recordManualPayment(
  * payment.
  */
 async function reopenOrder(orderId: string, actorId: string): Promise<"PAID" | "PENDING"> {
-  const order = await db.order.findUnique({
-    where: { id: orderId },
-    include: { payments: { where: { status: "SUCCESS" }, orderBy: { createdAt: "desc" }, take: 1 } },
-  });
+  const order = await db.order.findUnique({ where: { id: orderId } });
   if (!order) throw new Error("Order not found.");
   if (order.status !== "CANCELLED") throw new Error("Only a cancelled order can be reopened.");
   if (order.refundedTotal > 0) throw new Error("A refunded order cannot be reopened.");
 
-  await reserveStock(await stockLinesForOrder(orderId), order.orderNumber, actorId);
+  const lines = await stockLinesForOrder(orderId);
+  await reserveStock(lines, order.orderNumber, actorId);
 
-  const paid = order.paymentStatus === "SUCCESS";
-  await db.order.update({
-    where: { id: orderId },
+  const paid = isPaymentSettled(order.paymentStatus);
+  const claimed = await db.order.updateMany({
+    where: { id: orderId, status: "CANCELLED" },
     data: {
       status: paid ? "PAID" : "PENDING",
       cancelledAt: null,
       // Cancelling put any sold goods back; the claim starts over.
       inventoryAppliedAt: null,
+      stockReservedAt: new Date(),
       ...(paid ? {} : { paymentStatus: "PENDING" as const }),
     },
   });
+  if (claimed.count === 0) {
+    await releaseStock(lines, order.orderNumber, actorId);
+    throw new Error("This order changed while it was being reopened. Refresh and check it.");
+  }
+  await db.orderItem.updateMany({ where: { orderId }, data: { quantityRestocked: 0 } });
+
   await logOrderEvent({
     orderId,
     type: "order.reopened",
@@ -963,9 +1371,16 @@ async function reopenOrder(orderId: string, actorId: string): Promise<"PAID" | "
 
   if (paid) {
     await applySoldStock(order);
-    const reference = order.payments[0]?.reference ?? order.orderNumber;
-    await notifyOrder(orderId, { kind: "payment.received", reference });
-    await notifyOwnerOfPaidOrder(orderId, reference);
+    if (order.paidEffectsDoneAt) {
+      // Its receipt went out before it was cancelled; say it is back on.
+      const reference = (
+        await db.payment.findFirst({ where: { orderId, status: "SUCCESS" }, orderBy: { paidAt: "asc" } })
+      )?.reference ?? order.orderNumber;
+      await notifyOrder(orderId, { kind: "payment.received", reference });
+    } else {
+      // Paid after it was cancelled: everything a sale sets off, now.
+      await runPaidEffects(orderId);
+    }
     return "PAID";
   }
   return "PENDING";
@@ -976,6 +1391,9 @@ async function reopenOrder(orderId: string, actorId: string): Promise<"PAID" | "
  * On top of the forward steps: an unpaid order can be marked paid, and a
  * cancelled one reopened to awaiting payment or straight to paid.
  * Returns the line to show the person who made the change.
+ *
+ * Marking an order paid records money that did not come through Paystack, so
+ * callers must check `payments:record` before passing `status: "PAID"`.
  */
 export async function changeOrderStatusByStaff(args: {
   orderId: string;
@@ -983,12 +1401,14 @@ export async function changeOrderStatusByStaff(args: {
   actorId: string;
   reason?: string | null;
   paymentMethod?: ManualPaymentMethod | null;
+  /** Receipt number, transfer reference or who took the cash. */
+  paymentNote?: string | null;
   trackingNumber?: string | null;
   trackingCompany?: string | null;
 }): Promise<string> {
   const order = await db.order.findUnique({
     where: { id: args.orderId },
-    select: { status: true },
+    select: { status: true, currency: true },
   });
   if (!order) throw new Error("Order not found.");
   if (order.status === args.status) return "Nothing to change.";
@@ -998,16 +1418,22 @@ export async function changeOrderStatusByStaff(args: {
   if (order.status === "CANCELLED" && (args.status === "PENDING" || args.status === "PAID")) {
     const reopened = await reopenOrder(args.orderId, args.actorId);
     if (args.status === "PAID" && reopened === "PENDING") {
-      return recordManualPayment(args.orderId, args.actorId, method);
+      return recordManualPayment(args.orderId, args.actorId, method, args.paymentNote);
     }
     return reopened === "PAID" ? "Order reopened as paid." : "Order reopened, awaiting payment.";
   }
 
-  if (args.status === "PAID") return recordManualPayment(args.orderId, args.actorId, method);
+  if (args.status === "PAID") return recordManualPayment(args.orderId, args.actorId, method, args.paymentNote);
 
   if (args.status === "CANCELLED") {
-    await cancelOrder(args.orderId, args.reason?.trim() || "Cancelled by staff.", args.actorId);
-    return "Order cancelled. Its stock is back on the shelf.";
+    const { refundOwed } = await cancelOrder(
+      args.orderId,
+      args.reason?.trim() || "Cancelled by staff.",
+      args.actorId,
+    );
+    return refundOwed > 0
+      ? `Order cancelled and its stock is back on the shelf. ${formatMoney(refundOwed, order.currency)} was paid and must now be refunded.`
+      : "Order cancelled. Its stock is back on the shelf.";
   }
 
   if (args.status === "REFUNDED") throw new Error("Use the refund form to refund an order.");
@@ -1020,71 +1446,6 @@ export async function changeOrderStatusByStaff(args: {
     trackingCompany: args.trackingCompany,
   });
   return `Order marked ${args.status.toLowerCase()}.`;
-}
-
-/**
- * Records a refund against the order and, if asked, restocks the goods.
- *
- * The running total moves with one conditional update, so two refunds made at
- * once can never add up to more than was paid. Goods go back on the shelf at
- * most once per sale: the restock claims the order's "stock applied" flag.
- */
-export async function recordRefund(args: {
-  orderId: string;
-  amount: number;
-  reason: string;
-  restock: boolean;
-  actorId?: string | null;
-}): Promise<void> {
-  const order = await db.order.findUnique({
-    where: { id: args.orderId },
-    include: { payments: { where: { status: "SUCCESS" }, select: { amount: true } } },
-  });
-  if (!order) throw new Error("Order not found.");
-
-  const paid = Math.min(order.total, order.payments.reduce((sum, p) => sum + p.amount, 0));
-  if (args.amount <= 0) throw new Error("Refund amount must be positive.");
-
-  const result = await db.$transaction(async (tx) => {
-    const moved = await tx.order.updateMany({
-      where: { id: args.orderId, refundedTotal: { lte: paid - args.amount } },
-      data: { refundedTotal: { increment: args.amount } },
-    });
-    if (moved.count === 0) throw new Error("That is more than is left to refund on this order.");
-
-    const fresh = await tx.order.findUniqueOrThrow({ where: { id: args.orderId } });
-    const fullyRefunded = fresh.refundedTotal >= paid;
-    await tx.order.update({
-      where: { id: args.orderId },
-      data: {
-        paymentStatus: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED",
-        ...(fullyRefunded ? { status: "REFUNDED" } : {}),
-      },
-    });
-
-    const restockClaim = args.restock
-      ? await tx.order.updateMany({
-          where: { id: args.orderId, inventoryAppliedAt: { not: null } },
-          data: { inventoryAppliedAt: null },
-        })
-      : { count: 0 };
-    return { restocked: restockClaim.count === 1 };
-  });
-
-  if (result.restocked) {
-    const lines = await stockLinesForOrder(args.orderId);
-    await restockUnits(lines, order.orderNumber, "RETURN", args.actorId);
-  }
-
-  await logOrderEvent({
-    orderId: args.orderId,
-    type: "order.refunded",
-    message: `Refunded ${formatMoney(args.amount, order.currency)}. ${args.reason}`,
-    actorId: args.actorId,
-    meta: { amount: args.amount, restock: result.restocked },
-  });
-
-  await notifyOrder(args.orderId, { kind: "order.refunded", amount: args.amount });
 }
 
 export async function getOrderByNumber(orderNumber: string): Promise<FullOrder | null> {

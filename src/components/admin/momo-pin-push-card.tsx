@@ -240,11 +240,11 @@ export function MomoPinPushCard({
               >
                 <option value="FULL">100% Full Order ({formatMoney(totalMinor)})</option>
                 <option value="DEPOSIT_50">
-                  50% Pre-Order Deposit ({formatMoney(depositVal)})
+                  Pre-Order Deposit ({formatMoney(depositVal)})
                 </option>
                 {remainingVal > 0 ? (
                   <option value="REMAINING_BALANCE">
-                    50% Remaining Balance ({formatMoney(remainingVal)})
+                    Remaining Balance ({formatMoney(remainingVal)})
                   </option>
                 ) : null}
               </select>

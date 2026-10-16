@@ -8,6 +8,7 @@ import { AdminNav, type NavItem } from "@/components/admin/nav";
 import { AdminTopbar } from "@/components/admin/topbar";
 import { AdminNavProvider } from "@/components/admin/admin-nav-context";
 import { AdminHelpModal } from "@/components/admin/admin-help-modal";
+import { TestModeBanner } from "@/components/shop/test-mode-banner";
 import { getSettings, DEFAULT_SETTINGS } from "@/lib/settings";
 import { initials } from "@/lib/utils";
 
@@ -40,7 +41,7 @@ const NAV: {
     href: "/admin/analytics",
     label: "Sales & Profits",
     icon: "analytics",
-    permission: "dashboard:view",
+    permission: "finance:view",
     group: "Overview",
     description: "Revenue, profit margins & financial reports",
   },
@@ -294,6 +295,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <AdminTopbar />
+          <TestModeBanner audience="staff" />
 
           <main className="min-w-0 flex-1 px-4 pb-12 pt-6 sm:px-6 lg:px-8">{children}</main>
 

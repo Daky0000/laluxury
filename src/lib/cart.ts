@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { getCartToken, setCartToken, getSession } from "./auth/session";
 import { applyDiscount, type DiscountLine, type DiscountResult } from "./discounts";
+import { depositPercentFor } from "./deposits";
 import { availableOf } from "./inventory";
 import type { PaymentStatus, Prisma } from "@/generated/prisma";
 
@@ -65,6 +66,8 @@ export type CartTotals = {
   freeShipping: boolean;
   totalWeightGrams: number;
   hasPreorderItems: boolean;
+  /** Deposit due now when the shopper splits a pre-order payment (null: no split offered). */
+  depositPercent: number | null;
   /** Goods after discount; shipping and tax are added at checkout. */
   total: number;
   problems: string[];
@@ -288,6 +291,42 @@ async function findOrCreateCart(): Promise<CartWithItems> {
   });
   await setCartToken(created.token);
   return created;
+}
+
+/**
+ * A cart built from lines the app sends at checkout, so app orders are priced
+ * and placed by exactly the same code as web orders (`createOrderFromCart`).
+ * Prices come from the catalogue, never from the request. The cart has no
+ * owner or cookie; it exists to become one order.
+ */
+export async function createCheckoutCart(args: {
+  lines: { variantId: string; quantity: number }[];
+  email: string;
+  discountCode?: string | null;
+}): Promise<CartWithItems> {
+  const merged = new Map<string, number>();
+  for (const line of args.lines) merged.set(line.variantId, (merged.get(line.variantId) ?? 0) + line.quantity);
+
+  const variants = await db.variant.findMany({
+    where: { id: { in: [...merged.keys()] } },
+    select: { id: true, price: true },
+  });
+  const price = new Map(variants.map((v) => [v.id, v.price]));
+
+  const created = await db.cart.create({
+    data: {
+      token: randomUUID(),
+      email: args.email,
+      discountCode: args.discountCode?.trim().toUpperCase() || null,
+      items: {
+        create: [...merged.entries()]
+          .filter(([variantId]) => price.has(variantId))
+          .map(([variantId, quantity]) => ({ variantId, quantity, unitPrice: price.get(variantId)! })),
+      },
+    },
+    select: { id: true },
+  });
+  return reload(created.id);
 }
 
 async function reload(cartId: string): Promise<CartWithItems> {
@@ -517,6 +556,8 @@ export async function computeCartTotals(cart: CartWithItems): Promise<CartTotals
       shippingTotal: 0,
       userId: session?.userId ?? null,
       email: cart.email,
+      // The bag's own checkout, still awaiting payment, is not a rival use.
+      excludeOrderId: cart.convertedOrderId,
     });
 
     if (!discount) {
@@ -536,6 +577,7 @@ export async function computeCartTotals(cart: CartWithItems): Promise<CartTotals
     freeShipping: discount?.freeShipping ?? false,
     totalWeightGrams,
     hasPreorderItems,
+    depositPercent: depositPercentFor(cart.items.map((item) => item.variant.product)),
     total: Math.max(0, subtotal - discountTotal),
     problems,
   };

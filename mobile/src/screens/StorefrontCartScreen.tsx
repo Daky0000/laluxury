@@ -132,6 +132,8 @@ export function StorefrontCartScreen({
     displayText: string;
   } | null>(null);
   const [pendingOrderNumber, setPendingOrderNumber] = useState<string | null>(null);
+  // Lets a guest resend or check the prompt on their own order without an account.
+  const [orderAccessToken, setOrderAccessToken] = useState<string | null>(null);
   const [momoPolling, setMomoPolling] = useState(false);
   const [momoVerified, setMomoVerified] = useState(false);
   const [momoErrorMessage, setMomoErrorMessage] = useState<string | null>(null);
@@ -247,9 +249,19 @@ export function StorefrontCartScreen({
   const shippingFee = cart.length > 0 && !isPickup ? (isFreeDelivery ? 0 : (selectedRate?.price ?? 0)) : 0;
   const total = subtotal + shippingFee;
 
-  const hasPreorderItems = cart.some((item) => Boolean(item.product.isPreorder));
+  // Mirrors src/lib/deposits.ts: the highest deposit set on the bag's
+  // pre-order pieces (50% when the owner set none). 100% means no split.
+  const preorderPercents = cart
+    .filter((item) => Boolean(item.product.isPreorder))
+    .map((item) => {
+      const set = item.product.preorderDepositPercent;
+      return set ? Math.min(100, Math.max(10, Math.round(set))) : 50;
+    });
+  const depositPercent = preorderPercents.length > 0 ? Math.max(...preorderPercents) : 100;
+  const hasPreorderItems = preorderPercents.length > 0 && depositPercent < 100;
   const is50PercentDeposit = hasPreorderItems && preorderDepositOption === "deposit_50";
-  const amountDueNow = is50PercentDeposit ? Math.round(total * 0.5) : total;
+  const depositDue = Math.round((total * depositPercent) / 100);
+  const amountDueNow = is50PercentDeposit ? depositDue : total;
 
   const startMoMoPolling = (
     reference: string,
@@ -388,6 +400,7 @@ export function StorefrontCartScreen({
         phone: momoPushData.phone,
         provider: momoPushData.provider,
         chargeScope: is50PercentDeposit ? "DEPOSIT_50" : "FULL",
+        accessToken: orderAccessToken ?? undefined,
       });
       if (!res.ok || !res.reference) throw new Error(res.error || "Could not resend the prompt. Please try again.");
       setMomoPushData({ ...momoPushData, ...res, reference: res.reference, status: res.status || "pending" });
@@ -624,6 +637,16 @@ export function StorefrontCartScreen({
       track("checkout_start", { items: cart.length });
       const res = await api.checkout(orderPayload);
       if (res.ok) {
+        setOrderAccessToken(res.accessToken ?? null);
+
+        // Nothing was due (a fully discounted order): it is already paid.
+        if (res.paid) {
+          api.clearLocalCart().catch(() => {});
+          onClearCart();
+          onOrderSuccess(res.order.orderNumber, safePhone, safeEmail);
+          return;
+        }
+
         // If guest checkout created an account and returned credentials, save session immediately
         if (res.token && res.user) {
           try {
@@ -956,10 +979,10 @@ export function StorefrontCartScreen({
                     preorderDepositOption === "deposit_50" && styles.depositTabTextActive,
                   ]}
                 >
-                  50% Deposit Now
+                  {depositPercent}% Deposit Now
                 </Text>
                 <Text style={styles.depositTabAmount}>
-                  {formatCurrency(Math.round(total * 0.5))}
+                  {formatCurrency(depositDue)}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1268,7 +1291,7 @@ export function StorefrontCartScreen({
           {is50PercentDeposit && (
             <View style={[styles.summaryRow, { marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: "#EAD5D9" }]}>
               <Text style={[styles.summaryLabel, { color: colors.primary, fontWeight: "700" }]}>
-                DUE TODAY (50% DEPOSIT)
+                DUE TODAY ({depositPercent}% DEPOSIT)
               </Text>
               <Text style={[styles.summaryValue, { color: colors.primary, fontWeight: "800", fontSize: 16 }]}>
                 {formatCurrency(amountDueNow)}

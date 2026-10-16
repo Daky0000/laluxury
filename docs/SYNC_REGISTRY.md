@@ -1,5 +1,50 @@
 # Noble Enclave Cross-Platform Module & Settings Registry
 
+## Payment ledger update — 2026-10-16 (docs/PAYMENT_AUDIT_2026-10-16.md)
+
+- **One checkout path.** `POST /api/app/orders` now builds a server cart from the app's lines
+  (`createCheckoutCart`), places it through `createOrderFromCart` and starts payment through
+  `startCheckoutPayment` (`src/lib/checkout-payment.ts`), exactly like the web checkout. Prices,
+  stock, delivery, codes and deposits are no longer computed in the route. Pickup is only
+  `isPickup: true` / `deliveryType: "pickup"` (address words never make delivery free).
+  A discount code that does not apply returns its reason (400) instead of being dropped.
+- **No account or session at checkout.** The app response's `token` and `user` are now always
+  `null`; a guest's account is created after payment by `ensureCustomerAccount` (web parity),
+  never for a staff account. The response adds `accessToken` (the order access token) and
+  `paid` (true for a zero-total order). Guests send `accessToken` (body) or `t` (query) to
+  `/api/app/orders/[id]/momo-push` to resend or check a prompt; the app stores it from checkout.
+- **Customer MoMo pushes** (app and tracking page) charge what is due (deposit, total, then
+  balance) whatever scope the client sends, only on `momoDirectNetworks`, rate-limited per order
+  and per phone. Resends keep the earlier prompt on file (it is still watched) and are refused for
+  the first minute. References are random (`newPaymentReference`).
+- **Every successful payment is recorded.** A second payment on a paid order (two approvals,
+  two checkouts) is stored as SUCCESS, held (`Payment.heldAt`) and alerted for a refund. Payments
+  carry `purpose` (`FULL`/`DEPOSIT`/`BALANCE`) and `domain` (`live`/`test`). Amount, currency and
+  test-mode mismatches are held for review on every path (webhook, confirm page, app verify,
+  tracking and staff checks all use `reconcilePaystackPayment`). `GET /api/app/orders/verify` may
+  answer `status: "held"`.
+- **Refund ledger.** `Refund` rows per payment; `refundOrder` (`src/lib/refunds.ts`) claims
+  locally, then calls Paystack with the payment's own mode key; refused refunds are never
+  recorded or announced; "returned by hand" is explicit. `refund.*` webhooks (read from
+  `transaction_reference`) settle or roll back, and dashboard refunds are recorded.
+  `charge.dispute.*` sets `Order.disputeStatus` and blocks shipping while open.
+- **Permissions.** New `payments:record` (mark paid, POS paid-now, console paid orders, balance
+  collection, held-payment decisions), `payments:refund` and `finance:view`, for MANAGER and
+  above. They appear in `/api/app/auth/me` permissions. `PATCH /api/app/orders/[id]` with
+  `status: "PAID"` needs `payments:record` and accepts `paymentNote`; `{ recordBalance: true,
+  paymentMethod, paymentNote }` records a deposit order's balance collected by hand.
+- **Paystack keys and mode** are OWNER-only (integrations and general settings), alerted to
+  Slack, and stored encrypted (`INTEGRATIONS_KEY`, else `AUTH_SECRET`). The webhook accepts either
+  key's signature; test-signed or test-domain money never settles a live order (`Order.isTest`).
+- **Deposits** use the products' `preorderDepositPercent` (highest among the bag's pre-order
+  pieces, 50% when unset) on the web (`CartTotals.depositPercent`), in the app cart and on the server.
+- **Staff orders** carry `Order.source` (`pos`, `console`, `quote`) and never auto-expire; their
+  payments go through `markOrderPaid` (provider `manual`/`pos`), selling from the shelf without
+  touching other shoppers' reservations (`Order.stockReservedAt`).
+- **Housekeeping runs on its own**: `src/instrumentation.ts` starts `runPaymentJobs` every 5
+  minutes (reconcile, finish half-done paid orders, expire checkouts, daily manual-payment
+  list). `PAYMENT_JOBS=off` disables it; `scripts/cron-payments.mjs` calls the cron endpoint.
+
 ## Checkout, delivery and Direct Debit update — 2026-10-16
 
 - **Delivery is one fixed fee.** `deliveryFee` (minor units, default 5000 = GH₵50) in
@@ -123,22 +168,22 @@ Classification:
 | Guest Cart Merge | `src/lib/cart.ts` | Merged on web login | Merged via `POST /api/app/cart/merge` | On mobile login | **Shared (Parity Achieved)** | Local device cart merged into account cart |
 | Bag Kept Until Paid | `src/lib/cart.ts` (`liveCartWhere`) & `src/lib/checkout-payment.ts` | A bag whose order is unpaid (MoMo prompt pending, failed, abandoned) stays the live bag; checking out again verifies and cancels the earlier attempt | `GET/POST/PATCH/DELETE /api/app/cart` and `/api/app/cart/merge` use `liveCartWhere`; `POST /api/app/orders` empties that bag | Payment outcome / re-checkout | **Shared (Parity Achieved)** | Payment clears the bag (`markOrderPaid`); a paid earlier attempt redirects to its confirmation instead of charging twice. The bag is held only while that order is still PENDING and under 6h old. Every cart read (`readCart`, `getOrCreateCart`, `GET /api/app/cart`) runs `refreshCartLines`: off-sale lines are dropped and prices re-read from the variant. The app re-reads the server bag when it returns to the foreground. |
 | Direct Debit MoMo Number | `momoPhone` on checkout / `Payment.mobileMoneyNumber` | Checkout asks for the paying MoMo number (defaults to delivery phone, must be MTN/Telecel/AirtelTigo); prompt goes there and the pending page shows it | `momoPhone` in `POST /api/app/orders` (defaults to delivery phone) | Checkout submit | **Shared (Parity Achieved)** | Customer copy says "check your approvals" (MTN *170# hint). Web now also sends `momoProvider` (auto/mtn/vod/atl, for ported numbers) like the app, and a `send_otp` charge sends the shopper to `/checkout/confirm?step=otp`, which takes the network code (app modal has the same field). A charge Paystack refuses outright cancels the order and shows the reason. |
-| Late Payment Reconciliation | `src/lib/checkout-payment.ts` (`reconcilePendingPayments`) | Background check from the header-state heartbeat and admin orders list; inline on admin order page and `/orders/track`; expiry verifies before cancelling | Background check from `GET /api/app/orders` | Page/API traffic (2 min throttle) & `POST /api/cron/expire-orders` | **Shared (Parity Achieved)** | Pending Paystack payments from the last 3 days are verified; only successes are recorded in the background, so abandoned checkouts are never texted as failed |
+| Late Payment Reconciliation | `src/lib/checkout-payment.ts` (`reconcilePendingPayments`) & `src/lib/payment-jobs.ts` | Every 5 minutes in the server (`src/instrumentation.ts`), plus the header-state heartbeat, admin orders list, admin order page and `/orders/track`; expiry verifies before cancelling | Same server schedule, plus `GET /api/app/orders` | 5-minute schedule, page/API traffic & `POST /api/cron/expire-orders` | **Shared (Parity Achieved)** | Pending payments (3 days) and failed ones (1 day, even on paid orders, so a second approval is caught) are verified with the key of the mode they were taken in; only successes are recorded in the background. Held payments are left to staff. The sweep also finishes paid orders whose stock or receipts did not complete. |
 | Owner Paid-Order SMS | `settings.orderAlertPhones` (falls back to `supportPhone`) & `notifyOwnerOfPaidOrder` | Set in /admin/settings; queued from `markOrderPaid` | Same `markOrderPaid` path for app payments | Payment success | **Shared (Parity Achieved)** | Owner text carries the order number, total, items and customer; customer SMS always includes the order number |
-| Staff Order Status Changes | `changeOrderStatusByStaff` in `src/lib/orders.ts` | Admin order page: Awaiting payment to Paid (cash, MoMo, bank transfer) or Cancelled; Cancelled reopens to Awaiting payment or Paid; forward steps unchanged | `PATCH /api/app/orders/[id]` (`status`, optional `paymentMethod`, `reason`) uses the same function | Staff action | **Shared (Parity Achieved)** | Marking paid checks Paystack first, then runs `markOrderPaid` (stock, receipt SMS, owner SMS); reopening re-reserves stock |
+| Staff Order Status Changes | `changeOrderStatusByStaff` & `recordBalancePayment` in `src/lib/orders.ts` | Admin order page: Awaiting payment to Paid (cash, MoMo, bank transfer, with a proof note; `payments:record`) or Cancelled; Cancelled reopens; "Balance due" card records a balance collected by hand | `PATCH /api/app/orders/[id]` (`status`, `paymentMethod`, `paymentNote`, `reason`; `recordBalance: true`) uses the same functions | Staff action | **Shared (Parity Achieved)** | Marking paid checks Paystack first, then runs `markOrderPaid` with provider `manual`. Cancelling a paid order flags the refund owed (event, alert, admin banner). Delivered is blocked while a balance is due or a dispute is open. |
 | Delivery fee | `deliveryFee` in `Setting["store"]` / `src/lib/shipping.ts` | `quoteShipping` & `/admin/settings/delivery` | `GET /api/app/shipping/rates` & `DeliverySettingsScreen` | Checkout & Admin mutation | **Shared (Parity Achieved)** | One fixed fee (default GH₵50) for every region; zones and rates retired |
 | Flat GH₵25 Removal | `src/lib/shipping.ts` | Eliminated | Eliminated | Build & API verification | **Shared (Parity Achieved)** | Real calculated shipping replacing hardcode |
-| Pre-order 50% Deposit | `src/lib/orders.ts` | Supported | Supported in checkout API & cart | User selection | **Shared (Parity Achieved)** | Allows 50% advance for bespoke items |
-| Discount Codes | `src/lib/discounts.ts` | Supported | Supported in checkout API & cart | User coupon entry | **Shared (Parity Achieved)** | Validated on backend against order subtotal |
+| Pre-order Deposit | `src/lib/deposits.ts` (`preorderDepositPercent` per product) | Checkout shows "N% deposit" from `CartTotals.depositPercent` | App cart mirrors the same rule from product data; the server decides | User selection | **Shared (Parity Achieved)** | Highest percentage among the bag's pre-order pieces, 50% when unset; 100% means no split. `preorderDepositOption: "deposit_50"` still means "pay a deposit". |
+| Discount Codes | `src/lib/discounts.ts` | Supported | Supported in checkout API & cart | User coupon entry | **Shared (Parity Achieved)** | Validated on the backend; the code is kept on the order (`Order.discountId`) and counted when paid on both platforms (free-delivery codes included). Unpaid checkouts hold a use toward `usageLimit`; an over-limit redemption is alerted. |
 | Payment methods | Network first: MTN MoMo, Telecel Cash, AT Money, Bank Card (nothing preselected) | Checkout steps Delivery → Payment → Approve → Receipt; tracking page uses the same picker | App cart: inline network chips + modal | Checkout / order payment | **Shared (Parity Achieved)** | `momoDirectNetworks` setting (admin Settings → Payment, default MTN + AT) decides which networks get the direct phone prompt; other networks and cards use the hosted page. Exposed as `momoDirectNetworks` in `/api/app/config` and `/api/store/config`. On a listed network the buyer chooses Direct Debit or Paystack (web `momoRoute` direct/hosted, app sends `direct_debit` or `mobile_money`); off-list networks are Paystack only, enforced on the server. Fulfilment: Delivery (fixed fee shown, first/last name, address or digital address, region, city, note) or Pickup from `pickupLocations` (admin Settings → Payment; `pickupLocations` in `/api/app/config`, app sends `pickupLocationId`). Pickup orders are written with "<name> (Pickup)" as line1 and no delivery fee. |
 | MoMo PIN Direct USSD Push | `initiateMomoPinPushAction`, `checkOrConfirmMomoPinAction` | `QuickMomoPromptButton` | `OrderPromptModal` / `/api/app/orders/[id]/momo-push` | Owner action | **Shared (Parity Achieved)** | Pushes live MoMo PIN USSD prompt to customer handset, auto-detects telco, handles OTP, polls status |
-| Paystack callback and webhook URLs | `NEXT_PUBLIC_SITE_URL` | `/checkout/confirm`, `/api/webhooks/paystack` | Same backend endpoints | Admin Settings > Integrations | **Shared (Parity Achieved)** | Public HTTPS URLs shown in settings; webhook signature uses active Paystack secret |
+| Paystack callback and webhook URLs | `NEXT_PUBLIC_SITE_URL` | `/checkout/confirm?t=<order token>`, `/api/webhooks/paystack` | Same backend endpoints | Admin Settings > Integrations | **Shared (Parity Achieved)** | Public HTTPS URLs shown in settings; the webhook accepts the live or test key's signature. Checkout refuses to start a payment if the site URL is localhost in production. The confirm page shows the full receipt only with the order token or the owner's session. |
 | Ghana delivery regions | `src/lib/constants.ts` | Checkout | `/api/store/config` consumed by mobile | Checkout address | **Shared (Parity Achieved)** | Mobile keeps a compile-time fallback only for offline startup |
 | Direct Debit (`direct_debit`) | Paystack Charge API | Web & API | Native in-app phone prompt + polling | Checkout submission | **Shared (Parity Achieved)** | Remains pending until provider verification or a signed webhook confirms the exact amount and currency. |
 | Payment success invariant | Provider verification / signed webhook | Enforced | Enforced | Confirmation, polling, order tracking | **Shared (Parity Achieved)** | Callback arrival, charge initialization, and test mode never mark an order paid. |
 | SMS & Email Purchase Receipts | `src/lib/notify.ts:notifyOrder`, `src/lib/sms.ts` | Sent on payment | Sent on app order placement & MoMo approval (`/receipt`) | Order creation / payment | **Shared (Parity Achieved)** | Dispatches SMS via Vynfy & Email receipt with Unicode currency normalization |
 | PDF Invoice Download | `/orders/[orderNumber]/invoice` | Confirmation page | OrderConfirmationModal & share action | Post-checkout | **Shared (Parity Achieved)** | Official tax invoice download link |
-| Guest Auto-Account Creation | `db.user` from customer phone | Web registration | Auto-created in `/api/app/orders` | Checkout | **Shared (Parity Achieved)** | Phone links account & issues bearer token |
+| Guest Auto-Account Creation | `ensureCustomerAccount` in `src/lib/orders.ts` | After the first paid order | After the first paid order (checkout returns `token: null`, `user: null` and an `accessToken` for the order) | Payment success | **Shared (Parity Achieved)** | Accounts are never created or signed in from details typed at checkout; customer (never staff) accounts with the same phone or email get the paid order. |
 | Idempotency Protection | `db.order` unique reference | Supported | `Idempotency-Key` / unique order | Network request | **Shared (Parity Achieved)** | Blocks double order creation |
 
 ---
@@ -159,7 +204,7 @@ Classification:
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Dashboard KPI Metrics | `db.order`, `db.product` | Full admin analytics | Mobile Backend dashboard | Screen focus / refresh | **Shared (Parity Achieved)** | Revenue, active orders, stock alerts |
 | Order Management & Filtering | `db.order`, `/api/app/orders` | `/admin/orders` | `OrdersScreen` (All, Unpaid, Paid, Shipped, Delivered) | Filter switch / search | **Shared (Parity Achieved)** | Comprehensive order details, items, notes, status update |
-| Manual Order Creation | `createManualOrderAction` / `POST /api/app/orders` | `/admin/orders` (New order) | `ManualOrderModal` in OrdersScreen | Owner action | **Shared (Parity Achieved)** | Create phone/walk-in orders directly from catalog with delivery & payment options |
+| Manual Order Creation | `createManualOrderAction`, POS `createPosShowroomOrderAction` | `/admin/orders` (New order), POS desk | `ManualOrderModal` in OrdersScreen | Owner action | **Shared (Parity Achieved)** | Orders carry `source` (`console`, `pos`) and never expire; paid ones need `payments:record` and are settled through `markOrderPaid` (a payment row, stock from the shelf, receipts). POS discounts need `discounts:write`. |
 | Delivery Fee Editor | `deliveryFee`, `/api/app/shipping/zones` (`save_fee`) | `/admin/settings/delivery` | `DeliverySettingsScreen` | Owner mutation | **Shared (Parity Achieved)** | Edit the one delivery fee in-app or on the web |
 | Product Catalog CRUD | `db.product`, `db.variant` | `/admin/products` | ProductsList & CreateProduct | Mutation | **Shared (Parity Achieved)** | Create, edit price/stock, upload images |
 | Direct Camera Image Upload | Device Camera / R2 CDN | Web file picker | Native Camera + Expo ImagePicker | User action | **App-Only (Documented Exception)** | Mobile camera snap uploaded to R2 |

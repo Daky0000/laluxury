@@ -8,7 +8,7 @@ import {
   withApiAuth,
 } from "@/lib/auth/bearer";
 import { can, isStaff } from "@/lib/auth/rbac";
-import { changeOrderStatusByStaff, logOrderEvent, orderInclude } from "@/lib/orders";
+import { changeOrderStatusByStaff, logOrderEvent, orderInclude, recordBalancePayment } from "@/lib/orders";
 import { MANUAL_PAYMENT_METHODS, type ManualPaymentMethod } from "@/lib/constants";
 import type { OrderStatus } from "@/generated/prisma";
 import { orderAccessTokenMatches, orderPath } from "@/lib/order-access";
@@ -155,11 +155,35 @@ export const PATCH = withApiAuth(async (
   const trackingCompany =
     body.trackingCompany !== undefined ? (body.trackingCompany ? String(body.trackingCompany).trim() : null) : undefined;
 
+  const method = String(body.paymentMethod ?? "cash");
+  const manualMethod: ManualPaymentMethod = method in MANUAL_PAYMENT_METHODS ? (method as ManualPaymentMethod) : "cash";
+
+  // A deposit order's balance collected by hand (cash on delivery, transfer).
+  if (body.recordBalance === true) {
+    const recorder = await requireBearerPermission("payments:record");
+    try {
+      const message = await recordBalancePayment({
+        orderId: order.id,
+        actorId: recorder.id,
+        method: manualMethod,
+        note: body.paymentNote ? String(body.paymentNote) : null,
+      });
+      return NextResponse.json({ ok: true, message });
+    } catch (error) {
+      if (error instanceof ApiAuthError) throw error;
+      return NextResponse.json(
+        { ok: false, error: error instanceof Error ? error.message : "Could not record the balance." },
+        { status: 400 },
+      );
+    }
+  }
+
   // Status changes go through the shared services so transitions, stock and
   // customer notices behave exactly as they do from the web admin.
   if (body.status && body.status !== order.status) {
     const status = String(body.status) as OrderStatus;
-    const method = String(body.paymentMethod ?? "cash");
+    // Marking paid records money that did not pass through Paystack.
+    if (status === "PAID") await requireBearerPermission("payments:record");
     try {
       // The same rules as the web admin: mark unpaid orders paid (an offline
       // payment), cancel, reopen a cancelled order, or step forward.
@@ -168,7 +192,8 @@ export const PATCH = withApiAuth(async (
         status,
         actorId: actor.id,
         reason: body.reason ? String(body.reason) : null,
-        paymentMethod: method in MANUAL_PAYMENT_METHODS ? (method as ManualPaymentMethod) : "cash",
+        paymentMethod: manualMethod,
+        paymentNote: body.paymentNote ? String(body.paymentNote) : null,
         trackingNumber,
         trackingCompany,
       });

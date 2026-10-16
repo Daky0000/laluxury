@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "./env";
-import { getIntegrations, activePaystack } from "./integrations";
+import { getIntegrations, activePaystack, paystackSecretFor, type PaystackMode } from "./integrations";
 import { networkOf, normalisePhone } from "./phone";
 import type { DirectChargeStatus } from "./momo-networks";
 
@@ -13,21 +13,33 @@ import type { DirectChargeStatus } from "./momo-networks";
 
 const API = "https://api.paystack.co";
 
+/** Long enough for a slow MoMo network hand-off, short enough not to hang a page. */
+const TIMEOUT_MS = 15_000;
+
 export class PaystackError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    /** Paystack did not answer in time: the request may or may not have landed. */
+    readonly timedOut = false,
   ) {
     super(message);
     this.name = "PaystackError";
   }
 }
 
+/**
+ * Calls Paystack with the key for `mode`, or the store's current mode when
+ * none is given. A payment is always verified, charged on and refunded with
+ * the key of the mode it was started in.
+ */
 async function call<T>(
   path: string,
   init: { method: "GET" | "POST"; body?: unknown } = { method: "GET" },
+  mode?: PaystackMode | null,
 ): Promise<T> {
-  const secret = activePaystack(await getIntegrations()).secretKey?.trim();
+  const config = await getIntegrations();
+  const secret = (mode ? paystackSecretFor(config, mode) : activePaystack(config).secretKey)?.trim();
   if (!secret || !secret.startsWith("sk_")) {
     throw new PaystackError(
       "Paystack secret key is missing or invalid. Please check your Paystack API keys in the admin console.",
@@ -35,15 +47,26 @@ async function call<T>(
     );
   }
 
-  const response = await fetch(`${API}${path}`, {
-    method: init.method,
-    headers: {
-      Authorization: `Bearer ${secret}`,
-      "Content-Type": "application/json",
-    },
-    body: init.body ? JSON.stringify(init.body) : undefined,
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API}${path}`, {
+      method: init.method,
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        "Content-Type": "application/json",
+      },
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (error) {
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    throw new PaystackError(
+      timedOut ? "The payment provider did not answer in time." : "The payment provider could not be reached.",
+      504,
+      true,
+    );
+  }
 
   const payload = (await response.json().catch(() => null)) as
     | { status: boolean; message: string; data: T & { message?: string; gateway_response?: string } }
@@ -66,6 +89,11 @@ async function call<T>(
     );
   }
   return payload.data;
+}
+
+/** The mode checkout is starting payments in right now. */
+export async function currentPaystackMode(): Promise<PaystackMode> {
+  return activePaystack(await getIntegrations()).mode;
 }
 
 // --- Initialise -------------------------------------------------------------
@@ -105,6 +133,8 @@ export async function initializeTransaction(args: {
 export type PaystackTransaction = {
   id: number;
   status: "success" | "failed" | "abandoned" | "ongoing" | "pending";
+  /** "test" for a test-key transaction; it never moved real money. */
+  domain?: "live" | "test" | string | null;
   reference: string;
   amount: number;
   currency: string;
@@ -122,53 +152,100 @@ export type PaystackTransaction = {
   metadata: Record<string, unknown> | null;
 };
 
-export async function verifyTransaction(reference: string): Promise<PaystackTransaction> {
-  return call<PaystackTransaction>(`/transaction/verify/${encodeURIComponent(reference)}`);
+export async function verifyTransaction(
+  reference: string,
+  mode?: PaystackMode | null,
+): Promise<PaystackTransaction> {
+  return call<PaystackTransaction>(`/transaction/verify/${encodeURIComponent(reference)}`, { method: "GET" }, mode);
+}
+
+/**
+ * The transaction as it is safe to keep on file. The card authorization code
+ * can charge the card again, and nothing here charges a saved card, so it is
+ * dropped rather than stored.
+ */
+export function storableTransaction(transaction: object): Record<string, unknown> {
+  const copy = JSON.parse(JSON.stringify(transaction)) as Record<string, unknown>;
+  const authorization = copy.authorization as Record<string, unknown> | undefined;
+  if (authorization && typeof authorization === "object") delete authorization.authorization_code;
+  return copy;
 }
 
 // --- Refund -----------------------------------------------------------------
 
+export type PaystackRefund = {
+  id: number;
+  status: string;
+  amount: number;
+  currency?: string;
+};
+
 export async function refundTransaction(args: {
   reference: string;
-  /** Minor units. Omit to refund the full amount. */
-  amount?: number;
+  /** Minor units. Always given: a refund is never "whatever is left". */
+  amount: number;
   reason?: string;
-}): Promise<{ id: number; status: string; amount: number }> {
-  return call("/refund", {
-    method: "POST",
-    body: {
-      transaction: args.reference,
-      ...(args.amount ? { amount: args.amount } : {}),
-      ...(args.reason ? { merchant_note: args.reason } : {}),
+  /** The mode the payment was taken in. */
+  mode?: PaystackMode | null;
+}): Promise<PaystackRefund> {
+  if (!Number.isSafeInteger(args.amount) || args.amount <= 0) {
+    throw new PaystackError("A refund needs a positive amount.", 400);
+  }
+  return call<PaystackRefund>(
+    "/refund",
+    {
+      method: "POST",
+      body: {
+        transaction: args.reference,
+        amount: args.amount,
+        ...(args.reason ? { merchant_note: args.reason } : {}),
+      },
     },
-  });
+    args.mode,
+  );
 }
 
 // --- Webhook ----------------------------------------------------------------
 
 /**
- * Paystack signs the raw request body with HMAC-SHA512 using the secret key.
- * The comparison is constant-time so the signature cannot be probed byte by
- * byte.
+ * Paystack signs the raw request body with HMAC-SHA512 using the secret key of
+ * the mode the event belongs to. Both keys are tried, so a live payment's
+ * webhook still lands while the store is in test mode. Returns the mode whose
+ * key signed it, or null. The comparison is constant-time.
  */
 export async function verifyWebhookSignature(
   rawBody: string,
   signature: string | null,
-): Promise<boolean> {
-  const secret = activePaystack(await getIntegrations()).secretKey;
-  if (!secret || !signature) return false;
-
-  const expected = createHmac("sha512", secret).update(rawBody, "utf8").digest("hex");
-  const a = Buffer.from(expected, "utf8");
-  const b = Buffer.from(signature, "utf8");
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+): Promise<PaystackMode | null> {
+  if (!signature) return null;
+  const config = await getIntegrations();
+  const given = Buffer.from(signature, "utf8");
+  for (const mode of ["live", "test"] as const) {
+    const secret = paystackSecretFor(config, mode);
+    if (!secret) continue;
+    const expected = Buffer.from(createHmac("sha512", secret).update(rawBody, "utf8").digest("hex"), "utf8");
+    if (expected.length === given.length && timingSafeEqual(expected, given)) return mode;
+  }
+  return null;
 }
 
 export type PaystackWebhookEvent = {
   event: string;
-  data: PaystackTransaction & { [key: string]: unknown };
+  data: PaystackTransaction & {
+    /** Refund events name the charge here instead of `reference`. */
+    transaction_reference?: string | null;
+    /** Dispute events nest the charge. */
+    transaction?: { reference?: string | null } | null;
+    [key: string]: unknown;
+  };
 };
+
+/** The charge an event is about, wherever this event type keeps it. */
+export function webhookReference(event: PaystackWebhookEvent): string | null {
+  const data = event.data ?? ({} as PaystackWebhookEvent["data"]);
+  const ref = data.reference ?? data.transaction_reference ?? data.transaction?.reference ?? null;
+  return typeof ref === "string" && ref.trim() ? ref.trim() : null;
+}
 
 /** Human label for the payment channel, for order timelines and receipts. */
 export function describeChannel(channel: string | null): string {
@@ -292,14 +369,19 @@ export async function chargeMobileMoney(args: {
 export async function submitMobileMoneyOtp(args: {
   reference: string;
   otp: string;
+  mode?: PaystackMode | null;
 }): Promise<PaystackChargeResult> {
-  return call<PaystackChargeResult>("/charge/submit_otp", {
-    method: "POST",
-    body: {
-      reference: args.reference,
-      otp: args.otp.trim(),
+  return call<PaystackChargeResult>(
+    "/charge/submit_otp",
+    {
+      method: "POST",
+      body: {
+        reference: args.reference,
+        otp: args.otp.trim(),
+      },
     },
-  });
+    args.mode,
+  );
 }
 
 /**
@@ -309,7 +391,10 @@ export async function submitMobileMoneyOtp(args: {
  * again here. Unlike `/transaction/verify`, this also says when the network
  * has since asked for a code (`send_otp`), which verify cannot.
  */
-export async function checkPendingCharge(reference: string): Promise<PaystackChargeResult> {
-  return call<PaystackChargeResult>(`/charge/${encodeURIComponent(reference)}`);
+export async function checkPendingCharge(
+  reference: string,
+  mode?: PaystackMode | null,
+): Promise<PaystackChargeResult> {
+  return call<PaystackChargeResult>(`/charge/${encodeURIComponent(reference)}`, { method: "GET" }, mode);
 }
 

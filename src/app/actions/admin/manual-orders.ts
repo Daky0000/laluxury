@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
+import { can } from "@/lib/auth/rbac";
 import { recordAudit } from "@/lib/audit";
-import { uniqueOrderNumber, logOrderEvent } from "@/lib/orders";
+import { uniqueOrderNumber, logOrderEvent, markOrderPaid } from "@/lib/orders";
 import { notifyOrder } from "@/lib/notify";
-import { commitStock } from "@/lib/inventory";
+import { newPaymentReference } from "@/lib/payment-reference";
 import { GHANA_REGIONS } from "@/lib/constants";
 import { normalisePhone } from "@/lib/phone";
 import type { AdminState } from "./products";
@@ -82,9 +83,10 @@ async function writeOrder(args: {
 
   // Attach to the customer record when one already has this email, so the
   // order shows up in their history rather than sitting as a guest order.
-  const customer =
-    (await db.user.findUnique({ where: { email: args.email }, select: { id: true } })) ??
-    (await db.user.findUnique({ where: { phone: args.phone }, select: { id: true } }));
+  const match =
+    (await db.user.findUnique({ where: { email: args.email }, select: { id: true, role: true } })) ??
+    (await db.user.findUnique({ where: { phone: args.phone }, select: { id: true, role: true } }));
+  const customer = match?.role === "CUSTOMER" ? match : null;
 
   const order = await db.$transaction(async (tx) => {
     const address = await tx.address.create({
@@ -106,8 +108,10 @@ async function writeOrder(args: {
         userId: customer?.id ?? null,
         email: args.email,
         phone: args.phone,
-        status: args.markPaid ? "PAID" : "PENDING",
-        paymentStatus: args.markPaid ? "SUCCESS" : "PENDING",
+        // A paid one is settled below through markOrderPaid.
+        status: "PENDING",
+        paymentStatus: "PENDING",
+        source: "console",
         subtotal,
         discountTotal: 0,
         shippingTotal: args.shippingTotal,
@@ -116,38 +120,11 @@ async function writeOrder(args: {
         shippingAddressId: address.id,
         billingAddressId: address.id,
         staffNote: args.staffNote ?? null,
-        paidAt: args.markPaid ? new Date() : null,
         items: { create: items },
       },
       include: { items: true },
     });
   });
-
-  // A paid order has left the shelf, so take the stock now. Unpaid ones are
-  // left alone — the stock moves when they are marked paid, exactly as a
-  // checkout order behaves.
-  if (args.markPaid) {
-    try {
-      await commitStock(
-        order.items.flatMap((item) =>
-          item.variantId ? [{ variantId: item.variantId, quantity: item.quantity }] : [],
-        ),
-        order.orderNumber,
-        args.actorId,
-      );
-      await db.order.update({
-        where: { id: order.id },
-        data: { inventoryAppliedAt: new Date() },
-      });
-    } catch (error) {
-      // The order is real either way; flag the stock problem rather than lose it.
-      await logOrderEvent({
-        orderId: order.id,
-        type: "note",
-        message: `Stock was not deducted: ${error instanceof Error ? error.message : "unknown error"}`,
-      });
-    }
-  }
 
   await logOrderEvent({
     orderId: order.id,
@@ -163,14 +140,22 @@ async function writeOrder(args: {
     after: { orderNumber, total, channel: args.channel },
   });
 
-  // An order raised over WhatsApp or in the showroom is the one case where the
-  // customer has nothing on screen to confirm it, so the text is the receipt.
-  // There is no Paystack reference behind a paid one — the money came in by
-  // hand — so none is quoted.
-  await notifyOrder(
-    order.id,
-    args.markPaid ? { kind: "payment.received" } : { kind: "order.placed" },
-  );
+  // Money taken by hand is recorded like any payment: a payment row to
+  // refund against, the stock off the shelf (it never held a reservation),
+  // and the receipt text, which is the customer's only confirmation here.
+  if (args.markPaid) {
+    await markOrderPaid({
+      orderId: order.id,
+      reference: newPaymentReference(order.orderNumber, "MANUAL"),
+      amount: total,
+      channel: args.channel,
+      provider: "manual",
+      purpose: "FULL",
+      raw: { recordedBy: args.actorId, channel: args.channel },
+    });
+  } else {
+    await notifyOrder(order.id, { kind: "order.placed" });
+  }
 
   return order;
 }
@@ -180,6 +165,10 @@ export async function createManualOrderAction(
   formData: FormData,
 ): Promise<AdminState> {
   const user = await requirePermission("orders:write");
+  const markPaid = formData.get("markPaid") === "on";
+  if (markPaid && !can(user.role, "payments:record")) {
+    return { ok: false, message: "Only a manager can record a payment taken by hand. Create it unpaid instead." };
+  }
 
   let lines: LineInput[];
   try {
@@ -226,7 +215,7 @@ export async function createManualOrderAction(
       city,
       region,
       shippingTotal: Math.max(0, Math.round(shippingMajor * 100)),
-      markPaid: formData.get("markPaid") === "on",
+      markPaid,
       staffNote: String(formData.get("staffNote") ?? "").trim() || null,
       actorId: user.id,
       channel: String(formData.get("channel") ?? "console"),

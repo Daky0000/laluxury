@@ -3,13 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
+import { can } from "@/lib/auth/rbac";
 import {
   changeOrderStatusByStaff,
-  recordRefund,
   logOrderEvent,
+  recordBalancePayment,
 } from "@/lib/orders";
+import { refundOrder } from "@/lib/refunds";
+import { resolveHeldPayment } from "@/lib/checkout-payment";
 import { notifyOrder, type OrderNotice } from "@/lib/notify";
-import { refundTransaction, PaystackError } from "@/lib/paystack";
 import { toMinorUnits } from "@/lib/money";
 import { normalisePhone } from "@/lib/phone";
 import { GHANA_REGIONS, MANUAL_PAYMENT_METHODS, type ManualPaymentMethod } from "@/lib/constants";
@@ -136,6 +138,11 @@ export async function updateOrderStatusAction(
   const trackingCompany = String(formData.get("trackingCompany") || "").trim();
   const method = String(formData.get("paymentMethod") || "cash");
 
+  // Marking paid records money that did not pass through Paystack.
+  if (status === "PAID" && !can(actor.role, "payments:record")) {
+    return { ok: false, message: "Only a manager can record a payment taken outside Paystack." };
+  }
+
   let message: string;
   try {
     message = await changeOrderStatusByStaff({
@@ -144,6 +151,7 @@ export async function updateOrderStatusAction(
       actorId: actor.id,
       reason: String(formData.get("reason") || ""),
       paymentMethod: method in MANUAL_PAYMENT_METHODS ? (method as ManualPaymentMethod) : "cash",
+      paymentNote: String(formData.get("paymentNote") || "").trim() || null,
       trackingNumber: trackingNumber || undefined,
       trackingCompany: trackingCompany || undefined,
     });
@@ -178,79 +186,89 @@ export async function addOrderNoteAction(
 }
 
 /**
- * Refunds through Paystack, then records it locally.
- *
- * The local record is written even when Paystack rejects the call, because the
- * money may have been returned by hand — but the message says plainly which
- * half succeeded so nobody assumes it went through.
+ * Refunds an order through the refund ledger (`src/lib/refunds.ts`): the
+ * amount is claimed first, Paystack is asked second, and nothing is recorded
+ * or told to the customer for a part Paystack refuses. "Returned by hand"
+ * records money already given back in cash, MoMo or by transfer.
  */
 export async function refundOrderAction(
   orderId: string,
   _prev: AdminState | null,
   formData: FormData,
 ): Promise<AdminState> {
-  const actor = await requirePermission("orders:write");
-
-  const order = await db.order.findUnique({
-    where: { id: orderId },
-    include: { payments: { where: { status: "SUCCESS" }, orderBy: { createdAt: "desc" } } },
-  });
-  if (!order) return { ok: false, message: "Order not found." };
-
-  const payment = order.payments[0];
-  if (!payment) return { ok: false, message: "There is no successful payment to refund." };
+  const actor = await requirePermission("payments:refund");
 
   const amountRaw = Number(formData.get("amount"));
   if (!Number.isFinite(amountRaw) || amountRaw <= 0) {
     return { ok: false, message: "Enter an amount to refund." };
   }
-
   const amount = toMinorUnits(amountRaw);
-  const paid = Math.min(
-    order.total,
-    order.payments.reduce((sum, p) => sum + p.amount, 0),
-  );
-  const outstanding = paid - order.refundedTotal;
-  if (amount > outstanding) {
-    return { ok: false, message: `You can refund at most ${(outstanding / 100).toFixed(2)}.` };
+  const reason = String(formData.get("reason") || "").trim() || "Refunded by staff.";
+  const method = formData.get("method") === "manual" ? "manual" : "provider";
+
+  // Per-line restock quantities: restock:<orderItemId> = units.
+  const restock: { orderItemId: string; quantity: number }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("restock:")) continue;
+    const quantity = Math.floor(Number(value));
+    if (Number.isFinite(quantity) && quantity > 0) restock.push({ orderItemId: key.slice(8), quantity });
   }
 
-  const reason = String(formData.get("reason") || "Refunded by staff.");
-  const restock = formData.get("restock") === "on";
-
-  let providerMessage = "";
+  let result;
   try {
-    await refundTransaction({ reference: payment.reference, amount, reason });
-    providerMessage = "Paystack refund submitted.";
+    result = await refundOrder({ orderId, amount, reason, actorId: actor.id, method, restock });
   } catch (error) {
-    if (error instanceof PaystackError) {
-      providerMessage = `Paystack refused the refund (${error.message}). Recorded locally only — check the Paystack dashboard.`;
-    } else {
-      throw error;
-    }
+    return { ok: false, message: error instanceof Error ? error.message : "The refund could not be made." };
   }
 
-  try {
-    await recordRefund({ orderId, amount, reason, restock, actorId: actor.id });
-  } catch (error) {
-    return {
-      ok: false,
-      message: `${providerMessage} But the refund could not be recorded: ${
-        error instanceof Error ? error.message : "unknown error"
-      }`,
-    };
+  if (result.accepted > 0) {
+    await recordAudit({
+      actorId: actor.id,
+      action: "order.refund",
+      entity: "Order",
+      entityId: orderId,
+      after: { amount: result.accepted, requested: amount, reason, method, restock },
+    });
   }
-
-  await recordAudit({
-    actorId: actor.id,
-    action: "order.refund",
-    entity: "Order",
-    entityId: orderId,
-    after: { amount, reason, restock },
-  });
 
   revalidateOrder(orderId);
-  return { ok: true, message: `Refund of ${(amount / 100).toFixed(2)} recorded. ${providerMessage}` };
+  return { ok: result.ok, message: result.message };
+}
+
+/** Records a deposit order's balance collected outside Paystack (cash on delivery, transfer). */
+export async function recordBalanceAction(
+  orderId: string,
+  _prev: AdminState | null,
+  formData: FormData,
+): Promise<AdminState> {
+  const actor = await requirePermission("payments:record");
+  const method = String(formData.get("paymentMethod") || "cash");
+  try {
+    const message = await recordBalancePayment({
+      orderId,
+      actorId: actor.id,
+      method: method in MANUAL_PAYMENT_METHODS ? (method as ManualPaymentMethod) : "cash",
+      note: String(formData.get("paymentNote") || "").trim() || null,
+    });
+    await recordAudit({ actorId: actor.id, action: "order.balance.record", entity: "Order", entityId: orderId, after: { method } });
+    revalidateOrder(orderId);
+    return { ok: true, message };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Could not record the balance." };
+  }
+}
+
+/** Accepts or clears a payment held for review. */
+export async function resolveHeldPaymentAction(orderId: string, paymentId: string): Promise<AdminState> {
+  const actor = await requirePermission("payments:record");
+  try {
+    const message = await resolveHeldPayment(paymentId, actor.id);
+    await recordAudit({ actorId: actor.id, action: "payment.held.resolve", entity: "Order", entityId: orderId, after: { paymentId } });
+    revalidateOrder(orderId);
+    return { ok: true, message };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Could not resolve that payment." };
+  }
 }
 
 /**

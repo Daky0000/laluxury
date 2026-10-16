@@ -12,11 +12,13 @@ import { formatMoney } from "@/lib/money";
 import { formatPhone, telHref } from "@/lib/phone";
 import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
-import { Card, Badge, Divider } from "@/components/ui";
+import { Card, Badge, Divider, Alert } from "@/components/ui";
 import { AssignOrderCustomer } from "@/components/admin/order-customer";
 import { OrderControls } from "@/components/admin/order-controls";
 import { EditOrderAddress, OrderToolbar } from "@/components/admin/order-extras";
 import { MomoPinPushCard } from "@/components/admin/momo-pin-push-card";
+import { PaymentLedger } from "@/components/admin/payment-ledger";
+import { isPaymentSettled, outstandingBalance } from "@/lib/orders";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -31,9 +33,31 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
   const order = await db.order.findUnique({ where: { id }, include: orderInclude });
   if (!order) notFound();
 
-  const payment = order.payments.find((p) => p.status === "SUCCESS") ?? order.payments[0];
+  const payment = order.payments.find((p) => p.status === "SUCCESS" && !p.heldAt) ?? order.payments[0];
   const canWrite = can(user.role, "orders:write");
-  const outstanding = order.total - order.refundedTotal;
+  const canRefund = can(user.role, "payments:refund");
+  const canRecordPayment = can(user.role, "payments:record");
+
+  // What came in, and what can still go back (and how).
+  const received = order.payments.filter((p) => p.status === "SUCCESS");
+  const outstanding = Math.max(0, received.reduce((sum, p) => sum + p.amount, 0) - order.refundedTotal);
+  const paystackRefundable = Math.min(
+    outstanding,
+    received
+      .filter((p) => p.provider === "paystack")
+      .reduce((sum, p) => sum + p.amount - p.refundedAmount, 0),
+  );
+  const held = order.payments.filter((p) => p.heldAt);
+  const balanceDue = isPaymentSettled(order.paymentStatus) ? outstandingBalance(order) : 0;
+  const refundLines = order.inventoryAppliedAt
+    ? order.items
+        .filter((item) => item.variantId)
+        .map((item) => ({
+          id: item.id,
+          title: `${item.productTitle}${item.variantTitle !== "Default" ? ` · ${item.variantTitle}` : ""}`,
+          restockable: item.quantity - item.quantityRestocked,
+        }))
+    : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -92,6 +116,26 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
         </span>
       </div>
 
+      {order.status === "CANCELLED" && outstanding > 0 ? (
+        <Alert tone="danger">
+          Cancelled after payment: {formatMoney(outstanding, order.currency)} is owed back to the customer.
+          {canRefund ? " Refund it from the Refund card." : " Ask a manager to refund it."}
+        </Alert>
+      ) : null}
+      {order.disputeStatus === "open" ? (
+        <Alert tone="danger">
+          The customer&apos;s bank has disputed this payment. Do not ship until the dispute is resolved in the Paystack
+          dashboard.
+        </Alert>
+      ) : null}
+      {held.length > 0 ? (
+        <Alert tone="warning">
+          {held.length === 1 ? "A payment on this order is" : `${held.length} payments on this order are`} held for
+          review. See Payments &amp; refunds.
+        </Alert>
+      ) : null}
+      {order.isTest ? <Alert tone="warning">Test-mode order: no real money was taken.</Alert> : null}
+
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="flex flex-col gap-6">
           {canWrite ? (
@@ -101,7 +145,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
               defaultPhone={order.phone ?? order.shippingAddress?.phone ?? ""}
               totalMinor={order.total}
               depositMinor={order.depositAmount}
-              isPaid={order.paymentStatus === "SUCCESS"}
+              isPaid={isPaymentSettled(order.paymentStatus)}
               balancePaid={Boolean(order.balancePaidAt)}
             />
           ) : null}
@@ -327,6 +371,36 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
             </Card>
           ) : null}
 
+          <PaymentLedger
+            orderId={order.id}
+            canResolve={canRecordPayment}
+            payments={order.payments.map((p) => ({
+              id: p.id,
+              reference: p.reference,
+              amount: p.amount,
+              currency: p.currency,
+              status: p.status,
+              provider: p.provider,
+              channel: describeChannel(p.channel),
+              purpose: p.purpose,
+              refundedAmount: p.refundedAmount,
+              heldReason: p.heldReason,
+              held: Boolean(p.heldAt),
+              paidAt: p.paidAt?.toISOString() ?? null,
+              createdAt: p.createdAt.toISOString(),
+            }))}
+            refunds={order.refunds.map((r) => ({
+              id: r.id,
+              amount: r.amount,
+              currency: r.currency,
+              status: r.status,
+              method: r.method,
+              reason: r.reason,
+              failureReason: r.failureReason,
+              createdAt: r.createdAt.toISOString(),
+            }))}
+          />
+
           {order.customerNote ? (
             <Card className="p-5">
               <h2 className="lx-eyebrow mb-2">Customer note</h2>
@@ -341,8 +415,13 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
               trackingNumber={order.trackingNumber}
               trackingCompany={order.trackingCompany}
               staffNote={order.staffNote}
+              isPaid={isPaymentSettled(order.paymentStatus)}
               outstanding={outstanding}
-              canRefund={order.paymentStatus === "SUCCESS" && outstanding > 0}
+              canRefund={canRefund}
+              canRecordPayment={canRecordPayment}
+              paystackRefundable={paystackRefundable}
+              refundLines={refundLines}
+              balanceDue={balanceDue}
             />
           ) : null}
         </div>

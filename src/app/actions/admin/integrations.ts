@@ -13,6 +13,7 @@ import {
   type Integrations,
 } from "@/lib/integrations";
 import { pingAgent } from "@/lib/agent/provider";
+import { postAlert } from "@/lib/agent/slack";
 import { sendTestEmail, isEmailConfigured } from "@/lib/email";
 import { isCdnConfigured } from "@/lib/cdn";
 import type { AdminState } from "./products";
@@ -111,7 +112,20 @@ export async function saveIntegrationsAction(
     }
   }
 
+  // Where the money goes is the owner's decision alone: a Paystack key or mode
+  // change can send every payment to another account, or stop taking real money.
+  const paystackFields = touched.filter((f) => f.startsWith("paystack."));
+  if (paystackFields.length > 0 && user.role !== "OWNER") {
+    return { ok: false, message: "Only the store owner can change the Paystack keys or mode." };
+  }
+
   await updateIntegrations(patch as Parameters<typeof updateIntegrations>[0]);
+
+  if (paystackFields.length > 0) {
+    await postAlert(
+      `:lock: Paystack settings changed by ${user.email ?? user.id}: ${paystackFields.join(", ")}${mode ? ` (mode is now ${String(mode).toUpperCase()})` : ""}. If this was not you, change the keys in Paystack now.`,
+    );
+  }
 
   // Keep the store-wide web/mobile mode and active Paystack key pair aligned.
   // Two disagreeing mode controls previously caused live keys to run as a
@@ -147,8 +161,14 @@ export async function clearIntegrationAction(
   if (!SHAPE[group]?.includes(field)) {
     return { ok: false, message: "Unknown setting." };
   }
+  if (group === "paystack" && user.role !== "OWNER") {
+    return { ok: false, message: "Only the store owner can change the Paystack keys or mode." };
+  }
 
   await clearIntegrationField(group, field);
+  if (group === "paystack") {
+    await postAlert(`:lock: Paystack setting ${field} was cleared by ${user.email ?? user.id}.`);
+  }
   await recordAudit({
     actorId: user.id,
     action: "integrations.clear",

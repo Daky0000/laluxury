@@ -2,14 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimitResponse, requestAddress } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { apiOptionsResponse } from "@/lib/auth/bearer";
-import {
-  verifyTransaction,
-  submitMobileMoneyOtp,
-  detectGhanaMomoProvider,
-  MOMO_PROVIDER_LABELS,
-} from "@/lib/paystack";
-import { markOrderPaid, markPaymentFailed } from "@/lib/orders";
-import { isFinalFailure } from "@/lib/checkout-payment";
+import { submitMobileMoneyOtp, detectGhanaMomoProvider, MOMO_PROVIDER_LABELS } from "@/lib/paystack";
+import { reconcilePaystackPayment } from "@/lib/checkout-payment";
+import { isPaymentSettled } from "@/lib/orders";
 import { getIntegrations, activePaystack } from "@/lib/integrations";
 
 export const runtime = "nodejs";
@@ -20,17 +15,20 @@ export const OPTIONS = apiOptionsResponse;
 /**
  * GET /api/app/orders/verify?reference=...
  *
- * Verifies Mobile Money PIN payment status with Paystack.
- * Automatically marks order as PAID and dispatches SMS + Email receipts
- * as soon as the customer authorizes the transaction on their phone.
+ * Verifies a payment with Paystack while the app waits on it. The reference
+ * is a random, unguessable value handed only to the payer, and the answer
+ * carries no personal details. Settlement goes through the same checks as the
+ * webhook (`reconcilePaystackPayment`): a mismatch is held for review.
  */
 export async function GET(request: NextRequest) {
-  const limited = rateLimitResponse([
-    { key: `app-pay-verify-ip:${await requestAddress()}`, limit: 120, windowMs: 10 * 60 * 1000 },
-  ]);
-  if (limited) return limited;
   const { searchParams } = new URL(request.url);
   const reference = searchParams.get("reference")?.trim();
+
+  const limited = rateLimitResponse([
+    { key: `app-pay-verify-ip:${await requestAddress()}`, limit: 120, windowMs: 10 * 60 * 1000 },
+    ...(reference ? [{ key: `app-pay-verify-ref:${reference}`, limit: 240, windowMs: 10 * 60 * 1000 }] : []),
+  ]);
+  if (limited) return limited;
 
   if (!reference) {
     return NextResponse.json({ ok: false, error: "Payment reference is required." }, { status: 400 });
@@ -45,31 +43,35 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Payment record not found." }, { status: 404 });
   }
 
+  const orderSummary = (o: typeof payment.order) => ({
+    id: o.id,
+    orderNumber: o.orderNumber,
+    status: o.status,
+    paymentStatus: o.paymentStatus,
+    total: o.total,
+    depositAmount: o.depositAmount,
+    currency: o.currency,
+  });
+
   // Already marked as paid
   if (payment.status === "SUCCESS") {
+    return NextResponse.json({ ok: true, paid: true, order: orderSummary(payment.order) });
+  }
+  if (payment.heldAt) {
     return NextResponse.json({
       ok: true,
-      paid: true,
-      order: {
-        id: payment.order.id,
-        orderNumber: payment.order.orderNumber,
-        status: payment.order.status,
-        paymentStatus: payment.order.paymentStatus,
-        total: payment.order.total,
-        depositAmount: payment.order.depositAmount,
-        currency: payment.order.currency,
-      },
+      paid: false,
+      status: "held",
+      message: "Our team is checking this payment and will be in touch.",
     });
   }
 
   // Legacy simulated records must never become paid without a real transaction.
-  if (payment.provider === "test_simulation") {
+  if (payment.provider !== "paystack") {
     return NextResponse.json({ ok: true, paid: false, status: "pending" });
   }
 
-  // Live / Test Paystack verification
-  const paystackConfig = activePaystack(await getIntegrations());
-  if (!paystackConfig.secretKey) {
+  if (!activePaystack(await getIntegrations()).secretKey) {
     return NextResponse.json({
       ok: true,
       paid: false,
@@ -79,81 +81,54 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const verified = await verifyTransaction(reference);
+    const outcome = await reconcilePaystackPayment({
+      orderId: payment.orderId,
+      orderNumber: payment.order.orderNumber,
+      reference,
+      amount: payment.amount,
+      currency: payment.currency,
+      domain: payment.domain,
+    });
 
-    if (verified.status === "success") {
-      const expectedCurrency = payment.currency.toUpperCase();
-      const actualCurrency = verified.currency.toUpperCase();
-      if (verified.amount !== payment.amount || actualCurrency !== expectedCurrency) {
-        console.error("[payment.verify] amount or currency mismatch", {
-          reference,
-          expectedAmount: payment.amount,
-          actualAmount: verified.amount,
-          expectedCurrency,
-          actualCurrency,
-        });
-        return NextResponse.json(
-          { ok: false, paid: false, error: "Payment details did not match this order." },
-          { status: 409 },
-        );
-      }
+    if (outcome === "paid") {
+      const fresh = await db.order.findUniqueOrThrow({ where: { id: payment.orderId } });
       const provider = detectGhanaMomoProvider(payment.mobileMoneyNumber || "");
-      const channelLabel = MOMO_PROVIDER_LABELS[provider] || "Mobile Money";
-
-      await markOrderPaid({
-        orderId: payment.orderId,
-        reference,
-        amount: verified.amount,
-        channel: verified.channel || "mobile_money",
-        providerTransactionId: String(verified.id),
-        mobileMoneyNumber: verified.authorization?.mobile_money_number || payment.mobileMoneyNumber,
-        raw: verified as never,
-      });
-
       return NextResponse.json({
         ok: true,
-        paid: true,
-        channel: channelLabel,
-        order: {
-          id: payment.order.id,
-          orderNumber: payment.order.orderNumber,
-          status: "PAID",
-          paymentStatus: "SUCCESS",
-          total: payment.order.total,
-          depositAmount: payment.order.depositAmount,
-          currency: payment.order.currency,
-        },
+        paid: isPaymentSettled(fresh.paymentStatus),
+        channel: MOMO_PROVIDER_LABELS[provider] || "Mobile Money",
+        order: orderSummary(fresh),
       });
     }
-
-    // The app polls from the moment the Paystack page opens, when Paystack
-    // already reads "abandoned"; only a settled failure is recorded.
-    if (isFinalFailure(verified.status, payment.createdAt)) {
-      await markPaymentFailed({
-        orderId: payment.orderId,
-        reference,
-        reason: verified.gateway_response || `Payment ${verified.status}.`,
-      });
+    if (outcome === "held") {
+      return NextResponse.json(
+        { ok: false, paid: false, status: "held", error: "Payment details did not match this order. Our team has been told." },
+        { status: 409 },
+      );
+    }
+    if (outcome === "failed") {
       return NextResponse.json({
         ok: true,
         paid: false,
         status: "failed",
-        error: verified.gateway_response || "Payment timed out or was declined on your handset.",
+        error: "Payment timed out or was declined on your handset.",
       });
     }
 
-    return NextResponse.json({
-      ok: true,
-      paid: false,
-      status: verified.status,
-      message: "Waiting for MoMo PIN entry on handset...",
-    });
-  } catch (err) {
+    // "unfinished" or "pending": the app polls from the moment the Paystack
+    // page opens, when Paystack already reads "abandoned".
     return NextResponse.json({
       ok: true,
       paid: false,
       status: "pending",
-      message: err instanceof Error ? err.message : "Checking gateway status...",
+      message: "Waiting for MoMo PIN entry on handset...",
+    });
+  } catch {
+    return NextResponse.json({
+      ok: true,
+      paid: false,
+      status: "pending",
+      message: "Checking gateway status...",
     });
   }
 }
@@ -179,17 +154,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const ref = String(reference).trim();
+    const perReference = rateLimitResponse([{ key: `momo-otp:${ref}`, limit: 8, windowMs: 15 * 60 * 1000 }]);
+    if (perReference) return perReference;
+
     const pending = await db.payment.findUnique({
-      where: { reference: String(reference).trim() },
-      select: { status: true, provider: true },
+      where: { reference: ref },
+      select: { status: true, provider: true, domain: true },
     });
     if (!pending || pending.provider !== "paystack" || pending.status !== "PENDING") {
       return NextResponse.json({ ok: false, error: "This payment is no longer awaiting a code." }, { status: 404 });
     }
 
     const res = await submitMobileMoneyOtp({
-      reference: String(reference).trim(),
+      reference: ref,
       otp: String(otp).trim(),
+      mode: pending.domain === "test" || pending.domain === "live" ? pending.domain : null,
     });
 
     return NextResponse.json({
@@ -199,7 +179,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : "Failed to submit OTP." },
+      { ok: false, error: err instanceof Error ? err.message.replace(/Paystack/gi, "payment provider") : "Failed to submit OTP." },
       { status: 500 },
     );
   }

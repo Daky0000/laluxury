@@ -101,6 +101,7 @@ export function OrderPaymentCard({
 
       const check = await customerCheckMomoPinAction({
         orderId,
+        token: accessToken,
         reference: pushState.reference!,
       });
 
@@ -123,7 +124,7 @@ export function OrderPaymentCard({
     }, 6000);
 
     return () => clearInterval(timer);
-  }, [pushState, confirmedPaid, orderId, router]);
+  }, [pushState, confirmedPaid, orderId, accessToken, router]);
 
   function choose(next: MomoNetworkId | "card") {
     if (pushState?.ok) return; // a prompt is out; resend or check it instead
@@ -142,7 +143,7 @@ export function OrderPaymentCard({
       try {
         // Already approved? Then never send a second request.
         if (pushState?.reference) {
-          const check = await customerCheckMomoPinAction({ orderId, reference: pushState.reference });
+          const check = await customerCheckMomoPinAction({ orderId, token: accessToken, reference: pushState.reference });
           if (check.paid) {
             setConfirmedPaid(true);
             setStatusMessage(check.message);
@@ -193,6 +194,7 @@ export function OrderPaymentCard({
     startTransition(async () => {
       const res = await customerSubmitMomoOtpAction({
         orderId,
+        token: accessToken,
         reference: pushState.reference!,
         otp: otpCode,
       });
@@ -211,6 +213,7 @@ export function OrderPaymentCard({
     startTransition(async () => {
       const check = await customerCheckMomoPinAction({
         orderId,
+        token: accessToken,
         reference: pushState.reference!,
       });
       setStatusMessage(check.message);
@@ -224,7 +227,7 @@ export function OrderPaymentCard({
   const label = isRemainingBalance
     ? "Remaining balance"
     : isPreorderDeposit
-      ? "50% pre-order deposit"
+      ? "Pre-order deposit"
       : "Payment due";
 
   return (

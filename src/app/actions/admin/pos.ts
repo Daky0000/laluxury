@@ -6,8 +6,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
-import { generateOrderNumber } from "@/lib/slug";
+import { can } from "@/lib/auth/rbac";
 import { logAudit } from "@/lib/audit";
+import { markOrderPaid, uniqueOrderNumber } from "@/lib/orders";
+import { newPaymentReference } from "@/lib/payment-reference";
+import { DEFAULT_DEPOSIT_PERCENT, depositAmountFor } from "@/lib/deposits";
 
 export type PosItemInput = {
   variantId: string;
@@ -23,7 +26,8 @@ export async function createPosShowroomOrderAction(formData: FormData): Promise<
     String(formData.get("email") ?? "")
       .trim()
       .toLowerCase() || `showroom.${Date.now()}@nobleenclave.com`;
-  const phone = String(formData.get("phone") ?? "").trim() || "+233000000000";
+  // No made-up number: receipts and the account SMS must not go to a stranger.
+  const phone = String(formData.get("phone") ?? "").trim() || null;
   const addressLine1 = String(formData.get("addressLine1") ?? "").trim() || "Noble Enclave Showroom Pickup / Accra Delivery";
   const city = String(formData.get("city") ?? "").trim() || "Accra";
   const region = String(formData.get("region") ?? "").trim() || "Greater Accra";
@@ -31,8 +35,8 @@ export async function createPosShowroomOrderAction(formData: FormData): Promise<
 
   const paymentMode = String(formData.get("paymentMode") ?? "FULL_100"); // FULL_100 | DEPOSIT_50
   const settlementChannel = String(formData.get("settlementChannel") ?? "PAID_POS"); // PAID_POS | PAID_MOMO_BANK | PENDING_INVOICE
-  const shippingMajor = Number(formData.get("shippingGhs") ?? 0);
-  const discountMajor = Number(formData.get("discountGhs") ?? 0);
+  const shippingMajor = Number(formData.get("shippingGhs") ?? 0) || 0;
+  const discountMajor = Number(formData.get("discountGhs") ?? 0) || 0;
 
   const itemsJson = String(formData.get("itemsJson") ?? "[]");
   let parsedItems: PosItemInput[] = [];
@@ -89,30 +93,42 @@ export async function createPosShowroomOrderAction(formData: FormData): Promise<
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
   const shippingTotal = Math.max(0, Math.round(shippingMajor * 100));
-  const discountTotal = Math.max(0, Math.round(discountMajor * 100));
+  const discountTotal = Math.min(subtotal, Math.max(0, Math.round(discountMajor * 100)));
   const total = Math.max(0, subtotal - discountTotal + shippingTotal);
 
+  // A showroom discount gives money away: managers only.
+  if (discountTotal > 0 && !can(staff.role, "discounts:write")) {
+    throw new Error("Only a manager can give a showroom discount.");
+  }
+
   const isDeposit50 = paymentMode === "DEPOSIT_50";
-  const depositAmount = isDeposit50 ? Math.round(total * 0.5) : null;
+  const depositAmount = isDeposit50 ? depositAmountFor(total, DEFAULT_DEPOSIT_PERCENT) : null;
   if (isDeposit50) {
     hasPreorderItems = true;
   }
 
   const isPaidNow =
     settlementChannel !== "PENDING_INVOICE" && settlementChannel !== "PUSH_MOMO_PIN";
-  const amountCollectedNow = isDeposit50 ? (depositAmount ?? total) : total;
+  const amountCollectedNow = depositAmount ?? total;
 
-  const orderNumber = await generateOrderNumber();
+  // Recording money taken at the desk is a payments permission, as in the
+  // order page's "mark paid".
+  if (isPaidNow && !can(staff.role, "payments:record")) {
+    throw new Error("Only a manager can record a showroom payment. Use \"pending invoice\" or the MoMo prompt.");
+  }
+
+  const orderNumber = await uniqueOrderNumber();
 
   const createdOrder = await db.$transaction(async (tx) => {
-    const existingCustomer = await tx.user.findUnique({ where: { email } });
+    const match = await tx.user.findUnique({ where: { email }, select: { id: true, role: true } });
+    const existingCustomer = match?.role === "CUSTOMER" ? match : null;
 
     const address = await tx.address.create({
       data: {
         userId: existingCustomer?.id ?? null,
         firstName,
         lastName,
-        phone,
+        phone: phone ?? "",
         line1: addressLine1,
         city,
         region,
@@ -126,8 +142,10 @@ export async function createPosShowroomOrderAction(formData: FormData): Promise<
         userId: existingCustomer?.id ?? null,
         email,
         phone,
-        status: isPaidNow ? "PAID" : "PENDING",
-        paymentStatus: isPaidNow ? "SUCCESS" : "PENDING",
+        // Settled below through markOrderPaid, like every other payment.
+        status: "PENDING",
+        paymentStatus: "PENDING",
+        source: "pos",
         fulfillmentStatus: "UNFULFILLED",
         subtotal,
         discountTotal,
@@ -152,7 +170,6 @@ export async function createPosShowroomOrderAction(formData: FormData): Promise<
         preorderNote: isDeposit50
           ? "50% Showroom Deposit recorded. Remaining 50% balance due upon arrival & white-glove inspection."
           : null,
-        paidAt: isPaidNow ? new Date() : null,
         items: {
           create: orderItemsData,
         },
@@ -166,23 +183,22 @@ export async function createPosShowroomOrderAction(formData: FormData): Promise<
       },
     });
 
-    if (isPaidNow) {
-      await tx.payment.create({
-        data: {
-          orderId: order.id,
-          provider: settlementChannel === "PAID_POS" ? "pos_terminal" : "bank_transfer",
-          reference: `POS-${order.orderNumber}-${Date.now()}`,
-          amount: amountCollectedNow,
-          currency: "GHS",
-          status: "SUCCESS",
-          channel: settlementChannel === "PAID_POS" ? "pos_card_momo" : "bank_transfer",
-          paidAt: new Date(),
-        },
-      });
-    }
-
     return order;
   });
+
+  // Money taken at the desk: recorded like any payment, so the stock leaves
+  // the shelf, a payment row exists to refund against, and receipts go out.
+  if (isPaidNow) {
+    await markOrderPaid({
+      orderId: createdOrder.id,
+      reference: newPaymentReference(createdOrder.orderNumber, "POS"),
+      amount: amountCollectedNow,
+      channel: settlementChannel === "PAID_POS" ? "pos_card_momo" : "bank_transfer",
+      provider: "pos",
+      purpose: depositAmount ? "DEPOSIT" : "FULL",
+      raw: { recordedBy: staff.id, settlementChannel },
+    });
+  }
 
   await logAudit({
     actorId: staff.id,

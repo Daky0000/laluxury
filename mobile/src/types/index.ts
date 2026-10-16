@@ -95,6 +95,8 @@ export type Product = {
   isFeatured: boolean;
   minimumOrderQuantity?: number;
   isPreorder: boolean;
+  /** Deposit (%) the owner set for this pre-order piece; null means the standard 50%. */
+  preorderDepositPercent?: number | null;
   tags: string[];
   totalStock: number;
   totalAvailable?: number;

@@ -484,6 +484,7 @@ model Discount {
   isActive Boolean   @default(true)
 
   redemptions DiscountRedemption[]
+  orders      Order[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -631,8 +632,37 @@ model Order {
   // Client retry key for app checkout; unique so two retries cannot both create
   idempotencyKey String? @unique
 
+  // Where the order was raised: "checkout" (web), "app", "pos", "console" or
+  // "quote". Only checkout and app orders expire unpaid after six hours.
+  source String @default("checkout")
+
+  // Set while this order holds a stock reservation (reserved at checkout),
+  // cleared when the reservation is sold or released. Staff orders never
+  // reserve, so their sale takes stock straight off the shelf.
+  stockReservedAt DateTime?
+
+  // The code applied at checkout, kept on the order so the redemption is
+  // counted on payment whatever later happens to the cart.
+  discountId String?
+  discount   Discount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
+
+  // Created while Paystack was in test mode; only these may settle with a
+  // test-domain transaction.
+  isTest Boolean @default(false)
+
+  // Paystack chargeback state: "open", or "resolved:<resolution>".
+  disputeStatus String?
+
+  // Post-payment steps (receipt, alerts, discount count, account...) that have
+  // run, so a step that failed is retried without repeating the others.
+  paidEffects            String[]  @default([])
+  paidEffectsDoneAt      DateTime?
+  // A short lease so two payment paths never run those steps at once.
+  paidEffectsLockedUntil DateTime?
+
   items       OrderItem[]
   payments    Payment[]
+  refunds     Refund[]
   redemptions DiscountRedemption[]
   events      OrderEvent[]
   notifications CustomerNotification[]
@@ -680,6 +710,8 @@ model OrderItem {
 
   quantityFulfilled Int @default(0)
   quantityRefunded  Int @default(0)
+  // Units put back on the shelf by a refund or cancellation after the sale.
+  quantityRestocked Int @default(0)
 
   @@index([orderId])
   @@index([productId])
@@ -711,11 +743,65 @@ model Payment {
   // Raw verification payload for audit/disputes
   rawResponse Json?
 
+  // What the money is for: "FULL", "DEPOSIT" or "BALANCE". Set when the
+  // attempt starts, so settlement never has to guess from order state.
+  purpose String?
+
+  // "live" or "test": the Paystack mode the attempt was started in.
+  domain String?
+
+  // Running total refunded against this payment (minor units).
+  refundedAmount Int @default(0)
+
+  // Set when the money needs a person: an amount or currency mismatch, a test
+  // transaction on a live order, or a second payment for a paid order.
+  heldAt     DateTime?
+  heldReason String?
+
+  refunds Refund[]
+
   paidAt    DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   @@index([orderId])
+  @@index([status])
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+/// One refund against one payment. Paystack refunds start PENDING and settle
+/// by webhook; refunds made by hand are PROCESSED when recorded.
+model Refund {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  paymentId String?
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  amount   Int
+  currency String       @default("GHS")
+  // "paystack" or "manual"
+  method   String
+  status   RefundStatus @default(PENDING)
+
+  providerRefundId String?
+  reason           String
+  failureReason    String?
+  actorId          String?
+
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([orderId])
+  @@index([paymentId])
   @@index([status])
 }
 

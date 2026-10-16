@@ -69,7 +69,9 @@ export default async function CheckoutPage() {
     postalCode: lastAddress?.postalCode ?? "",
   };
 
-  const hasPreorderItems = totals.lines.some((line) => line.isPreorder);
+  // A split is only offered when the pieces' deposit is less than the whole.
+  const depositPercent = totals.depositPercent && totals.depositPercent < 100 ? totals.depositPercent : null;
+  const hasPreorderItems = totals.lines.some((line) => line.isPreorder) && depositPercent !== null;
   return (
     <div className="lx-container py-6 sm:py-12">
       <h1 className="mb-5 text-[clamp(1.75rem,5vw,2.75rem)] sm:mb-8">Checkout</h1>
@@ -93,6 +95,7 @@ export default async function CheckoutPage() {
         }))}
         isSignedIn={Boolean(user)}
         hasPreorderItems={hasPreorderItems}
+        depositPercent={depositPercent ?? 100}
         freeShippingThreshold={settings.freeShippingThreshold}
         delivery={{
           rateId: deliveryQuote?.id ?? "",

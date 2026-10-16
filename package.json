@@ -26,6 +26,7 @@
     "catalog:worker": "tsx scripts/catalog-worker.ts",
     "notifications:worker": "tsx scripts/notification-worker.ts",
     "test:notifications": "tsx scripts/test-notification-policy.ts && tsx scripts/test-notification-delivery.ts",
+    "test:payments": "tsx scripts/test-payment-ledger.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

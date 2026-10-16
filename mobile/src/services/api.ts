@@ -624,6 +624,11 @@ class ApiService {
       amountFormatted: string;
       displayText: string;
     } | null;
+    /** Opens this order (tracking, MoMo resend) without an account. */
+    accessToken?: string | null;
+    /** Nothing was due (a free order): it is already paid. */
+    paid?: boolean;
+    /** Older servers signed guests in here; current ones return null. */
     token?: string | null;
     user?: User | null;
   }> {
@@ -722,6 +727,8 @@ class ApiService {
       chargeScope?: "FULL" | "DEPOSIT_50" | "REMAINING_BALANCE";
       otp?: string;
       reference?: string;
+      /** The order's access token, for a guest without an account. */
+      accessToken?: string;
     },
   ): Promise<{
     ok: boolean;
@@ -744,6 +751,7 @@ class ApiService {
     orderId: string,
     reference: string,
     chargeScope: "FULL" | "DEPOSIT_50" = "FULL",
+    accessToken?: string,
   ): Promise<{
     ok: boolean;
     paid: boolean;
@@ -754,7 +762,7 @@ class ApiService {
     message: string;
   }> {
     return this.request(
-      `/api/app/orders/${encodeURIComponent(orderId)}/momo-push?reference=${encodeURIComponent(reference)}&chargeScope=${chargeScope}`,
+      `/api/app/orders/${encodeURIComponent(orderId)}/momo-push?reference=${encodeURIComponent(reference)}&chargeScope=${chargeScope}${accessToken ? `&t=${encodeURIComponent(accessToken)}` : ""}`,
     );
   }
 

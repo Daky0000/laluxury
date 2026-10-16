@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { placeOrderAction, type CheckoutState } from "@/app/actions/checkout";
 import { formatPrice } from "@/lib/money";
+import { depositAmountFor } from "@/lib/deposits";
 import { GHANA_REGIONS } from "@/lib/constants";
 import { MOMO_NETWORK_OPTIONS, type MomoNetworkId } from "@/lib/momo-networks";
 import type { PickupLocation } from "@/lib/pickup-locations";
@@ -104,6 +105,7 @@ export function CheckoutForm({
   savedAddresses = [],
   isSignedIn,
   hasPreorderItems = false,
+  depositPercent,
   freeShippingThreshold,
   delivery,
   directNetworks,
@@ -118,6 +120,8 @@ export function CheckoutForm({
   savedAddresses?: SavedAddressOption[];
   isSignedIn: boolean;
   hasPreorderItems?: boolean;
+  /** Deposit percentage for pre-order pieces (from the products; 100 = no split). */
+  depositPercent: number;
   freeShippingThreshold: number | null;
   delivery: CheckoutDelivery;
   /** Networks that get the PIN prompt on the phone; the rest use Paystack's page. */
@@ -192,7 +196,7 @@ export function CheckoutForm({
   const total = goodsTotal + shippingTotal;
   const depositDueNow =
     hasPreorderItems && preorderDepositOption === "deposit_50"
-      ? Math.round(total * 0.5)
+      ? (depositAmountFor(total, depositPercent) ?? total)
       : total;
   const balanceOnDelivery = total - depositDueNow;
 
@@ -364,7 +368,7 @@ export function CheckoutForm({
       {hasPreorderItems && preorderDepositOption === "deposit_50" ? (
         <div className="mt-3 border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-3.5 text-sm">
           <div className="flex justify-between font-medium">
-            <span>Due today (50% deposit)</span>
+            <span>Due today ({depositPercent}% deposit)</span>
             <span className="tabular-nums">{formatPrice(depositDueNow)}</span>
           </div>
           <div className="mt-1 flex justify-between text-[var(--text-secondary)]">
@@ -834,13 +838,13 @@ export function CheckoutForm({
                     />
                     {radioDot(preorderDepositOption === "deposit_50")}
                     <span className="min-w-0 flex-1 text-left text-sm">
-                      <span className="block font-medium">50% pre-order deposit</span>
+                      <span className="block font-medium">{depositPercent}% pre-order deposit</span>
                       <span className="mt-0.5 block text-[var(--text-muted)]">
                         The other half is paid on delivery
                       </span>
                     </span>
                     <span className="shrink-0 whitespace-nowrap text-sm font-medium tabular-nums">
-                      {formatPrice(Math.round(total * 0.5))}
+                      {formatPrice(depositAmountFor(total, depositPercent) ?? total)}
                     </span>
                   </label>
                   <label className={optionRow(preorderDepositOption === "full")}>

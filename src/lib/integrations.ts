@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { db } from "./db";
 import { env } from "./env";
 import type { Prisma } from "@/generated/prisma";
@@ -156,6 +157,63 @@ function merge(base: Integrations, stored: DeepPartial<Integrations>): Integrati
   return out;
 }
 
+// --- Secrets at rest ---------------------------------------------------------
+//
+// Secret fields (the Paystack keys among them) are stored sealed with
+// AES-256-GCM, under a key derived from INTEGRATIONS_KEY, or AUTH_SECRET when
+// that is not set. A database dump or backup no longer hands out the live
+// Paystack key. Changing that secret makes stored keys unreadable: they read
+// as empty (payments switch off, loudly) until they are entered again.
+
+const SEALED = "enc:v1:";
+
+function sealingKey(): Buffer {
+  const base = process.env.INTEGRATIONS_KEY || env.authSecret();
+  return Buffer.from(hkdfSync("sha256", base, "laluxury-integrations", "integration-secrets", 32));
+}
+
+export function sealSecret(plain: string): string {
+  if (!plain || plain.startsWith(SEALED)) return plain;
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", sealingKey(), iv);
+  const body = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  return SEALED + Buffer.concat([iv, cipher.getAuthTag(), body]).toString("base64url");
+}
+
+export function openSecret(stored: string): string {
+  if (!stored?.startsWith(SEALED)) return stored;
+  try {
+    const raw = Buffer.from(stored.slice(SEALED.length), "base64url");
+    const decipher = createDecipheriv("aes-256-gcm", sealingKey(), raw.subarray(0, 12));
+    decipher.setAuthTag(raw.subarray(12, 28));
+    return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8");
+  } catch {
+    console.error("[integrations] a stored secret could not be decrypted; re-enter it in Settings → Integrations.");
+    return "";
+  }
+}
+
+type StoredGroups = Record<string, Record<string, unknown>>;
+
+/** Applies `fn` to every secret field in a stored settings object. */
+function mapSecrets(stored: StoredGroups, fn: (value: string) => string): StoredGroups {
+  const out = structuredClone(stored ?? {}) as StoredGroups;
+  for (const path of SECRET_FIELDS) {
+    const [group, field] = path.split(".");
+    const value = out[group]?.[field];
+    if (typeof value === "string" && value) out[group][field] = fn(value);
+  }
+  return out;
+}
+
+function hasPlaintextSecret(stored: StoredGroups): boolean {
+  return [...SECRET_FIELDS].some((path) => {
+    const [group, field] = path.split(".");
+    const value = stored?.[group]?.[field];
+    return typeof value === "string" && value !== "" && !value.startsWith(SEALED);
+  });
+}
+
 let cachedIntegrations: { data: Integrations; expiresAt: number } | null = null;
 const INTEGRATIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -170,7 +228,14 @@ async function fetchIntegrations(): Promise<Integrations> {
   }
 
   const row = await db.setting.findUnique({ where: { key: KEY } });
-  const merged = merge(fromEnv(), (row?.value as DeepPartial<Integrations>) ?? {});
+  const stored = (row?.value as StoredGroups) ?? {};
+  // Keys saved before sealing existed are sealed the first time they are read.
+  if (row && hasPlaintextSecret(stored)) {
+    await db.setting
+      .update({ where: { key: KEY }, data: { value: mapSecrets(stored, sealSecret) as Prisma.InputJsonValue } })
+      .catch((error) => console.error("[integrations] could not seal stored secrets", error));
+  }
+  const merged = merge(fromEnv(), mapSecrets(stored, openSecret) as DeepPartial<Integrations>);
   cachedIntegrations = { data: merged, expiresAt: now + INTEGRATIONS_CACHE_TTL_MS };
   return merged;
 }
@@ -199,10 +264,11 @@ export async function updateIntegrations(patch: DeepPartial<Integrations>): Prom
     }
   }
 
+  const sealed = mapSecrets(next, sealSecret);
   await db.setting.upsert({
     where: { key: KEY },
-    create: { key: KEY, value: next as Prisma.InputJsonValue },
-    update: { value: next as Prisma.InputJsonValue },
+    create: { key: KEY, value: sealed as Prisma.InputJsonValue },
+    update: { value: sealed as Prisma.InputJsonValue },
   });
 }
 
@@ -270,6 +336,15 @@ export function activePaystack(config: Integrations): {
     secretKey: sanitizeKey(rawSecret),
     publicKey: sanitizeKey(rawPublic),
   };
+}
+
+/**
+ * The secret key for one Paystack mode, whichever mode the store is in now.
+ * A payment started in live mode is verified and refunded with the live key
+ * even after the store is switched to test, and the other way round.
+ */
+export function paystackSecretFor(config: Integrations, mode: PaystackMode): string {
+  return sanitizeKey(mode === "test" ? config.paystack.testSecretKey : config.paystack.secretKey);
 }
 
 /** True when a group has enough filled in to actually work. */

@@ -12,11 +12,14 @@ import { customerSubmitMomoOtpAction } from "@/app/actions/order-pay";
  */
 export function MomoOtpForm({
   orderId,
+  token,
   reference,
   required,
   network,
 }: {
   orderId: string;
+  /** The order access token the page was opened with. */
+  token: string;
   reference: string;
   /** Paystack asked for a code (charge status `send_otp`). */
   required: boolean;
@@ -32,7 +35,7 @@ export function MomoOtpForm({
     const code = otp.trim();
     if (!code) return;
     startTransition(async () => {
-      const res = await customerSubmitMomoOtpAction({ orderId, reference, otp: code });
+      const res = await customerSubmitMomoOtpAction({ orderId, token, reference, otp: code });
       if (!res.ok) {
         setMessage({ tone: "error", text: res.error ?? "That code was not accepted. Check it and try again." });
         return;
