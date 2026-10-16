@@ -144,7 +144,6 @@ export function CheckoutForm({
   const [firstName, setFirstName] = useState(defaults.firstName);
   const [lastName, setLastName] = useState(defaults.lastName);
   const [phone, setPhone] = useState(defaults.phone);
-  const [email, setEmail] = useState(defaults.email);
   // One field takes a street address or a digital address (GA-123-4567).
   const [line1, setLine1] = useState(defaults.line1 || defaults.postalCode);
   const [city, setCity] = useState(defaults.city || "Accra");
@@ -294,6 +293,28 @@ export function CheckoutForm({
 
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
+  // Asked once, with whichever details block is showing.
+  const phoneField = (
+    <div className="col-span-2">
+      <label htmlFor="phone" className={labelClass}>
+        Phone
+      </label>
+      <input
+        id="phone"
+        name="phone"
+        type="tel"
+        required
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        autoComplete="tel"
+        inputMode="tel"
+        placeholder="024 000 0000"
+        className={field}
+      />
+      {errors.phone ? <p className="mt-1.5 text-sm text-danger">{errors.phone}</p> : null}
+    </div>
+  );
+
   const summary = (
     <>
       <ul className="flex flex-col gap-4">
@@ -438,64 +459,11 @@ export function CheckoutForm({
 
           {/* ---------------- Step 1: Delivery ---------------- */}
           <div ref={deliveryRef} hidden={step !== 0}>
-            {/* Contact */}
-            <section>
-              <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="text-xl sm:text-2xl">Contact</h2>
-                {isSignedIn ? (
-                  <span className="text-sm text-[var(--text-secondary)]">
-                    Signed in as {defaults.email}
-                  </span>
-                ) : null}
-              </div>
-              <div className="grid gap-3.5 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="email" className={labelClass}>
-                    Email
-                  </label>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    inputMode="email"
-                    placeholder="you@example.com"
-                    className={field}
-                  />
-                  {errors.email ? <p className="mt-1.5 text-sm text-danger">{errors.email}</p> : null}
-                </div>
-                <div>
-                  <label htmlFor="phone" className={labelClass}>
-                    Phone
-                  </label>
-                  <input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    autoComplete="tel"
-                    inputMode="tel"
-                    placeholder="024 000 0000"
-                    className={field}
-                  />
-                  {errors.phone ? <p className="mt-1.5 text-sm text-danger">{errors.phone}</p> : null}
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-[var(--text-muted)]">
-                We send your receipt and delivery updates here.
-                {isSignedIn
-                  ? null
-                  : " New here? Your account is made from this order once it is paid, and we text you how to sign in."}
-              </p>
-            </section>
+            {/* Known from the account or an earlier order; never asked for here. */}
+            <input type="hidden" name="email" value={defaults.email} />
 
             {/* How the order reaches the buyer */}
-            <section className="mt-10">
+            <section>
               <h2 className={sectionHeading}>Delivery or pickup</h2>
               <input type="hidden" name="fulfilment" value={fulfilment} />
               <div
@@ -579,7 +547,7 @@ export function CheckoutForm({
                 ) : null}
 
                 <h3 className="mb-3 mt-8 text-base font-medium">Who will collect it?</h3>
-                <div className="grid gap-3.5 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-3.5">
                   <div>
                     <label htmlFor="firstName" className={labelClass}>
                       First name
@@ -611,6 +579,7 @@ export function CheckoutForm({
                       className={field}
                     />
                   </div>
+                  {phoneField}
                 </div>
               </section>
             ) : (
@@ -653,7 +622,7 @@ export function CheckoutForm({
                   </div>
                 ) : null}
 
-                <div className="grid gap-3.5 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-3.5">
                   <div>
                     <label htmlFor="firstName" className={labelClass}>
                       First name
@@ -686,7 +655,9 @@ export function CheckoutForm({
                     />
                   </div>
 
-                  <div className="sm:col-span-2">
+                  {phoneField}
+
+                  <div className="col-span-2">
                     <label htmlFor="line1" className={labelClass}>
                       Address / digital address
                     </label>
@@ -790,7 +761,7 @@ export function CheckoutForm({
             {/* Review, as the big checkouts do before the payment choice */}
             <dl className="divide-y divide-[var(--border-subtle)] border border-[var(--border-strong)] bg-[var(--surface-raised)] px-4 text-sm">
               {[
-                { label: "Contact", value: `${email} · ${phone}` },
+                { label: "Phone", value: phone },
                 isPickup
                   ? {
                       label: "Pickup",

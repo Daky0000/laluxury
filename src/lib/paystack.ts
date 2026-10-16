@@ -104,6 +104,17 @@ export type InitializeResult = {
   reference: string;
 };
 
+/**
+ * Paystack needs an email on every charge, but checkout only asks for a
+ * phone. A shopper with no email gets a stand-in on the store's own domain,
+ * keyed on the phone (or reference), so Paystack's records stay grouped.
+ */
+function paystackEmail(email: string, key: string): string {
+  if (email.trim()) return email.trim();
+  const local = key.replace(/[^0-9A-Za-z]/g, "").toLowerCase() || "customer";
+  return `${local}@${new URL(env.siteUrl()).hostname}`;
+}
+
 export async function initializeTransaction(args: {
   email: string;
   amount: number;
@@ -117,7 +128,7 @@ export async function initializeTransaction(args: {
   return call<InitializeResult>("/transaction/initialize", {
     method: "POST",
     body: {
-      email: args.email,
+      email: paystackEmail(args.email, args.reference),
       amount: args.amount,
       currency: args.currency ?? env.currency(),
       reference: args.reference,
@@ -349,7 +360,7 @@ export async function chargeMobileMoney(args: {
   return call<PaystackChargeResult>("/charge", {
     method: "POST",
     body: {
-      email: args.email,
+      email: paystackEmail(args.email, cleanPhone),
       amount: args.amount,
       currency: "GHS",
       reference: args.reference,

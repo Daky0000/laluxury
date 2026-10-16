@@ -27,7 +27,8 @@ export type CheckoutState = {
 };
 
 const schema = z.object({
-  email: z.string().email("Enter a valid email address."),
+  // Not asked for at checkout: carried over from the account or an earlier order.
+  email: z.union([z.literal(""), z.string().email()]).optional().default(""),
   firstName: z.string().trim().min(1, "Enter a first name."),
   lastName: z.string().trim().optional().default(""),
   phone: z
@@ -57,7 +58,7 @@ export async function placeOrderAction(
   formData: FormData,
 ): Promise<CheckoutState> {
   const parsed = schema.safeParse({
-    email: formData.get("email"),
+    email: formData.get("email") ?? "",
     firstName: formData.get("firstName"),
     lastName: formData.get("lastName"),
     phone: formData.get("phone"),
@@ -166,7 +167,7 @@ export async function placeOrderAction(
     ? null
     : ((
         await db.user.findFirst({
-          where: { OR: [{ phone }, { email }], role: "CUSTOMER" },
+          where: { OR: email ? [{ phone }, { email }] : [{ phone }], role: "CUSTOMER" },
           select: { id: true },
         })
       )?.id ?? null);
