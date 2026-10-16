@@ -145,7 +145,8 @@ export async function placeOrderAction(
   // stock, so it is limited per address, per contact number and per wallet.
   const address = await requestAddress();
   for (const [key, limit] of [
-    [`checkout-ip:${address}`, 12],
+    // Generous: Ghanaian mobile networks put many phones behind one address.
+    [`checkout-ip:${address}`, 40],
     [`checkout-phone:${phone}`, 6],
     ...(isDirectDebit ? [[`checkout-momo:${normaliseGhanaMomoPhone(momoNumber)}`, 5]] : []),
   ] as [string, number][]) {

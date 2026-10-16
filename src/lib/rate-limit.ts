@@ -83,20 +83,20 @@ export function rateLimit(
 /**
  * The address the request arrived from, as the proxy in front of us saw it.
  *
- * `X-Forwarded-For` is a list that anyone can start: a client can send its own
- * header and the proxy appends the address it actually saw. So the trusted
- * entry is counted from the right, one per proxy we run behind: Railway's edge
- * by default (`TRUSTED_PROXY_HOPS=1`), two behind Cloudflare and Railway.
- * Taking the left-most entry let anyone pick a fresh address per request and
- * walk past every limit.
+ * On Railway the edge replaces any `X-Forwarded-For` a client sends and may
+ * append its own hop on the right, so the left-most entry is the client: the
+ * default here. When another proxy that appends rather than replaces sits in
+ * front (Cloudflare, say), set `TRUSTED_PROXY_HOPS` to the number of proxies
+ * and the trusted entry is counted from the right instead, so a client-sent
+ * header cannot pick its own address.
  */
 export async function requestAddress(): Promise<string> {
   const list = await headers();
   const forwarded = list.get("x-forwarded-for");
   if (forwarded) {
     const hops = forwarded.split(",").map((part) => part.trim()).filter(Boolean);
-    const trusted = Math.max(1, Number(process.env.TRUSTED_PROXY_HOPS) || 1);
-    const entry = hops[Math.max(0, hops.length - trusted)];
+    const trusted = Number(process.env.TRUSTED_PROXY_HOPS);
+    const entry = Number.isInteger(trusted) && trusted > 0 ? hops[Math.max(0, hops.length - trusted)] : hops[0];
     if (entry) return entry.slice(0, 100);
   }
   return list.get("x-real-ip")?.slice(0, 100) ?? "unknown";

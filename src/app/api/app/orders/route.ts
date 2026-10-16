@@ -283,7 +283,8 @@ export const POST = withApiAuth(async (request: Request) => {
   // Checkout sends payment prompts to phones and holds stock: limited per
   // address, per contact number and per paying wallet.
   const limited = raisedByStaff ? null : rateLimitResponse([
-    { key: `checkout-ip:${await requestAddress()}`, limit: 12, windowMs: 15 * 60 * 1000 },
+    // Generous: Ghanaian mobile networks put many phones behind one address.
+    { key: `checkout-ip:${await requestAddress()}`, limit: 40, windowMs: 15 * 60 * 1000 },
     { key: `checkout-phone:${cleanPhone}`, limit: 6, windowMs: 15 * 60 * 1000 },
     ...(isDirectDebit
       ? [{ key: `checkout-momo:${normaliseGhanaMomoPhone(momoNumber)}`, limit: 5, windowMs: 15 * 60 * 1000 }]

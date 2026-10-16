@@ -31,7 +31,7 @@ Every finding below has been fixed in code, except where noted under "Left for t
 | P1-4 discount limits | `Order.discountId`; counted on payment (free-delivery codes too); open checkouts hold a use; over-limit alerted | `src/lib/discounts.ts` |
 | P1-5 duplicate mobile checkout | App checkout uses `createOrderFromCart` + `startCheckoutPayment`; no keyword pickup; no account or session before payment | `src/app/api/app/orders/route.ts` |
 | P1-6 guest attach | Orders attach to the signed-in buyer only; paid guest orders link to customer (never staff) accounts | `src/app/actions/checkout.ts`, `ensureCustomerAccount` |
-| P2-1 to P2-5 | Checkout and prompt rate limits; right-most `X-Forwarded-For` (`TRUSTED_PROXY_HOPS`); order token on OTP/check/resend and the full receipt; random references and order numbers; secrets sealed at rest; card auth codes dropped; 15 s Paystack timeout | `src/lib/rate-limit.ts`, `src/app/actions/order-pay.ts`, `src/lib/integrations.ts`, `src/lib/paystack.ts` |
+| P2-1 to P2-5 | Checkout and prompt rate limits; client address from Railway's left-most `X-Forwarded-For`, or counted from the right with `TRUSTED_PROXY_HOPS` behind another proxy; order token on OTP/check/resend and the full receipt; random references and order numbers; secrets sealed at rest; card auth codes dropped; 15 s Paystack timeout | `src/lib/rate-limit.ts`, `src/app/actions/order-pay.ts`, `src/lib/integrations.ts`, `src/lib/paystack.ts` |
 | P3-1 deposits | Per-product deposit %; "Balance due" recording; Delivered blocked while a balance is due; balance never before the deposit; tracking page fixed; dead balance action removed | `src/lib/deposits.ts`, `recordBalancePayment` |
 | P3-2 to P3-6 | One verify path with holds and a resolve action; revenue from the ledger (`finance:view`); in-server 5-minute jobs + cron script; localhost guard; zero-total orders; honest receipt copy; POS fixes | `src/lib/payment-jobs.ts`, `src/instrumentation.ts`, `src/app/admin/analytics/page.tsx` |
 
@@ -50,7 +50,7 @@ webhooks, refunds, disputes, the confirmation page, the app endpoints and the cr
   people the MANAGER role if they need to.
 - Set `INTEGRATIONS_KEY` before deploying, if you want stored keys independent of `AUTH_SECRET`.
   Keys already saved in the console are encrypted the first time they are read.
-- Check that `TRUSTED_PROXY_HOPS` matches the proxies in front of the app (1 on Railway alone).
+- Leave `TRUSTED_PROXY_HOPS` unset on Railway alone; set it (2) if Cloudflare is put in front.
 - Make a test refund and dispute in Paystack test mode once to confirm the webhook payloads.
 
 ---
