@@ -172,11 +172,20 @@ export function ProductView({
             </div>
           )}
 
-          {badge ? (
-            <span className="lx-badge pointer-events-none absolute left-4 top-4 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.92)] px-2.5 py-1 backdrop-blur">
-              {badge}
-            </span>
-          ) : null}
+          <div className="pointer-events-none absolute left-4 top-4 right-4 flex items-center justify-between gap-2 z-10">
+            <div>
+              {badge ? (
+                <span className="lx-badge border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.92)] px-2.5 py-1 backdrop-blur">
+                  {badge}
+                </span>
+              ) : null}
+            </div>
+            {variants.length > 1 ? (
+              <span className="lx-badge border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.92)] px-2.5 py-1 backdrop-blur">
+                {variants.length} Varieties
+              </span>
+            ) : null}
+          </div>
 
           {images.length > 1 ? (
             <span className="pointer-events-none absolute bottom-4 right-4 bg-[rgba(43,39,36,0.72)] px-2.5 py-1 text-xs tracking-[0.06em] text-[var(--surface)]">

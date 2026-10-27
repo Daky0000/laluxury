@@ -442,6 +442,46 @@ export function StorefrontShopScreen({
                     <Feather name="box" size={26} color={colors.textMuted} />
                   </View>
                 )}
+                {/* Top Badges */}
+                {(() => {
+                  const now = Date.now();
+                  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+                  const isNewProduct = item.createdAt ? (now - new Date(item.createdAt).getTime()) <= SEVEN_DAYS_MS : false;
+                  const isNewVariety = item.variants ? item.variants.some((v) => v.createdAt && (now - new Date(v.createdAt).getTime()) <= SEVEN_DAYS_MS) : false;
+                  const hasNewTag = (item.tags || []).some((t) => /new/i.test(t));
+                  const isNew = isNewProduct || isNewVariety || hasNewTag;
+                  const isBestSeller = (item.tags || []).some((t) => /best/i.test(t));
+                  const isOnSale = item.compareAtPrice && item.compareAtPrice > item.minPrice;
+
+                  const badgeText = item.isPreorder
+                    ? "PRE-ORDER"
+                    : isNew
+                      ? "NEW"
+                      : isBestSeller
+                        ? "BEST SELLER"
+                        : isOnSale
+                          ? "SALE"
+                          : null;
+
+                  if (!badgeText) return null;
+
+                  return (
+                    <View style={[styles.cardBadge, badgeText === "NEW" && styles.cardBadgeNew]}>
+                      <Text style={[styles.cardBadgeText, badgeText === "NEW" && styles.cardBadgeTextNew]}>
+                        {badgeText}
+                      </Text>
+                    </View>
+                  );
+                })()}
+
+                {/* Variety count badge on the right side */}
+                {((item.variantCount && item.variantCount > 1) || (item.variants && item.variants.length > 1)) ? (
+                  <View style={styles.cardVarietyBadge}>
+                    <Text style={styles.cardVarietyText}>
+                      {item.variantCount || item.variants?.length} Varieties
+                    </Text>
+                  </View>
+                ) : null}
                 <TouchableOpacity
                   style={styles.heartBtn}
                   onPress={() => toggleWishlist(item.id)}
@@ -502,6 +542,49 @@ const styles = StyleSheet.create({
   },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
   stockRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  cardBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+  },
+  cardBadgeNew: {
+    backgroundColor: "#064E3B",
+    borderColor: "#047857",
+  },
+  cardBadgeText: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    color: colors.text,
+    textTransform: "uppercase",
+  },
+  cardBadgeTextNew: {
+    color: "#A7F3D0",
+  },
+  cardVarietyBadge: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+  },
+  cardVarietyText: {
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+  },
   heartBtn: {
     position: "absolute",
     top: 8,

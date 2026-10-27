@@ -120,7 +120,9 @@ export function FilterRail({
   selected: Selected;
   carried: Carried;
 }) {
-  const topLevel = facets.categories.filter((c) => c.parentId === null);
+  const topLevel = facets.categories
+    .filter((c) => c.parentId === null)
+    .filter((c) => c.name.trim().toLowerCase() !== "type" && c.slug.toLowerCase() !== "type");
 
   return (
     <aside aria-label="Filters" className="flex flex-col gap-7">
@@ -245,16 +247,23 @@ export function FilterRail({
 
       {/* Whatever the catalog defines: swatches where the owner set hex values,
           chips for sizes, widths and lengths. */}
-      {facets.options.map((option) => {
+      {facets.options
+        .filter((option) => option.name.trim().toLowerCase() !== "type")
+        .map((option) => {
         const chosen = selected.options[option.name] ?? [];
-        const isColour = option.values.some((v) => v.hexColor);
+        const isColour = option.name.toLowerCase().includes("colo") || option.values.some((v) => Boolean(v.hexColor?.trim()));
+        const displayValues = isColour
+          ? option.values.filter((v) => Boolean(v.hexColor && v.hexColor.trim()))
+          : option.values;
+
+        if (displayValues.length === 0) return null;
 
         return (
           <section key={option.name}>
             <h2 className={heading}>{option.name}</h2>
             {isColour ? (
               <div className="flex flex-wrap gap-3">
-                {option.values.map((value) => {
+                {displayValues.map((value) => {
                   const active = chosen.includes(value.value);
                   return (
                     <Link
@@ -286,7 +295,7 @@ export function FilterRail({
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {option.values.map((value) => {
+                {displayValues.map((value) => {
                   const active = chosen.includes(value.value);
                   return (
                     <Link
@@ -365,6 +374,7 @@ export function ActiveFilters({
   }
 
   for (const [name, values] of Object.entries(selected.options)) {
+    if (name.trim().toLowerCase() === "type") continue;
     for (const value of values) {
       chips.push({
         id: `option:${name}:${value}`,

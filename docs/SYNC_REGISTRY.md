@@ -295,7 +295,7 @@ Web admin (`/admin/products/bulk-add`) and, since 2026-10-06, the owner app (OWN
 | Shop listing | `storeProductList` (`/api/store/products`: `page`, `limit`, `categoryId`, `sort`, `minPrice`, `maxPrice`, `inStock`, `q`) | `/shop` â€” 24 per page, numbered pages with gaps and a "Go to page" box (`src/components/ui/page-nav.tsx`) | Shop tab â€” 24 per page via `Pager` (`mobile/src/components/Pager.tsx`), same pattern; category pills are live store categories filtered on the server (no client-side filtering of loaded pages) |
 | Admin product list | `/admin/products` query / `GET /api/app/products` (`page`, `limit`, `status`, `stock`, `categoryId`, `q`) | Numbered pages + jump; out-of-range page redirects to the last page | Products tab â€” 20 per page, status, stock (out/low) and category filters, debounced search, `Pager` |
 
-## Mobile Money prompt recovery ¡ª 2026-10-08
+## Mobile Money prompt recovery ï¿½ï¿½ 2026-10-08
 
 Web order tracking and mobile storefront checkout offer a customer-controlled Resend MoMo Prompt action with a 30-second UI cooldown and a payment-status check before dispatch. The mobile action uses the existing authenticated POST /api/app/orders/[id]/momo-push endpoint and preserves the checkout deposit scope; it never creates another order. Both surfaces remind customers to check network approvals, approve only one request, and check payment status if already debited. MTN guidance uses *170#, My Wallet, My Approvals; other networks receive network-specific menu guidance without MTN instructions. Pending means authorization is unconfirmed, not that a handset pop-up was delivered. Web and shared app services reject cancelled, refunded, or fully paid orders; paid deposits cannot be reissued through the app service. Existing response contracts remain unchanged. No automatic charge retries or outbound reminders are introduced.
 
@@ -318,3 +318,12 @@ Customer API contracts (active bearer account required, private/no-store):
 Web /account uses the same inbox service with a bell count, pagination, read controls and authenticated order links. These APIs are available to mobile; a native inbox screen is not included in this change. Existing Expo order push routing remains unchanged, with notificationId added to its data payload. Guest orders receive provider jobs without a customer inbox. No new providers or marketing channels are activated.
 
 Database migration 20261009000000_customer_notifications adds CustomerNotification, NotificationDelivery and NotificationAttempt. Run migrations before serving the updated account/admin pages. POST /api/cron/notifications uses CRON_SECRET to drain pending jobs and apply retention; npm run notifications:worker is an alternative queue runner. See [notification implementation and rollout](CUSTOMER_NOTIFICATIONS.md).
+
+
+## Domain 9: Catalog Merchandising, Filtering & 3-Day New Products SMS
+
+- **Type Filter & Empty Colour Sanitization**: Excluded "Type" filter from storefront facets and filter rails. Excluded empty hex colour values so swatches without explicit color codes do not render blank transparent circles.
+- **Product Card Badges & Variety Count**: Products with multiple active variants display the number of varieties on the right side of merchandising badges (e.g. "3 Varieties" opposite "Best Sellers" or "New").
+- **7-Day New Tag Rule**: Active products created within the last 7 days or having active variants created within the last 7 days automatically receive the "New" badge across web and mobile.
+- **Dedicated New Products Page**: Served at `/new` (and mirrored at `/new-in`) querying `searchProducts({ newOnly: true })` to isolate newly arrived stock.
+- **3-Day New Stock SMS Notification**: Centralized service in `src/lib/new-products-sms.ts` notifying buyers and registered customer contacts ~3 days after new products/varieties land in stock, linking directly to `/new`. Integrated with `POST /api/cron/notifications` and the Admin Custom Notifications panel.

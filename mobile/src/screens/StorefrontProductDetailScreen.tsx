@@ -600,6 +600,30 @@ export function StorefrontProductDetailScreen({
             {product.brand && (
               <Text style={styles.brandLabel}>{product.brand.toUpperCase()}</Text>
             )}
+
+            {(() => {
+              const now = Date.now();
+              const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+              const isNewProduct = product.createdAt ? (now - new Date(product.createdAt).getTime()) <= SEVEN_DAYS_MS : false;
+              const isNewVariety = product.variants ? product.variants.some((v) => v.createdAt && (now - new Date(v.createdAt).getTime()) <= SEVEN_DAYS_MS) : false;
+              const hasNewTag = (product.tags || []).some((t) => /new/i.test(t));
+              if (isNewProduct || isNewVariety || hasNewTag) {
+                return (
+                  <View style={[styles.stockBadge, { backgroundColor: "#064E3B", borderColor: "#047857" }]}>
+                    <Text style={[styles.stockText, { color: "#A7F3D0" }]}>NEW</Text>
+                  </View>
+                );
+              }
+              return null;
+            })()}
+
+            {product.variants && product.variants.length > 1 ? (
+              <View style={[styles.stockBadge, { backgroundColor: "rgba(0,0,0,0.04)", borderColor: "rgba(0,0,0,0.1)" }]}>
+                <Text style={[styles.stockText, { color: colors.textSecondary }]}>
+                  {product.variants.length} VARIETIES
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Title */}

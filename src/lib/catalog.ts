@@ -35,6 +35,7 @@ export type CatalogFilters = {
   onSaleOnly?: boolean;
   featuredOnly?: boolean;
   preorderOnly?: boolean;
+  newOnly?: boolean;
   sort?: ProductSort;
   page?: number;
   perPage?: number;
@@ -74,6 +75,7 @@ export const productCardSelect = {
     select: {
       id: true,
       price: true,
+      createdAt: true,
       inventory: { select: { onHand: true, reserved: true, trackInventory: true, allowBackorder: true } },
     },
   },
@@ -135,6 +137,17 @@ function buildWhere(filters: CatalogFilters, status: ProductStatus | null = "ACT
         { isPreorder: true },
         { categories: { some: { category: { slug: "pre-order" } } } },
         { tags: { hasSome: ["pre-order", "preorder"] } },
+      ],
+    });
+  }
+
+  if (filters.newOnly) {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    and.push({
+      OR: [
+        { createdAt: { gte: sevenDaysAgo } },
+        { variants: { some: { isActive: true, createdAt: { gte: sevenDaysAgo } } } },
+        { tags: { hasSome: ["new", "new in", "New", "New In"] } },
       ],
     });
   }
@@ -381,6 +394,7 @@ async function fetchCatalogFacets(): Promise<CatalogFacetsResult> {
     // Collapse duplicate option names across products into one facet group.
     const optionMap = new Map<string, Map<string, string | null>>();
     for (const option of options) {
+      if (option.name.trim().toLowerCase() === "type") continue;
       const group = optionMap.get(option.name) ?? new Map<string, string | null>();
       for (const v of option.values) {
         if (!group.has(v.value)) group.set(v.value, v.hexColor);
@@ -395,7 +409,9 @@ async function fetchCatalogFacets(): Promise<CatalogFacetsResult> {
 
     const result: CatalogFacetsResult = {
       productTotal,
-      categories: categories.map((c) => ({
+      categories: categories
+        .filter((c) => c.name.trim().toLowerCase() !== "type" && c.slug.toLowerCase() !== "type")
+        .map((c) => ({
         id: c.id,
         name: c.name,
         slug: c.slug,
@@ -408,10 +424,19 @@ async function fetchCatalogFacets(): Promise<CatalogFacetsResult> {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 24)
         .map(([name, count]) => ({ name, count })),
-      options: [...optionMap.entries()].map(([name, values]) => ({
-        name,
-        values: [...values.entries()].map(([value, hexColor]) => ({ value, hexColor })),
-      })),
+      options: [...optionMap.entries()]
+        .filter(([name]) => name.trim().toLowerCase() !== "type")
+        .map(([name, values]) => {
+          const isColour = name.toLowerCase().includes("colo") || [...values.values()].some((hex) => Boolean(hex?.trim()));
+          const filteredValues = [...values.entries()]
+            .filter(([_, hexColor]) => !isColour || Boolean(hexColor && hexColor.trim()))
+            .map(([value, hexColor]) => ({ value, hexColor }));
+          return {
+            name,
+            values: filteredValues,
+          };
+        })
+        .filter((group) => group.values.length > 0),
     };
 
     cachedFacets = { data: result, expiresAt: now + FACETS_CACHE_TTL_MS };

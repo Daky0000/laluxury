@@ -22,6 +22,8 @@ export type ProductTileData = {
   /** True when several variants are priced differently, so the price reads "from ₵x". */
   hasRange: boolean;
   badge: string | null;
+  badges: string[];
+  variantCount: number;
   minimumOrderQuantity: number;
   isPreorder: boolean;
   preorderLeadTime: string | null;
@@ -41,8 +43,14 @@ export type ProductTileData = {
 const BADGES: Record<string, string> = {
   "pre-order": "Pre-Order",
   preorder: "Pre-Order",
-  bestseller: "Bestseller",
+  bestseller: "Best Seller",
+  "best seller": "Best Seller",
+  "best-seller": "Best Seller",
+  "best sellers": "Best Sellers",
+  "bestsellers": "Best Sellers",
   new: "New",
+  "new in": "New",
+  "new-in": "New",
   luxe: "Luxe",
   deal: "Deal",
   sale: "Sale",
@@ -62,7 +70,38 @@ export function toTile(product: ProductCard): ProductTileData {
       .find((c) => c.category.slug !== "student" && c.category.slug !== "pre-order")?.category ??
     product.categories[0]?.category ?? { name: "", slug: "" };
 
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const isNewProduct = product.createdAt ? (now - new Date(product.createdAt).getTime()) <= SEVEN_DAYS_MS : false;
+  const isNewVariety = product.variants ? product.variants.some((v) => v.createdAt && (now - new Date(v.createdAt).getTime()) <= SEVEN_DAYS_MS) : false;
+  const hasNewTag = product.tags.some((t) => {
+    const clean = t.toLowerCase().trim();
+    return clean === "new" || clean === "new in" || clean === "new-in";
+  });
+  const isNew = isNewProduct || isNewVariety || hasNewTag;
+
   const badgeTag = product.tags.find((tag) => BADGES[tag.toLowerCase()]);
+  const onSale = product.compareAtPrice !== null && product.compareAtPrice > product.minPrice;
+
+  const badges: string[] = [];
+  if (isPreorder) {
+    badges.push("Pre-Order");
+  } else {
+    if (badgeTag && BADGES[badgeTag.toLowerCase()] !== "New") {
+      badges.push(BADGES[badgeTag.toLowerCase()]);
+    }
+    if (isNew && !badges.includes("New")) {
+      badges.push("New");
+    } else if (badgeTag && BADGES[badgeTag.toLowerCase()] === "New" && !badges.includes("New")) {
+      badges.push("New");
+    }
+    if (onSale && !badges.includes("Sale")) {
+      badges.push("Sale");
+    }
+  }
+
+  const badge = badges[0] ?? null;
+  const variantCount = product.variants?.length ?? 0;
   const [primary, secondary] = product.images;
 
   const swatches = (product.options ?? [])
@@ -81,13 +120,9 @@ export function toTile(product: ProductCard): ProductTileData {
     maxPrice: product.maxPrice,
     compareAtPrice: product.compareAtPrice,
     hasRange: product.maxPrice > product.minPrice,
-    badge: isPreorder
-      ? "Pre-Order"
-      : badgeTag
-        ? BADGES[badgeTag.toLowerCase()]
-        : product.compareAtPrice && product.compareAtPrice > product.minPrice
-          ? "Sale"
-          : null,
+    badge,
+    badges,
+    variantCount,
     minimumOrderQuantity: product.minimumOrderQuantity,
     isPreorder,
     preorderLeadTime: product.preorderLeadTime ?? (isPreorder ? "2–3 weeks" : null),

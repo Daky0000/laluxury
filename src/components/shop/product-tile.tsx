@@ -63,16 +63,40 @@ export function ProductTile({
           </span>
         ) : null}
 
-        {product.isPreorder ? (
-          <span className="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1.5 border border-amber-800/30 bg-[#231B12]/90 px-2 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-[#F4E6C8] backdrop-blur">
-            <Clock className="h-2.5 w-2.5 text-[#D4AF37]" aria-hidden />
-            Pre-Order
-          </span>
-        ) : product.badge ? (
-          <span className="pointer-events-none absolute left-3 top-3 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.9)] px-2 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-[var(--text-primary)] backdrop-blur">
-            {product.badge}
-          </span>
-        ) : null}
+        {/* Top Badges & Variety Count Bar */}
+        <div className="pointer-events-none absolute left-3 top-3 right-3 flex items-start justify-between gap-2 z-10">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {product.isPreorder ? (
+              <span className="inline-flex items-center gap-1.5 border border-amber-800/30 bg-[#231B12]/90 px-2 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-[#F4E6C8] backdrop-blur">
+                <Clock className="h-2.5 w-2.5 text-[#D4AF37]" aria-hidden />
+                Pre-Order
+              </span>
+            ) : product.badges && product.badges.length > 0 ? (
+              product.badges.map((b) => (
+                <span
+                  key={b}
+                  className={`border px-2 py-1 text-[9px] font-medium uppercase tracking-[0.16em] backdrop-blur ${
+                    b.toLowerCase() === "new"
+                      ? "border-emerald-700/30 bg-emerald-950/85 text-emerald-100"
+                      : "border-[var(--border-subtle)] bg-[rgba(253,250,244,0.9)] text-[var(--text-primary)]"
+                  }`}
+                >
+                  {b}
+                </span>
+              ))
+            ) : product.badge ? (
+              <span className="border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.9)] px-2 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-[var(--text-primary)] backdrop-blur">
+                {product.badge}
+              </span>
+            ) : null}
+          </div>
+
+          {product.variantCount > 1 ? (
+            <span className="shrink-0 border border-[var(--border-subtle)] bg-[rgba(253,250,244,0.9)] px-2 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-[var(--text-primary)] backdrop-blur">
+              {product.variantCount} {product.variantCount === 1 ? "Variety" : "Varieties"}
+            </span>
+          ) : null}
+        </div>
 
         {product.inStock || product.isPreorder ? (
           <AddToBag

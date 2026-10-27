@@ -83,8 +83,24 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
     Boolean(product.isPreorder) ||
     product.categories.some((c) => c.category.slug === "pre-order") ||
     product.tags.some((t) => t.toLowerCase() === "pre-order" || t.toLowerCase() === "preorder");
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const isNewProduct = product.createdAt ? (now - new Date(product.createdAt).getTime()) <= SEVEN_DAYS_MS : false;
+  const isNewVariety = product.variants ? product.variants.some((v) => v.createdAt && (now - new Date(v.createdAt).getTime()) <= SEVEN_DAYS_MS) : false;
+  const hasNewTag = product.tags.some((t) => {
+    const clean = t.toLowerCase().trim();
+    return clean === "new" || clean === "new in" || clean === "new-in";
+  });
+  const isNew = isNewProduct || isNewVariety || hasNewTag;
+
   const badgeTag = product.tags.find((tag) => BADGES[tag.toLowerCase()]);
-  const badge = isPreorder ? "Pre-Order" : badgeTag ? BADGES[badgeTag.toLowerCase()] : null;
+  const badge = isPreorder
+    ? "Pre-Order"
+    : isNew
+      ? "New"
+      : badgeTag
+        ? BADGES[badgeTag.toLowerCase()]
+        : null;
 
   const perks = [
     settings.freeShippingThreshold

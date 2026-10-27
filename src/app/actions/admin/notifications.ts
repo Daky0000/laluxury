@@ -6,6 +6,7 @@ import { sendSms } from "@/lib/sms";
 import { getSettings, updateSettings } from "@/lib/settings";
 import { recordAudit } from "@/lib/audit";
 import { normalisePhone } from "@/lib/phone";
+import { sendNewProductsSmsNotification } from "@/lib/new-products-sms";
 
 export type NotificationActionState = {
   ok: boolean;
@@ -78,4 +79,24 @@ export async function updateStoreAnnouncementAction(
   revalidatePath("/");
 
   return { ok: true, message: "Storewide announcement banner updated!" };
+}
+
+export async function sendNewProductsSmsCampaignAction(
+  _prev: NotificationActionState | null,
+  formData: FormData,
+): Promise<NotificationActionState> {
+  const staff = await requirePermission("settings:manage");
+  const force = formData.get("force") === "true";
+  const dryRun = formData.get("dryRun") === "true";
+
+  const result = await sendNewProductsSmsNotification({
+    actorId: staff.id,
+    force,
+    dryRun,
+  });
+
+  return {
+    ok: result.ok,
+    message: result.message,
+  };
 }
