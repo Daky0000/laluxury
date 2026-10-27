@@ -5,6 +5,15 @@ const allowRead = createPublicTrafficLimiter();
 
 /** Reject expensive bulk reads before catalog rendering or database access. */
 export function proxy(request: NextRequest) {
+  // Reject malformed Next-Action headers from scanners/bots before Next.js deserializer throws E1442
+  const nextAction = request.headers.get("next-action");
+  if (nextAction && nextAction.length !== 40 && nextAction.length !== 42) {
+    return new NextResponse("Invalid action reference.", {
+      status: 400,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
   if (request.method !== "GET" && request.method !== "HEAD") return NextResponse.next();
   if (process.env.BULK_CRAWLER_BLOCK_ENABLED !== "false" && isBulkCrawler(request.headers.get("user-agent") ?? "")) {
     return new NextResponse("Crawling disabled.", { status: 403, headers: { "Cache-Control": "no-store" } });

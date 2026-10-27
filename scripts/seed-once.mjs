@@ -15,7 +15,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const CATALOG_SCHEMA_VERSION = 3;
+const CATALOG_SCHEMA_VERSION = 4;
 const REVISION_KEY = "catalog.revision";
 
 function computeSeedRevision() {

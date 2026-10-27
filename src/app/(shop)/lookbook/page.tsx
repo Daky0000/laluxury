@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { publicAssetUrl } from "@/lib/media-url";
 import { RoomLookbook, type LookbookScene } from "@/components/shop/room-lookbook";
 
 export const metadata: Metadata = {
@@ -52,7 +53,7 @@ export default async function LookbookPage() {
         title: p.title,
         slug: p.slug,
         price: p.variants[0]!.price,
-        imageUrl: p.images[0]?.url ?? null,
+        imageUrl: p.images[0]?.url ? publicAssetUrl(p.images[0].url) : null,
         isPreorder: p.isPreorder,
         minimumOrderQuantity: p.minimumOrderQuantity,
         preorderLeadTime: p.preorderLeadTime,
@@ -77,7 +78,7 @@ export default async function LookbookPage() {
         title: p.title,
         slug: p.slug,
         price: p.variants[0]!.price,
-        imageUrl: p.images[0]?.url ?? null,
+        imageUrl: p.images[0]?.url ? publicAssetUrl(p.images[0].url) : null,
         isPreorder: p.isPreorder,
         minimumOrderQuantity: p.minimumOrderQuantity,
         preorderLeadTime: p.preorderLeadTime,
@@ -102,7 +103,7 @@ export default async function LookbookPage() {
         title: p.title,
         slug: p.slug,
         price: p.variants[0]!.price,
-        imageUrl: p.images[0]?.url ?? null,
+        imageUrl: p.images[0]?.url ? publicAssetUrl(p.images[0].url) : null,
         isPreorder: p.isPreorder,
         minimumOrderQuantity: p.minimumOrderQuantity,
         preorderLeadTime: p.preorderLeadTime,

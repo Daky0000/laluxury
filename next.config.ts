@@ -1,4 +1,13 @@
+import { createHash } from "node:crypto";
 import type { NextConfig } from "next";
+
+// Ensure Server Actions closure encryption keys stay consistent across rebuilds and deployments,
+// preventing E1442 / E974 deployment skew crashes when users submit forms after a new release.
+if (!process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY && process.env.AUTH_SECRET) {
+  process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY = createHash("sha256")
+    .update(process.env.AUTH_SECRET)
+    .digest("base64");
+}
 
 const nextConfig: NextConfig = {
   // The Postgres driver and Prisma engine are Node-only; keep them out of the
@@ -11,6 +20,12 @@ const nextConfig: NextConfig = {
   // deploy has no commit, hence the timestamp fallback.
   env: {
     BUILD_STAMP: process.env.RAILWAY_GIT_COMMIT_SHA ?? new Date().toISOString(),
+    NEXT_PUBLIC_MEDIA_BASE_URL: (
+      process.env.CATALOG_CDN_URL ||
+      process.env.R2_PUBLIC_URL ||
+      process.env.NEXT_PUBLIC_MEDIA_BASE_URL ||
+      ""
+    ).replace(/\/+$/, ""),
   },
 
   // Without this Turbopack walks up to the home directory looking for a lockfile.
@@ -39,7 +54,17 @@ const nextConfig: NextConfig = {
   async redirects() {
     const cdnUrl = (process.env.CATALOG_CDN_URL || process.env.R2_PUBLIC_URL || "").replace(/\/+$/, "");
     return [
-      ...(cdnUrl ? [{ source: "/catalog/:path*", destination: `${cdnUrl}/catalog/:path*`, permanent: false }] : []),
+      ...(cdnUrl
+        ? [
+            { source: "/catalog/:path*", destination: `${cdnUrl}/catalog/:path*`, permanent: true },
+            { source: "/images/:path*", destination: `${cdnUrl}/images/:path*`, permanent: true },
+            { source: "/emblem.png", destination: `${cdnUrl}/emblem.png`, permanent: true },
+            { source: "/emblem-white.png", destination: `${cdnUrl}/emblem-white.png`, permanent: true },
+            { source: "/logo.png", destination: `${cdnUrl}/logo.png`, permanent: true },
+            { source: "/logo-transparent.png", destination: `${cdnUrl}/logo-transparent.png`, permanent: true },
+            { source: "/icon.png", destination: `${cdnUrl}/icon.png`, permanent: true },
+          ]
+        : []),
       ...["/downloads/:file(.*\\.apk)", "/NobleEnclave-Management.apk", "/Noble-Enclave.apk", "/NobelEnclave-Management.apk", "/download", "/app/download"].map((source) => ({
         source, destination: "/api/app/download", permanent: false,
       })),
@@ -47,15 +72,23 @@ const nextConfig: NextConfig = {
   },
 
   // The response headers every page carries. None of them changes what the
-  // shop does; each closes a door a browser would otherwise leave open — being
-  // framed by another site, sniffing a download into a script, sending the
-  // full referring URL to third parties, or a page asking for the camera.
-  // No Content-Security-Policy yet: Paystack and the image hosts the owner
-  // pastes make a correct one a project of its own.
+  // shop does; each closes a door a browser would otherwise leave open.
   async headers() {
     return [
       {
         source: "/catalog/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      {
+        source: "/images/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      {
+        source: "/:file(.*\\.(?:png|jpg|jpeg|webp|svg|ico|woff2?))",
         headers: [
           { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
         ],

@@ -29,10 +29,12 @@ const MIMES = {
   ".jpeg": "image/jpeg",
   ".png": "image/png",
   ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
   ".json": "application/json",
 };
 
 function getAllFiles(dir, fileList = []) {
+  if (!readdirSync) return fileList;
   const files = readdirSync(dir);
   for (const file of files) {
     const fullPath = join(dir, file);
@@ -46,10 +48,29 @@ function getAllFiles(dir, fileList = []) {
 }
 
 async function uploadCatalog() {
-  const catalogDir = join(process.cwd(), "public", "catalog");
-  const files = getAllFiles(catalogDir);
+  const publicDir = join(process.cwd(), "public");
+  const catalogDir = join(publicDir, "catalog");
+  const imagesDir = join(publicDir, "images");
 
-  console.log(`Uploading ${files.length} catalog files to Cloudflare R2...`);
+  const files = [
+    ...getAllFiles(catalogDir),
+    ...getAllFiles(imagesDir),
+    join(publicDir, "emblem.png"),
+    join(publicDir, "emblem-white.png"),
+    join(publicDir, "logo.png"),
+    join(publicDir, "logo-transparent.png"),
+    join(publicDir, "icon.png"),
+    join(publicDir, "apple-touch-icon.png"),
+    join(publicDir, "favicon.ico"),
+  ].filter((f) => {
+    try {
+      return statSync(f).isFile();
+    } catch {
+      return false;
+    }
+  });
+
+  console.log(`Checking and uploading ${files.length} static media files to Cloudflare R2 CDN...`);
 
   let count = 0;
   for (const filePath of files) {
@@ -58,9 +79,21 @@ async function uploadCatalog() {
     const mime = MIMES[ext] || "application/octet-stream";
     const bytes = readFileSync(filePath);
 
-    process.stdout.write(`[${count + 1}/${files.length}] Uploading ${rel} (${(bytes.length / 1024).toFixed(1)} KB)... `);
+    process.stdout.write(`[${count + 1}/${files.length}] Checking ${rel} (${(bytes.length / 1024).toFixed(1)} KB)... `);
 
     try {
+      const existing = await fetch(`${publicUrl}/${rel}`, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(10_000),
+      }).catch(() => null);
+
+      if (existing?.ok && Number(existing.headers.get("content-length")) === bytes.length) {
+        console.log("Verified (already up to date)");
+        count++;
+        continue;
+      }
+
+      process.stdout.write("Uploading... ");
       await s3.send(
         new PutObjectCommand({
           Bucket: bucketName,

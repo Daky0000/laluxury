@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3005",
     "dev:local": "next dev -H 0.0.0.0 -p 3005",
-    "build": "next build",
-    "start": "prisma migrate deploy && node scripts/seed-once.mjs && node --max-old-space-size=384 ./node_modules/next/dist/bin/next start",
-    "start:lean": "node --max-old-space-size=384 ./node_modules/next/dist/bin/next start",
+    "build": "node --max-old-space-size=1536 ./node_modules/next/dist/bin/next build",
+    "start": "prisma migrate deploy && node scripts/seed-once.mjs && node --optimize-for-size --max-old-space-size=384 ./node_modules/next/dist/bin/next start",
+    "start:lean": "node --optimize-for-size --max-old-space-size=384 ./node_modules/next/dist/bin/next start",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",

@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { Search } from "lucide-react";
 import { announcementItems, getSettings } from "@/lib/settings";
 import { getNavCategories } from "@/lib/catalog";
+import { publicAssetUrl } from "@/lib/media-url";
 import { SearchDialog } from "./search-dialog";
 import { HeaderCustomerControls } from "./header-customer-controls";
 import { CategoryNav } from "./category-nav";
@@ -47,7 +48,7 @@ export async function Header() {
         <div className="lx-container flex items-center gap-3 py-3.5 sm:py-4 md:gap-8">
           <Link href="/" className="mr-auto min-w-0 flex items-center gap-2.5 sm:gap-3 leading-none group">
             <Image
-              src="/emblem.png"
+              src={publicAssetUrl("/emblem.png")}
               alt="Noble Enclave"
               width={36}
               height={36}

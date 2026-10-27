@@ -1,0 +1,20 @@
+# Ignored files for container and Railway builds
+.git
+.next
+node_modules
+npm-debug.log*
+
+# Binaries and APKs (must be served from R2 CDN, not bundled in image)
+*.apk
+public/downloads/*.apk
+releases/*.apk
+mobile/android/
+mobile/ios/
+mobile/node_modules/
+
+# Documents & Scratch
+*.pptx
+*.pdf
+scratch/
+coverage/
+.DS_Store

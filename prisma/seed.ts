@@ -460,7 +460,8 @@ async function seedCatalog() {
   };
 
   /** Photographs of the real stock, produced by `npm run catalog:photos`. */
-  const photo = (name: string) => `/catalog/products/${name}.webp`;
+  const cdnBase = (process.env.CATALOG_CDN_URL || process.env.R2_PUBLIC_URL || "").replace(/\/+$/, "");
+  const photo = (name: string) => cdnBase ? `${cdnBase}/catalog/products/${name}.webp` : `/catalog/products/${name}.webp`;
 
   /**
    * Every size × colour pairing. Blinds are cut to a height and chosen in a

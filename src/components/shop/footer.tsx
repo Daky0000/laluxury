@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { getSettings } from "@/lib/settings";
 import { getNavCategories } from "@/lib/catalog";
+import { publicAssetUrl } from "@/lib/media-url";
 import { CookieSettingsLink } from "./cookie-consent";
 
 const LEGAL_LINKS = [
@@ -68,7 +69,7 @@ export async function Footer() {
         <div>
           <div className="flex items-center gap-3">
             <Image
-              src="/emblem.png"
+              src={publicAssetUrl("/emblem.png")}
               alt={settings.storeName}
               width={32}
               height={32}
