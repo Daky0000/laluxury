@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { proxy } from "../src/proxy";
 import { createPublicTrafficLimiter, isBulkCrawler } from "../src/lib/public-traffic";
@@ -12,6 +12,7 @@ assert.equal(limit("two", 3), true);
 assert.equal(limit("three", 4), false);
 assert.equal(limit("three", 60_001), true);
 assert.equal(isBulkCrawler("Mozilla/5.0 meta-externalagent/1.1"), true);
+assert.equal(isBulkCrawler("Lightpanda/1.0"), true);
 for (const agent of ["Googlebot", "bingbot", "facebookexternalhit", "WhatsApp", "Chrome/145"]) {
   assert.equal(isBulkCrawler(agent), false);
   assert.equal(proxy(new NextRequest("https://store.example/shop", { headers: { "user-agent": agent } })).status, 200);

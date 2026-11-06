@@ -1,6 +1,9 @@
 /** Known bulk AI crawlers have no storefront shopping flow. Search engines remain allowed. */
 export const BULK_CRAWLER_AGENTS = ["GPTBot", "PerplexityBot", "ClaudeBot", "Bytespider", "CCBot", "Amazonbot",
-  "meta-externalagent", "SERankingBacklinksBot", "Reflectionbot"];
+  "meta-externalagent", "SERankingBacklinksBot", "Reflectionbot",
+  // Headless scraping browsers. A distributed Lightpanda swarm (~1000 IPs) hammered /shop,
+  // saturated the DB pool and ran the server out of memory; per-IP limits cannot catch it.
+  "Lightpanda", "HeadlessChrome", "PhantomJS"];
 
 export function isBulkCrawler(userAgent: string): boolean {
   return BULK_CRAWLER_AGENTS.some((agent) => userAgent.toLowerCase().includes(agent.toLowerCase()));
