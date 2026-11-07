@@ -61,7 +61,7 @@ responded with HTTP 200 and a length of 71,336,685 bytes. The site's legacy
    which can include storefront HTML, or to all `/api` paths. Bypass account,
    cart, checkout, payment, admin, and authenticated responses. HTML caching
    requires separate review of cookies, personalization, and invalidation.
-6. Preserve the current 384 MB heap limit and three-connection default pool.
+6. Keep the 768 MB heap limit (raised from 384 MB after repeated out-of-memory crashes under bot floods) and the three-connection default pool. Storefront HTML is edge-cached by Cloudflare for 60s, so floods should not reach the server.
    A Node heap limit is not a limit on total process RAM. Measure process RSS,
    PostgreSQL memory, restarts, and request latency before adjusting resource
    limits. Do not add warming jobs solely to cut costs.
