@@ -49,7 +49,18 @@ const nextConfig: NextConfig = {
     // Compile cleanly rather than restoring an invalid persistent build cache.
     turbopackFileSystemCacheForBuild: false,
     serverActions: { bodySizeLimit: "24mb" },
+    // Keep the ISR / unstable_cache store in memory only. Next's file-system
+    // cache writes one file per cache key under .next/cache and never deletes
+    // any, and the catalog cache is keyed by shopper-controlled filters
+    // (search text, page, price range). A bot swarm varying those on /shop
+    // filled the container with files until Railway stopped it for exceeding
+    // the ephemeral-storage file limit. The in-memory LRU below is bounded.
+    isrFlushToDisk: false,
   },
+
+  // Size cap for that in-memory LRU (default 50 MB). Smaller than the default
+  // to leave room under the 768 MB heap the start command allows.
+  cacheMaxMemorySize: 24 * 1024 * 1024,
 
   async redirects() {
     const cdnUrl = (process.env.CATALOG_CDN_URL || process.env.R2_PUBLIC_URL || "").replace(/\/+$/, "");

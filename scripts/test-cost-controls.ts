@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { proxy } from "../src/proxy";
 import { createPublicTrafficLimiter, isBulkCrawler } from "../src/lib/public-traffic";
 import { rateLimit } from "../src/lib/rate-limit";
+import nextConfig from "../next.config";
 
 const limit = createPublicTrafficLimiter(2);
 assert.equal(limit("one", 0, 2), true);
@@ -37,3 +38,9 @@ try {
   assert.equal(rateLimit(key, { limit: 1, windowMs: 1000 }).ok, true);
 } finally { Date.now = realNow; }
 console.log("Cost controls passed: crawler policy, shopping/preview access, bounded throttling, recovery after denied floods.");
+
+// Next's file-system cache never evicts, and the catalog cache key includes
+// shopper-controlled filters. It must stay in memory or bots fill the disk.
+assert.equal(nextConfig.experimental?.isrFlushToDisk, false);
+assert.ok((nextConfig.cacheMaxMemorySize ?? 0) > 0 && (nextConfig.cacheMaxMemorySize ?? 0) <= 50 * 1024 * 1024);
+console.log("Cache stays in bounded memory: no per-key files written to ephemeral disk.");
